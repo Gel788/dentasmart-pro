@@ -1,0 +1,12 @@
+{
+  "name": "@dentasmart/widget",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/widget.ts --bundle --format=iife --global-name=DentaSmartWidget --outfile=dist/dentasmart-widget.js --minify"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.4",
+    "typescript": "^5.8.3"
+  }
+}

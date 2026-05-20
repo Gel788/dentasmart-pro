@@ -1,0 +1,10 @@
+{
+  "name": "DentaSmart Pro",
+  "short_name": "DentaSmart",
+  "description": "CRM для стоматологических клиник",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#f0f4f8",
+  "theme_color": "#0d9488",
+  "lang": "ru"
+}

@@ -1,0 +1,5 @@
+{
+  "installCommand": "cd ../.. && pnpm install",
+  "buildCommand": "cd ../.. && pnpm --filter @dentasmart/shared build && pnpm --filter @dentasmart/web build",
+  "framework": "nextjs"
+}

@@ -1,0 +1,26 @@
+{
+  "name": "dentasmart-pro",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DentaSmart Pro — CRM для стоматологических клиник",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "db:generate": "pnpm --filter @dentasmart/database db:generate",
+    "db:migrate": "pnpm --filter @dentasmart/database db:migrate",
+    "db:push": "pnpm --filter @dentasmart/database db:push",
+    "db:seed": "pnpm --filter @dentasmart/database db:seed",
+    "api:dev": "pnpm --filter @dentasmart/shared build && pnpm --filter @dentasmart/database db:generate && pnpm --filter @dentasmart/api build && pnpm --filter @dentasmart/api dev",
+    "start:local": "bash scripts/start-local.sh",
+    "fix:prisma": "bash scripts/fix-prisma.sh",
+    "db:studio": "pnpm --filter @dentasmart/database db:studio"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "devDependencies": {
+    "turbo": "^2.5.0"
+  }
+}

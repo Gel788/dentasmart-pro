@@ -1,0 +1,1394 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Организация (сеть клиник) ───────────────────────────────────────────────
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  inn       String?
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches              Branch[]
+  users                 User[]
+  roles                 Role[]
+  patients              Patient[]
+  services              Service[]
+  appointments          Appointment[]
+  auditLogs             AuditLog[]
+  employeeSchedules     EmployeeSchedule[]
+  treatmentPlans        TreatmentPlan[]
+  patientConsents       PatientConsent[]
+  patientSegments       PatientSegment[]
+  waitlistEntries       WaitlistEntry[]
+  priceLists            PriceList[]
+  invoices              Invoice[]
+  payments              Payment[]
+  promoCodes            PromoCode[]
+  loyaltyPrograms       LoyaltyProgram[]
+  inventoryItems        InventoryItem[]
+  stockMovements        StockMovement[]
+  purchaseOrders        PurchaseOrder[]
+  labOrders             LabOrder[]
+  marketingCampaigns    MarketingCampaign[]
+  automationChains      AutomationChain[]
+  communicationThreads  CommunicationThread[]
+  callRecords           CallRecord[]
+  integrationConfigs    IntegrationConfig[]
+  webhookEndpoints      WebhookEndpoint[]
+  widgetConfigs         WidgetConfig[]
+  medicalRecordHashes   MedicalRecordHash[]
+  aiInsights            AiInsight[]
+  receptionQueue        ReceptionQueueItem[]
+  cashShifts            CashShift[]
+  reminders             Reminder[]
+  inventorySessions     InventorySession[]
+  familyGroups          FamilyGroup[]
+  patientDeposits       PatientDeposit[]
+  installmentPlans      InstallmentPlan[]
+  serviceMaterialNorms  ServiceMaterialNorm[]
+  reminderTemplates     ReminderTemplate[]
+  payrollRules          PayrollRule[]
+
+  @@map("organizations")
+}
+
+model Branch {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  address        String?
+  phone          String?
+  timezone       String   @default("Europe/Moscow")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cabinets     Cabinet[]
+  employees    EmployeeBranch[]
+  appointments Appointment[]
+
+  @@index([organizationId])
+  @@map("branches")
+}
+
+enum CabinetPurpose {
+  THERAPY
+  SURGERY
+  ORTHOPEDICS
+  UNIVERSAL
+  HYGIENE
+  IMAGING
+}
+
+model Cabinet {
+  id             String         @id @default(cuid())
+  branchId       String
+  name           String
+  number         String?
+  purpose        CabinetPurpose @default(UNIVERSAL)
+  equipment      String[]       @default([])
+  cleaningMinutes Int           @default(15)
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  branch       Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@index([branchId])
+  @@map("cabinets")
+}
+
+// ─── Пользователи и RBAC ───────────────────────────────────────────────────
+
+enum EmployeeStatus {
+  ACTIVE
+  ON_LEAVE
+  SICK_LEAVE
+  TERMINATED
+}
+
+model User {
+  id             String    @id @default(cuid())
+  organizationId String
+  email          String
+  passwordHash   String
+  isActive       Boolean   @default(true)
+  lastLoginAt    DateTime?
+  totpSecret     String?
+  totpEnabled    Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employee       Employee?
+  userRoles      UserRole[]
+  auditLogs      AuditLog[]       @relation("AuditActor")
+  refreshTokens  RefreshToken[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@map("users")
+}
+
+model Employee {
+  id             String         @id @default(cuid())
+  userId         String         @unique
+  firstName      String
+  lastName       String
+  middleName     String?
+  phone          String?
+  birthDate      DateTime?
+  specialization String?
+  status         EmployeeStatus @default(ACTIVE)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branches          EmployeeBranch[]
+  appointments      Appointment[]      @relation("DoctorAppointments")
+  schedules         EmployeeSchedule[]
+  certificates      EmployeeCertificate[]
+  treatmentPlans    TreatmentPlan[]
+  labOrders         LabOrder[]
+  payrollEntries    PayrollEntry[]
+
+  @@map("employees")
+}
+
+model EmployeeBranch {
+  employeeId String
+  branchId   String
+  isPrimary  Boolean @default(false)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@id([employeeId, branchId])
+  @@map("employee_branches")
+}
+
+model Role {
+  id             String   @id @default(cuid())
+  organizationId String
+  code           String
+  name           String
+  description    String?
+  isSystem       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@unique([organizationId, code])
+  @@map("roles")
+}
+
+model Permission {
+  id          String @id @default(cuid())
+  code        String @unique
+  module      String
+  description String?
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+// ─── Пациенты ──────────────────────────────────────────────────────────────
+
+enum PatientGender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+model Patient {
+  id             String         @id @default(cuid())
+  organizationId String
+  firstName      String
+  lastName       String
+  middleName     String?
+  birthDate      DateTime?
+  gender         PatientGender?
+  phone          String?
+  email          String?
+  tags           String[]       @default([])
+  notes          String?
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  appointments         Appointment[]
+  toothRecords         ToothRecord[]
+  treatmentPlans       TreatmentPlan[]
+  consents             PatientConsent[]
+  imagingStudies       ImagingStudy[]
+  communications       PatientCommunication[]
+  loyaltyAccounts      LoyaltyAccount[]
+  invoices             Invoice[]
+  waitlistEntries      WaitlistEntry[]
+  receptionQueue       ReceptionQueueItem[]
+  segmentMembers       PatientSegmentMember[]
+  familyMembers        FamilyMember[]
+  deposit              PatientDeposit?
+  installmentPlans     InstallmentPlan[]
+
+  @@index([organizationId])
+  @@index([organizationId, phone])
+  @@index([organizationId, lastName, firstName])
+  @@map("patients")
+}
+
+enum ToothFormulaType {
+  ADULT
+  CHILD
+}
+
+enum ToothCondition {
+  HEALTHY
+  CARIES
+  FILLED
+  CROWN
+  MISSING
+  IMPLANT
+  ROOT_CANAL
+  OTHER
+}
+
+model ToothRecord {
+  id        String           @id @default(cuid())
+  patientId String
+  toothNum  Int
+  formula   ToothFormulaType @default(ADULT)
+  condition ToothCondition   @default(HEALTHY)
+  diagnosis String?
+  notes     String?
+  updatedAt DateTime         @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, formula, toothNum])
+  @@map("tooth_records")
+}
+
+// ─── Справочник услуг ──────────────────────────────────────────────────────
+
+model Service {
+  id             String   @id @default(cuid())
+  organizationId String
+  parentId       String?
+  code           String?
+  name           String
+  description    String?
+  durationMin    Int      @default(30)
+  basePrice      Decimal  @default(0) @db.Decimal(12, 2)
+  icd10Code      String?
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent       Service?     @relation("ServiceTree", fields: [parentId], references: [id])
+  children            Service[]           @relation("ServiceTree")
+  appointments        Appointment[]
+  treatmentPlanItems  TreatmentPlanItem[]
+  priceListItems      PriceListItem[]
+  materialNorms       ServiceMaterialNorm[]
+
+  @@index([organizationId])
+  @@map("services")
+}
+
+// ─── Расписание ────────────────────────────────────────────────────────────
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  WAITING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model Appointment {
+  id             String            @id @default(cuid())
+  organizationId String
+  branchId       String
+  cabinetId      String?
+  doctorId       String?
+  patientId      String
+  serviceId      String?
+  startsAt       DateTime
+  endsAt         DateTime
+  status         AppointmentStatus @default(SCHEDULED)
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch       Branch       @relation(fields: [branchId], references: [id])
+  cabinet      Cabinet?     @relation(fields: [cabinetId], references: [id])
+  doctor       Employee?    @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  patient      Patient      @relation(fields: [patientId], references: [id])
+  service        Service?        @relation(fields: [serviceId], references: [id])
+  reminders      Reminder[]
+  treatmentPlans TreatmentPlan[]
+  invoices       Invoice[]
+
+  @@index([organizationId, startsAt])
+  @@index([branchId, startsAt])
+  @@index([doctorId, startsAt])
+  @@index([patientId])
+  @@map("appointments")
+}
+
+// ─── Аудит ─────────────────────────────────────────────────────────────────
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  VIEW
+  LOGIN
+  LOGOUT
+}
+
+model AuditLog {
+  id             String      @id @default(cuid())
+  organizationId String
+  userId         String?
+  entityType     String
+  entityId       String?
+  action         AuditAction
+  changes        Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime    @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation("AuditActor", fields: [userId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+// ─── Сотрудники: график и сертификаты ───────────────────────────────────────
+
+model EmployeeSchedule {
+  id             String   @id @default(cuid())
+  organizationId String
+  employeeId     String
+  branchId       String
+  dayOfWeek      Int
+  startsAt       String
+  endsAt         String
+  breakStart     String?
+  breakEnd       String?
+  isActive       Boolean  @default(true)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("employee_schedules")
+}
+
+model EmployeeCertificate {
+  id         String   @id @default(cuid())
+  employeeId String
+  title      String
+  issuedAt   DateTime?
+  expiresAt  DateTime?
+  fileUrl    String?
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_certificates")
+}
+
+// ─── Клиника: планы лечения, дневник, снимки ───────────────────────────────
+
+enum TreatmentPlanStatus {
+  DRAFT
+  PROPOSED
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model TreatmentPlan {
+  id             String              @id @default(cuid())
+  organizationId String
+  patientId      String
+  appointmentId  String?
+  doctorId       String?
+  title          String
+  status         TreatmentPlanStatus @default(DRAFT)
+  totalPrice     Decimal             @default(0) @db.Decimal(12, 2)
+  notes          String?
+  isAlternative  Boolean             @default(false)
+  parentPlanId   String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  patient      Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment  Appointment?        @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  doctor       Employee?           @relation(fields: [doctorId], references: [id])
+  parentPlan   TreatmentPlan?      @relation("PlanAlternatives", fields: [parentPlanId], references: [id])
+  alternatives TreatmentPlan[]     @relation("PlanAlternatives")
+  items        TreatmentPlanItem[]
+  diaryEntries TreatmentDiaryEntry[]
+  invoices     Invoice[]
+
+  @@index([patientId])
+  @@index([appointmentId])
+  @@map("treatment_plans")
+}
+
+model TreatmentPlanItem {
+  id           String   @id @default(cuid())
+  planId       String
+  serviceId    String?
+  toothNum     Int?
+  title        String
+  sortOrder    Int      @default(0)
+  price        Decimal  @default(0) @db.Decimal(12, 2)
+  durationMin  Int      @default(30)
+  isCompleted  Boolean  @default(false)
+
+  plan    TreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  service Service?      @relation(fields: [serviceId], references: [id])
+
+  @@map("treatment_plan_items")
+}
+
+model TreatmentDiaryEntry {
+  id        String   @id @default(cuid())
+  planId    String
+  toothNum  Int?
+  notes     String
+  photoUrl  String?
+  createdAt DateTime @default(now())
+
+  plan TreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@map("treatment_diary_entries")
+}
+
+enum ImagingType {
+  OPG
+  CT
+  INTRAORAL
+  STL
+  PLY
+  DICOM
+  PHOTO
+}
+
+model ImagingStudy {
+  id        String      @id @default(cuid())
+  patientId String
+  type      ImagingType
+  title     String?
+  fileUrl   String
+  toothNum  Int?
+  takenAt   DateTime    @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@map("imaging_studies")
+}
+
+enum ConsentType {
+  PD_PROCESSING
+  MEDICAL_TREATMENT
+  MARKETING
+  TELEMEDICINE
+}
+
+enum ConsentStatus {
+  PENDING
+  SIGNED
+  REVOKED
+}
+
+model PatientConsent {
+  id             String        @id @default(cuid())
+  organizationId String
+  patientId      String
+  type           ConsentType
+  status         ConsentStatus @default(PENDING)
+  signedAt       DateTime?
+  documentUrl    String?
+  signatureHash  String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("patient_consents")
+}
+
+// ─── Сегментация ─────────────────────────────────────────────────────────────
+
+model PatientSegment {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  rulesJson      Json
+  isDynamic      Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members      PatientSegmentMember[]
+
+  @@map("patient_segments")
+}
+
+model PatientSegmentMember {
+  segmentId String
+  patientId String
+  addedAt   DateTime @default(now())
+
+  segment PatientSegment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  patient Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@id([segmentId, patientId])
+  @@map("patient_segment_members")
+}
+
+// ─── Очередь и лист ожидания ─────────────────────────────────────────────────
+
+model WaitlistEntry {
+  id             String    @id @default(cuid())
+  organizationId String
+  patientId      String
+  serviceId      String?
+  branchId       String
+  priority       Int       @default(0)
+  preferredFrom  DateTime?
+  preferredTo    DateTime?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("waitlist_entries")
+}
+
+enum QueueStatus {
+  WAITING
+  CALLED
+  IN_CHAIR
+  DONE
+  SKIPPED
+}
+
+model ReceptionQueueItem {
+  id             String      @id @default(cuid())
+  organizationId String
+  branchId       String
+  patientId      String
+  appointmentId  String?
+  status         QueueStatus @default(WAITING)
+  position       Int
+  checkedInAt    DateTime    @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([branchId, status])
+  @@map("reception_queue")
+}
+
+// ─── Финансы ─────────────────────────────────────────────────────────────────
+
+model PriceList {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  code           String
+  isDefault      Boolean  @default(false)
+  isActive       Boolean  @default(true)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items        PriceListItem[]
+
+  @@unique([organizationId, code])
+  @@map("price_lists")
+}
+
+model PriceListItem {
+  id          String  @id @default(cuid())
+  priceListId String
+  serviceId   String
+  price       Decimal @db.Decimal(12, 2)
+
+  priceList PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  service   Service   @relation(fields: [serviceId], references: [id])
+
+  @@unique([priceListId, serviceId])
+  @@map("price_list_items")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIAL
+  PAID
+  CANCELLED
+}
+
+model Invoice {
+  id              String        @id @default(cuid())
+  organizationId  String
+  patientId       String
+  appointmentId   String?
+  treatmentPlanId String?
+  number          String
+  status          InvoiceStatus @default(DRAFT)
+  totalAmount     Decimal       @default(0) @db.Decimal(12, 2)
+  paidAmount      Decimal       @default(0) @db.Decimal(12, 2)
+  dueDate         DateTime?
+  createdAt       DateTime      @default(now())
+
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  patient           Patient           @relation(fields: [patientId], references: [id])
+  appointment       Appointment?      @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  treatmentPlan     TreatmentPlan?    @relation(fields: [treatmentPlanId], references: [id], onDelete: SetNull)
+  payments          Payment[]
+  installmentPlans  InstallmentPlan[]
+
+  @@unique([organizationId, number])
+  @@index([patientId])
+  @@index([treatmentPlanId])
+  @@map("invoices")
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  ONLINE
+  DMS
+  INSTALLMENT
+  BONUS
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  organizationId String
+  invoiceId      String?
+  patientId      String
+  amount         Decimal       @db.Decimal(12, 2)
+  method         PaymentMethod
+  externalId     String?
+  paidAt         DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice      Invoice?     @relation(fields: [invoiceId], references: [id])
+
+  @@map("payments")
+}
+
+model PromoCode {
+  id             String    @id @default(cuid())
+  organizationId String
+  code           String
+  discountPct    Decimal?  @db.Decimal(5, 2)
+  discountAmount Decimal?  @db.Decimal(12, 2)
+  validFrom      DateTime?
+  validTo        DateTime?
+  maxUses        Int?
+  usedCount      Int       @default(0)
+  isActive       Boolean   @default(true)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, code])
+  @@map("promo_codes")
+}
+
+model LoyaltyProgram {
+  id             String @id @default(cuid())
+  organizationId String
+  name           String
+  levelsJson     Json
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accounts     LoyaltyAccount[]
+
+  @@map("loyalty_programs")
+}
+
+model LoyaltyAccount {
+  id        String @id @default(cuid())
+  programId String
+  patientId String
+  points    Int    @default(0)
+  level     String @default("bronze")
+
+  program LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  patient Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, patientId])
+  @@map("loyalty_accounts")
+}
+
+model PayrollEntry {
+  id         String   @id @default(cuid())
+  employeeId String
+  periodFrom DateTime
+  periodTo   DateTime
+  amount     Decimal  @db.Decimal(12, 2)
+  detailsJson Json?
+  createdAt  DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("payroll_entries")
+}
+
+// ─── Склад ───────────────────────────────────────────────────────────────────
+
+enum InventoryCategory {
+  MATERIAL
+  MEDICATION
+  INSTRUMENT
+  HOUSEHOLD
+}
+
+model InventoryItem {
+  id             String            @id @default(cuid())
+  organizationId String
+  parentId       String?
+  sku            String?
+  name           String
+  category       InventoryCategory @default(MATERIAL)
+  unit           String            @default("шт")
+  minStock       Decimal           @default(0) @db.Decimal(12, 3)
+  isActive       Boolean           @default(true)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent       InventoryItem? @relation("InventoryTree", fields: [parentId], references: [id])
+  children     InventoryItem[] @relation("InventoryTree")
+  batches      StockBatch[]
+  movements    StockMovement[]
+  countLines   InventoryCountLine[]
+  materialNorms ServiceMaterialNorm[]
+
+  @@index([organizationId])
+  @@map("inventory_items")
+}
+
+model StockBatch {
+  id           String    @id @default(cuid())
+  itemId       String
+  branchId     String
+  quantity     Decimal   @db.Decimal(12, 3)
+  serialNumber String?
+  expiresAt    DateTime?
+  costPrice    Decimal?  @db.Decimal(12, 2)
+
+  item InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@map("stock_batches")
+}
+
+enum StockMovementType {
+  RECEIPT
+  WRITE_OFF
+  TRANSFER
+  TREATMENT_USE
+  INVENTORY
+}
+
+model StockMovement {
+  id             String            @id @default(cuid())
+  organizationId String
+  itemId         String
+  branchId       String
+  type           StockMovementType
+  quantity       Decimal           @db.Decimal(12, 3)
+  notes          String?
+  createdAt      DateTime          @default(now())
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  item         InventoryItem @relation(fields: [itemId], references: [id])
+
+  @@map("stock_movements")
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  PARTIAL
+  RECEIVED
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id             String              @id @default(cuid())
+  organizationId String
+  supplierName   String
+  status         PurchaseOrderStatus @default(DRAFT)
+  totalAmount    Decimal             @default(0) @db.Decimal(12, 2)
+  orderedAt      DateTime            @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_orders")
+}
+
+// ─── Зуботехническая лаборатория ─────────────────────────────────────────────
+
+enum LabOrderStatus {
+  RECEIVED
+  IN_PROGRESS
+  READY
+  DELIVERED
+  REJECTED
+}
+
+model LabOrder {
+  id             String         @id @default(cuid())
+  organizationId String
+  patientId      String?
+  doctorId       String?
+  title          String
+  status         LabOrderStatus @default(RECEIVED)
+  shade          String?
+  stlFileUrl     String?
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  doctor       Employee?    @relation(fields: [doctorId], references: [id])
+  messages     LabMessage[]
+
+  @@map("lab_orders")
+}
+
+model LabMessage {
+  id        String   @id @default(cuid())
+  orderId   String
+  authorId  String?
+  body      String
+  fileUrl   String?
+  createdAt DateTime @default(now())
+
+  order LabOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("lab_messages")
+}
+
+// ─── Маркетинг ───────────────────────────────────────────────────────────────
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+model MarketingCampaign {
+  id             String         @id @default(cuid())
+  organizationId String
+  name           String
+  channel        String
+  status         CampaignStatus @default(DRAFT)
+  budget         Decimal?       @db.Decimal(12, 2)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  statsJson      Json?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("marketing_campaigns")
+}
+
+enum ChainTrigger {
+  NO_VISIT_6M
+  NO_VISIT_12M
+  BIRTHDAY
+  AFTER_TREATMENT
+  ABANDONED_BOOKING
+}
+
+model AutomationChain {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  trigger        ChainTrigger
+  stepsJson      Json
+  isActive       Boolean      @default(true)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("automation_chains")
+}
+
+// ─── Коммуникации ────────────────────────────────────────────────────────────
+
+enum CommChannel {
+  WHATSAPP
+  TELEGRAM
+  VK
+  SMS
+  EMAIL
+  PHONE
+}
+
+model CommunicationThread {
+  id             String      @id @default(cuid())
+  organizationId String
+  patientId      String?
+  channel        CommChannel
+  externalId     String?
+  subject        String?
+  lastMessageAt  DateTime    @default(now())
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  messages     CommunicationMessage[]
+
+  @@map("communication_threads")
+}
+
+model CommunicationMessage {
+  id        String   @id @default(cuid())
+  threadId  String
+  direction String
+  body      String
+  metaJson  Json?
+  sentAt    DateTime @default(now())
+
+  thread CommunicationThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@map("communication_messages")
+}
+
+model PatientCommunication {
+  id        String      @id @default(cuid())
+  patientId String
+  channel   CommChannel
+  summary   String
+  sentiment String?
+  createdAt DateTime    @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("patient_communications")
+}
+
+model CallRecord {
+  id             String   @id @default(cuid())
+  organizationId String
+  patientId      String?
+  phone          String
+  durationSec    Int?
+  recordingUrl   String?
+  transcript     String?
+  aiScore        Decimal? @db.Decimal(5, 2)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("call_records")
+}
+
+// ─── Интеграции и виджет ─────────────────────────────────────────────────────
+
+enum IntegrationProvider {
+  ONEC
+  YUKASSA
+  ATOL
+  EGISZ
+  ROISTAT
+  YANDEX_METRIKA
+  PLANMECA
+  THREESHAPE
+  HL7_FHIR
+}
+
+model IntegrationConfig {
+  id             String              @id @default(cuid())
+  organizationId String
+  provider       IntegrationProvider
+  configJson     Json
+  isActive       Boolean             @default(false)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, provider])
+  @@map("integration_configs")
+}
+
+model WebhookEndpoint {
+  id             String   @id @default(cuid())
+  organizationId String
+  url            String
+  events         String[]
+  secret         String
+  isActive       Boolean  @default(true)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("webhook_endpoints")
+}
+
+model WidgetConfig {
+  id             String  @id @default(cuid())
+  organizationId String
+  primaryColor   String  @default("#3b9eff")
+  logoUrl        String?
+  fieldsJson     Json?
+  isActive       Boolean @default(true)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("widget_configs")
+}
+
+// ─── AI, блокчейн-аудит, аналитика ───────────────────────────────────────────
+
+enum AiInsightType {
+  CHURN_RISK
+  REVENUE_FORECAST
+  STAFFING
+  PURCHASE_FORECAST
+  ADMIN_SUGGESTION
+  XRAY_ANALYSIS
+  VOICE_NOTE
+}
+
+model AiInsight {
+  id             String        @id @default(cuid())
+  organizationId String
+  type           AiInsightType
+  entityType     String?
+  entityId       String?
+  payload        Json
+  confidence     Decimal?      @db.Decimal(5, 4)
+  createdAt      DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, type])
+  @@map("ai_insights")
+}
+
+model MedicalRecordHash {
+  id             String   @id @default(cuid())
+  organizationId String
+  patientId      String
+  recordType     String
+  recordId       String
+  contentHash    String
+  prevHash       String?
+  chainedAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, chainedAt])
+  @@map("medical_record_hashes")
+}
+
+// ─── Кассовая смена ──────────────────────────────────────────────────────────
+
+enum CashShiftStatus {
+  OPEN
+  CLOSED
+}
+
+model CashShift {
+  id             String          @id @default(cuid())
+  organizationId String
+  branchId       String
+  openedById     String?
+  closedById     String?
+  status         CashShiftStatus @default(OPEN)
+  openingCash    Decimal         @default(0) @db.Decimal(12, 2)
+  closingCash    Decimal?        @db.Decimal(12, 2)
+  cardTotal      Decimal         @default(0) @db.Decimal(12, 2)
+  cashTotal      Decimal         @default(0) @db.Decimal(12, 2)
+  openedAt       DateTime        @default(now())
+  closedAt       DateTime?
+  notes          String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@map("cash_shifts")
+}
+
+// ─── Напоминания (внутренние, без внешних SMS-шлюзов) ───────────────────────
+
+enum ReminderChannel {
+  SMS
+  EMAIL
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  CANCELLED
+}
+
+model Reminder {
+  id             String          @id @default(cuid())
+  organizationId String
+  patientId      String
+  appointmentId  String?
+  channel        ReminderChannel @default(SMS)
+  message        String
+  scheduledAt    DateTime
+  sentAt         DateTime?
+  status         ReminderStatus  @default(PENDING)
+  createdAt      DateTime        @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  appointment  Appointment? @relation(fields: [appointmentId], references: [id])
+
+  @@index([organizationId, scheduledAt, status])
+  @@map("reminders")
+}
+
+// ─── Инвентаризация склада ───────────────────────────────────────────────────
+
+enum InventorySessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model InventorySession {
+  id             String                 @id @default(cuid())
+  organizationId String
+  branchId       String
+  status         InventorySessionStatus @default(IN_PROGRESS)
+  startedAt      DateTime               @default(now())
+  completedAt    DateTime?
+  notes          String?
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lines        InventoryCountLine[]
+
+  @@map("inventory_sessions")
+}
+
+model InventoryCountLine {
+  id          String  @id @default(cuid())
+  sessionId   String
+  itemId      String
+  expectedQty Decimal @db.Decimal(12, 3)
+  actualQty   Decimal @db.Decimal(12, 3)
+  diffQty     Decimal @db.Decimal(12, 3)
+
+  session InventorySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  item    InventoryItem    @relation(fields: [itemId], references: [id])
+
+  @@unique([sessionId, itemId])
+  @@map("inventory_count_lines")
+}
+
+// ─── Auth: refresh tokens ────────────────────────────────────────────────────
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+// ─── Семейный счёт ───────────────────────────────────────────────────────────
+
+model FamilyGroup {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  createdAt      DateTime @default(now())
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members      FamilyMember[]
+
+  @@map("family_groups")
+}
+
+model FamilyMember {
+  familyGroupId String
+  patientId     String
+  role          String   @default("MEMBER")
+  joinedAt      DateTime @default(now())
+
+  familyGroup FamilyGroup @relation(fields: [familyGroupId], references: [id], onDelete: Cascade)
+  patient     Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@id([familyGroupId, patientId])
+  @@map("family_members")
+}
+
+// ─── Депозиты и рассрочки ────────────────────────────────────────────────────
+
+model PatientDeposit {
+  id             String   @id @default(cuid())
+  organizationId String
+  patientId      String   @unique
+  balance        Decimal  @default(0) @db.Decimal(12, 2)
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("patient_deposits")
+}
+
+enum InstallmentStatus {
+  ACTIVE
+  COMPLETED
+  DEFAULTED
+  CANCELLED
+}
+
+enum InstallmentLineStatus {
+  PENDING
+  PAID
+  OVERDUE
+}
+
+model InstallmentPlan {
+  id             String            @id @default(cuid())
+  organizationId String
+  patientId      String
+  invoiceId      String?
+  totalAmount    Decimal           @db.Decimal(12, 2)
+  paidAmount     Decimal           @default(0) @db.Decimal(12, 2)
+  months         Int
+  status         InstallmentStatus @default(ACTIVE)
+  createdAt      DateTime          @default(now())
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  patient      Patient               @relation(fields: [patientId], references: [id])
+  invoice      Invoice?              @relation(fields: [invoiceId], references: [id])
+  schedule     InstallmentSchedule[]
+
+  @@map("installment_plans")
+}
+
+model InstallmentSchedule {
+  id       String                @id @default(cuid())
+  planId   String
+  dueDate  DateTime
+  amount   Decimal               @db.Decimal(12, 2)
+  status   InstallmentLineStatus @default(PENDING)
+  paidAt   DateTime?
+
+  plan InstallmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@map("installment_schedule")
+}
+
+// ─── Нормы расхода материалов ────────────────────────────────────────────────
+
+model ServiceMaterialNorm {
+  id             String  @id @default(cuid())
+  organizationId String
+  serviceId      String
+  itemId         String
+  quantity       Decimal @db.Decimal(12, 3)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  service      Service       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  item         InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, itemId])
+  @@map("service_material_norms")
+}
+
+// ─── Шаблоны напоминаний ─────────────────────────────────────────────────────
+
+model ReminderTemplate {
+  id             String          @id @default(cuid())
+  organizationId String
+  name           String
+  channel        ReminderChannel
+  body           String
+  isActive       Boolean         @default(true)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("reminder_templates")
+}
+
+// ─── Конструктор зарплаты ─────────────────────────────────────────────────────
+
+enum PayrollRuleType {
+  FIXED
+  PERCENT_REVENUE
+  PER_SERVICE
+}
+
+model PayrollRule {
+  id             String          @id @default(cuid())
+  organizationId String
+  name           String
+  ruleType       PayrollRuleType
+  paramsJson     Json
+  isActive       Boolean         @default(true)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("payroll_rules")
+}
