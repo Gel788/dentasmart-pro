@@ -1,4 +1,4 @@
-const CACHE = 'dentasmart-v1';
+const CACHE = 'dentasmart-v2';
 const SHELL = ['/', '/dashboard', '/patients', '/schedule', '/manifest.json'];
 
 self.addEventListener('install', (e) => {
@@ -6,12 +6,17 @@ self.addEventListener('install', (e) => {
 });
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(self.clients.claim());
+  e.waitUntil(
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim()),
+  );
 });
 
 self.addEventListener('fetch', (e) => {
   const { request } = e;
-  if (request.method !== 'GET') return;
+  if (request.method !== 'GET' || request.mode === 'navigate') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   e.respondWith(
