@@ -22,7 +22,7 @@ export function PatientAvatar({
   return (
     <div
       className={clsx(
-        'flex shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--accent)] to-[var(--blue)] font-bold text-white shadow-md shadow-[var(--accent)]/20',
+        'flex shrink-0 items-center justify-center rounded-2xl bg-[var(--accent)] font-medium text-white',
         sizes[size],
         className,
       )}

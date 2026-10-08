@@ -16,6 +16,9 @@ import { Protected } from '@/components/protected';
 import { PatientProfileHero } from '@/components/patient-profile-hero';
 import { PatientForm } from '@/components/patient-form';
 import { ToothChart, type ToothRecord } from '@/components/tooth-chart';
+import { PlanBoard } from '@/components/plan-board';
+import { PerioChart } from '@/components/perio-chart';
+import { OmsPanel } from '@/components/oms-panel';
 import { Button } from '@/components/ui/button';
 import { Input, Label, Select } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
@@ -44,7 +47,7 @@ import {
 } from '@/lib/format';
 import { patientFormToPayload, patientToForm } from '@/lib/patient';
 
-type Tab = 'overview' | 'teeth' | 'plans' | 'finance' | 'documents';
+type Tab = 'overview' | 'teeth' | 'perio' | 'plans' | 'finance' | 'oms' | 'documents';
 
 type PatientFull = {
   id: string;
@@ -63,7 +66,17 @@ type PatientFull = {
     title: string;
     status: string;
     totalPrice: string;
-    items: { title: string; isCompleted?: boolean }[];
+    items: {
+      id: string;
+      title: string;
+      price: string;
+      listPrice?: string | null;
+      toothNum?: number | null;
+      isCompleted: boolean;
+      status?: string;
+      service?: { id: string; name: string; basePrice: string } | null;
+      invoiceItem?: { id: string } | null;
+    }[];
   }[];
   appointments: {
     id: string;
@@ -71,6 +84,7 @@ type PatientFull = {
     status: string;
     service?: { name: string };
     doctor?: { firstName: string; lastName: string };
+    branch?: { name: string };
   }[];
   invoices: { id: string; number: string; totalAmount: string; paidAmount: string; status: string }[];
   imagingStudies: { id: string; title?: string; type: string; fileUrl: string }[];
@@ -125,6 +139,8 @@ function PatientSkeleton() {
 export default function PatientCardPage() {
   const { id } = useParams<{ id: string }>();
   const [tab, setTab] = useState<Tab>('overview');
+  const [planId, setPlanId] = useState<string | null>(null);
+  const [planEditing, setPlanEditing] = useState(true);
   const [patient, setPatient] = useState<PatientFull | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [selectedTooth, setSelectedTooth] = useState<number | undefined>();
@@ -135,9 +151,19 @@ export default function PatientCardPage() {
   const [viewImg, setViewImg] = useState<{ fileUrl: string; type: string; title?: string } | null>(null);
   const [depositAmount, setDepositAmount] = useState('');
   const [consentType, setConsentType] = useState('MEDICAL_TREATMENT');
+  const [missing, setMissing] = useState(false);
 
   const load = useCallback(() => {
-    api<PatientFull>(`/patients/${id}/full`).then(setPatient).catch(console.error);
+    if (!id || id === 'undefined') {
+      setMissing(true);
+      return;
+    }
+    api<PatientFull>(`/patients/${id}/full`)
+      .then((data) => {
+        setPatient(data);
+        setMissing(false);
+      })
+      .catch(() => setMissing(true));
   }, [id]);
 
   useEffect(() => {
@@ -182,10 +208,26 @@ export default function PatientCardPage() {
   const tabs = [
     { id: 'overview' as Tab, label: 'Обзор' },
     { id: 'teeth' as Tab, label: 'Зубы' },
+    { id: 'perio' as Tab, label: 'Пародонт' },
     { id: 'plans' as Tab, label: 'Планы' },
     { id: 'finance' as Tab, label: 'Финансы' },
+    { id: 'oms' as Tab, label: 'ОМС' },
     { id: 'documents' as Tab, label: 'Документы' },
   ];
+
+  if (missing) {
+    return (
+      <Protected>
+        <div className="mx-auto max-w-md py-20 text-center">
+          <p className="text-lg font-semibold text-[var(--text)]">Пациент не найден</p>
+          <p className="mt-2 text-sm text-[var(--muted)]">Карточка недоступна или ссылка устарела.</p>
+          <Link href="/patients" className="mt-6 inline-block">
+            <Button>К списку пациентов</Button>
+          </Link>
+        </div>
+      </Protected>
+    );
+  }
 
   if (!patient) {
     return (
@@ -223,7 +265,50 @@ export default function PatientCardPage() {
       </div>
 
       {tab === 'overview' && (
-        <div className="mt-6 grid gap-6 lg:grid-cols-3">
+        <div className="mt-6 space-y-6">
+          <PlanSwitcher
+            plans={patient.treatmentPlans ?? []}
+            activeId={planId ?? patient.summary?.activePlanId ?? patient.treatmentPlans?.[0]?.id}
+            onPick={setPlanId}
+          />
+          {(() => {
+            const activeId = planId ?? patient.summary?.activePlanId ?? patient.treatmentPlans?.[0]?.id;
+            const active = patient.treatmentPlans?.find((plan) => plan.id === activeId);
+            return active ? (
+              planEditing ? (
+                <PlanBoard
+                  planId={active.id}
+                  patientId={patient.id}
+                  items={active.items ?? []}
+                  teeth={patient.toothRecords ?? []}
+                  onChanged={load}
+                  onClose={() => setPlanEditing(false)}
+                />
+              ) : (
+                <div className="ds-card flex flex-wrap items-center justify-between gap-4 p-5">
+                  <div>
+                    <p className="ds-kicker">Активный план</p>
+                    <p className="mt-1 text-sm font-semibold text-[var(--text)]">{active.title}</p>
+                    <p className="mt-1 text-sm text-[var(--muted)]">
+                      {formatMoney(active.totalPrice)} · {active.items?.length ?? 0} строк · {label(PLAN_STATUS, active.status)}
+                    </p>
+                  </div>
+                  <Button onClick={() => setPlanEditing(true)}>Изменить</Button>
+                </div>
+              )
+            ) : (
+              <EmptyBlock
+                icon={Stethoscope}
+                title="Плана лечения ещё нет"
+                action={
+                  <Link href="/clinical">
+                    <Button size="sm">Создать план</Button>
+                  </Link>
+                }
+              />
+            );
+          })()}
+        <div className="grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
             <SectionCard
               title="История визитов"
@@ -242,9 +327,10 @@ export default function PatientCardPage() {
                   {patient.appointments.map((a) => (
                     <TimelineItem
                       key={a.id}
+                      href={`/visit/${a.id}`}
                       time={formatDate(a.startsAt)}
                       title={a.service?.name ?? 'Приём'}
-                      subtitle={a.doctor ? `Врач: ${a.doctor.lastName} ${a.doctor.firstName}` : undefined}
+                      subtitle={[a.doctor ? `Врач: ${a.doctor.lastName} ${a.doctor.firstName}` : '', a.branch?.name].filter(Boolean).join(' · ') || undefined}
                       badge={
                         <Badge variant={a.status === 'COMPLETED' ? 'success' : a.status === 'CANCELLED' ? 'danger' : 'accent'}>
                           {label(APPOINTMENT_STATUS, a.status)}
@@ -266,43 +352,20 @@ export default function PatientCardPage() {
               )}
             </SectionCard>
 
-            {patient.treatmentPlans?.length > 0 && (
-              <SectionCard title="Планы лечения" description="Краткий список">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {patient.treatmentPlans.slice(0, 2).map((plan) => (
-                    <PlanCard
-                      key={plan.id}
-                      id={plan.id}
-                      title={plan.title}
-                      statusLabel={label(PLAN_STATUS, plan.status)}
-                      statusVariant={PLAN_VARIANT[plan.status] ?? 'default'}
-                      totalPrice={plan.totalPrice}
-                      itemsCount={plan.items?.length ?? 0}
-                      completedCount={plan.items?.filter((i) => i.isCompleted).length}
-                    />
-                  ))}
-                </div>
-                {patient.treatmentPlans.length > 2 && (
-                  <Button variant="ghost" className="mt-4 w-full" onClick={() => setTab('plans')}>
-                    Все планы ({patient.treatmentPlans.length})
-                  </Button>
-                )}
-              </SectionCard>
-            )}
           </div>
 
           <div className="space-y-6">
             <SectionCard title="Финансы" description="Баланс и счета">
-              <div className="space-y-4">
-                <div className="rounded-xl bg-[var(--surface-muted)]/50 p-4">
-                  <p className="text-xs font-medium uppercase text-[var(--muted)]">Долг</p>
-                  <p className={`text-2xl font-bold ${(patient.summary?.balanceDue ?? 0) > 0 ? 'text-[var(--danger)]' : 'text-[var(--success)]'}`}>
+              <div className="space-y-3">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                  <p className="ds-kicker">Долг</p>
+                  <p className={`mt-1 ds-display text-2xl tabular-nums ${(patient.summary?.balanceDue ?? 0) > 0 ? 'text-[var(--danger)]' : 'text-[var(--success)]'}`}>
                     {formatMoney(patient.summary?.balanceDue ?? 0)}
                   </p>
                 </div>
-                <div className="rounded-xl bg-[var(--accent-soft)]/40 p-4">
-                  <p className="text-xs font-medium uppercase text-[var(--muted)]">Депозит</p>
-                  <p className="text-2xl font-bold text-[var(--accent)]">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--accent-soft)] p-4">
+                  <p className="ds-kicker">Депозит</p>
+                  <p className="mt-1 ds-display text-2xl tabular-nums text-[var(--accent)]">
                     {formatMoney(patient.deposit?.balance ?? patient.summary?.depositBalance ?? 0)}
                   </p>
                 </div>
@@ -323,7 +386,7 @@ export default function PatientCardPage() {
                   onChange={(e) => setImgTitle(e.target.value)}
                   className="flex-1 text-sm"
                 />
-                <label className="inline-flex cursor-pointer items-center rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-medium hover:bg-[var(--surface-muted)]">
+                <label className="inline-flex cursor-pointer items-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text)] transition-colors duration-150 hover:bg-[var(--surface-muted)]">
                   {uploading ? '…' : '+ Файл'}
                   <input
                     type="file"
@@ -340,10 +403,10 @@ export default function PatientCardPage() {
                       key={img.id}
                       type="button"
                       onClick={() => setViewImg(img)}
-                      className="flex flex-col items-center gap-2 rounded-xl border border-[var(--border)] p-3 text-center transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]/30"
+                      className="ds-card-hover flex flex-col items-center gap-2 p-3 text-center"
                     >
                       <FileImage size={24} className="text-[var(--accent)]" />
-                      <span className="line-clamp-2 text-xs font-medium">{img.title ?? img.type}</span>
+                      <span className="line-clamp-2 text-xs font-medium text-[var(--text)]">{img.title ?? img.type}</span>
                     </button>
                   ))}
                 </div>
@@ -351,9 +414,9 @@ export default function PatientCardPage() {
                 <p className="py-4 text-center text-sm text-[var(--muted)]">Снимков нет</p>
               )}
               {viewImg && (
-                <div className="mt-4 rounded-xl border border-[var(--border)] p-3">
-                  <div className="mb-2 flex justify-between">
-                    <p className="text-sm font-medium">{viewImg.title ?? 'Просмотр'}</p>
+                <div className="ds-card mt-4 p-3">
+                  <div className="mb-2 flex items-center justify-between border-b border-[var(--border)] pb-2">
+                    <p className="text-sm font-medium text-[var(--text)]">{viewImg.title ?? 'Просмотр'}</p>
                     <Button variant="ghost" size="sm" onClick={() => setViewImg(null)}>
                       Закрыть
                     </Button>
@@ -372,6 +435,7 @@ export default function PatientCardPage() {
               </SectionCard>
             )}
           </div>
+        </div>
         </div>
       )}
 
@@ -403,10 +467,16 @@ export default function PatientCardPage() {
               </div>
             </SectionCard>
           ) : (
-            <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-dashed border-[var(--border)] text-sm text-[var(--muted)]">
+            <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] text-sm text-[var(--muted)]">
               Выберите зуб на схеме
             </div>
           )}
+        </div>
+      )}
+
+      {tab === 'perio' && (
+        <div className="mt-6">
+          <PerioChart patientId={id} />
         </div>
       )}
 
@@ -444,17 +514,17 @@ export default function PatientCardPage() {
       {tab === 'finance' && (
         <div className="mt-6 space-y-6">
           <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
-              <p className="text-sm text-[var(--muted)]">Долг</p>
-              <p className="mt-1 text-2xl font-bold text-[var(--danger)]">{formatMoney(patient.summary?.balanceDue ?? 0)}</p>
+            <div className="ds-card p-5">
+              <p className="ds-kicker">Долг</p>
+              <p className="mt-1 ds-display text-2xl tabular-nums text-[var(--danger)]">{formatMoney(patient.summary?.balanceDue ?? 0)}</p>
             </div>
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
-              <p className="text-sm text-[var(--muted)]">Депозит</p>
-              <p className="mt-1 text-2xl font-bold text-[var(--accent)]">{formatMoney(patient.deposit?.balance ?? 0)}</p>
+            <div className="ds-card p-5">
+              <p className="ds-kicker">Депозит</p>
+              <p className="mt-1 ds-display text-2xl tabular-nums text-[var(--accent)]">{formatMoney(patient.deposit?.balance ?? 0)}</p>
             </div>
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
-              <p className="text-sm text-[var(--muted)]">Счетов</p>
-              <p className="mt-1 text-2xl font-bold">{patient.invoices?.length ?? 0}</p>
+            <div className="ds-card p-5">
+              <p className="ds-kicker">Счетов</p>
+              <p className="mt-1 ds-display text-2xl tabular-nums text-[var(--text)]">{patient.invoices?.length ?? 0}</p>
             </div>
           </div>
 
@@ -484,16 +554,16 @@ export default function PatientCardPage() {
 
           {!!patient.installmentPlans?.length && (
             <SectionCard title="Рассрочки">
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {patient.installmentPlans.map((pl) => (
-                  <div key={pl.id} className="rounded-xl border border-[var(--border)] p-4">
-                    <p className="font-semibold">
+                  <div key={pl.id} className="ds-card p-4">
+                    <p className="font-semibold text-[var(--text)]">
                       {formatMoney(pl.totalAmount)} · {label(INSTALLMENT_STATUS, pl.status)}
                     </p>
-                    <ul className="mt-3 space-y-2">
+                    <ul className="mt-3 divide-y divide-[var(--border)]">
                       {pl.schedule.map((line) => (
-                        <li key={line.id} className="flex items-center justify-between text-sm">
-                          <span>{formatMoney(line.amount)}</span>
+                        <li key={line.id} className="flex items-center justify-between py-2 text-sm">
+                          <span className="tabular-nums text-[var(--text-secondary)]">{formatMoney(line.amount)}</span>
                           <Badge variant={line.status === 'PAID' ? 'success' : 'warning'}>{line.status}</Badge>
                         </li>
                       ))}
@@ -506,26 +576,32 @@ export default function PatientCardPage() {
         </div>
       )}
 
+      {tab === 'oms' && (
+        <div className="mt-6">
+          <OmsPanel patientId={id} />
+        </div>
+      )}
+
       {tab === 'documents' && (
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <SectionCard title="Согласия" description="ПДн, лечение, маркетинг">
-            <ul className="mb-4 space-y-2">
-              {patient.consents?.length ? (
-                patient.consents.map((c) => (
+            {patient.consents?.length ? (
+              <ul className="mb-4 divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)]">
+                {patient.consents.map((c) => (
                   <li
                     key={c.id}
-                    className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/40 px-4 py-3"
+                    className="flex items-center justify-between bg-[var(--surface)] px-4 py-3 transition-colors duration-150 hover:bg-[var(--surface-muted)]"
                   >
-                    <span className="text-sm font-medium">{label(CONSENT_TYPE, c.type)}</span>
+                    <span className="text-sm font-medium text-[var(--text)]">{label(CONSENT_TYPE, c.type)}</span>
                     <Badge variant={c.status === 'SIGNED' ? 'success' : 'default'}>
                       {label(CONSENT_STATUS, c.status)}
                     </Badge>
                   </li>
-                ))
-              ) : (
-                <p className="py-4 text-center text-sm text-[var(--muted)]">Согласий пока нет</p>
-              )}
-            </ul>
+                ))}
+              </ul>
+            ) : (
+              <p className="mb-4 py-4 text-center text-sm text-[var(--muted)]">Согласий пока нет</p>
+            )}
             <div className="flex gap-2">
               <Select value={consentType} onChange={(e) => setConsentType(e.target.value)} className="flex-1">
                 {Object.entries(CONSENT_TYPE).map(([k, v]) => (
@@ -549,7 +625,7 @@ export default function PatientCardPage() {
           </SectionCard>
 
           <SectionCard title="Депозит" description="Предоплата на балансе">
-            <p className="text-4xl font-bold tabular-nums text-[var(--accent)]">
+            <p className="ds-display text-4xl tabular-nums text-[var(--accent)]">
               {formatMoney(patient.deposit?.balance ?? 0)}
             </p>
             <div className="mt-6 flex gap-2">
@@ -592,5 +668,44 @@ export default function PatientCardPage() {
         />
       </Modal>
     </Protected>
+  );
+}
+
+function PlanSwitcher({
+  plans,
+  activeId,
+  onPick,
+}: {
+  plans: { id: string; title: string; status: string; totalPrice: string }[];
+  activeId?: string | null;
+  onPick: (id: string) => void;
+}) {
+  if (!plans.length) return null;
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-1">
+      {plans.map((plan) => {
+        const active = plan.id === activeId;
+        return (
+          <button
+            key={plan.id}
+            type="button"
+            onClick={() => onPick(plan.id)}
+            className={`shrink-0 rounded-full border px-4 py-2 text-left text-sm transition-colors duration-150 ${
+              active
+                ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
+                : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)]'
+            }`}
+          >
+            <span className="font-semibold">{plan.title}</span>
+            <span className={active ? 'text-white/80' : 'text-[var(--muted)]'}>
+              {' · '}
+              {label(PLAN_STATUS, plan.status)}
+              {' · '}
+              {formatMoney(plan.totalPrice)}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
 }

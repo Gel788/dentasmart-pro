@@ -75,8 +75,20 @@ export class PatientsService {
       where: { id, organizationId: orgId },
       include: {
         toothRecords: { orderBy: [{ formula: 'asc' }, { toothNum: 'asc' }] },
-        treatmentPlans: { include: { items: true }, orderBy: { updatedAt: 'desc' }, take: 10 },
-        appointments: { orderBy: { startsAt: 'desc' }, take: 10, include: { service: true, doctor: true } },
+        treatmentPlans: {
+          include: {
+            items: {
+              orderBy: { sortOrder: 'asc' },
+              include: {
+                service: { select: { id: true, name: true, basePrice: true, code: true } },
+                invoiceItem: { select: { id: true } },
+              },
+            },
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 10,
+        },
+        appointments: { orderBy: { startsAt: 'desc' }, take: 10, include: { service: true, doctor: true, branch: { select: { name: true } } } },
         invoices: { orderBy: { createdAt: 'desc' }, take: 10 },
         imagingStudies: { orderBy: { takenAt: 'desc' }, take: 20 },
         consents: { orderBy: { id: 'desc' } },

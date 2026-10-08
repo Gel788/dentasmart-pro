@@ -26,31 +26,31 @@ function formatValue(value: unknown): string {
 
 function ReportResultView({ data }: { data: unknown }) {
   if (data === null || data === undefined) {
-    return <p className="text-sm text-[var(--muted)]">Нет данных</p>;
+    return <p className="rounded-xl border border-dashed border-[var(--border)] py-8 text-center text-sm text-[var(--muted)]">Нет данных</p>;
   }
 
   if (Array.isArray(data)) {
-    if (!data.length) return <p className="text-sm text-[var(--muted)]">Пустой результат</p>;
+    if (!data.length) return <p className="rounded-xl border border-dashed border-[var(--border)] py-8 text-center text-sm text-[var(--muted)]">Пустой результат</p>;
     return (
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {data.map((item, i) => {
           if (item !== null && typeof item === 'object' && !Array.isArray(item)) {
             const entries = Object.entries(item as Record<string, unknown>);
             return (
-              <Card key={i}>
+              <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3">
                 {entries.map(([key, val]) => (
                   <div key={key} className="mb-2 last:mb-0">
-                    <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">{key}</p>
-                    <p className="mt-0.5 font-semibold text-[var(--text)]">{formatValue(val)}</p>
+                    <p className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--muted)]">{key}</p>
+                    <p className="mt-0.5 tabular-nums font-semibold text-[var(--text)]">{formatValue(val)}</p>
                   </div>
                 ))}
-              </Card>
+              </div>
             );
           }
           return (
-            <Card key={i}>
+            <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3">
               <p className="font-semibold text-[var(--text)]">{formatValue(item)}</p>
-            </Card>
+            </div>
           );
         })}
       </div>
@@ -62,8 +62,8 @@ function ReportResultView({ data }: { data: unknown }) {
     return (
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {entries.map(([key, val]) => (
-          <Card key={key}>
-            <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">{key}</p>
+          <div key={key} className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--muted)]">{key}</p>
             {val !== null && typeof val === 'object' && !Array.isArray(val) ? (
               <div className="mt-2 space-y-1 text-sm">
                 {Object.entries(val as Record<string, unknown>).map(([k, v]) => (
@@ -75,18 +75,18 @@ function ReportResultView({ data }: { data: unknown }) {
             ) : Array.isArray(val) ? (
               <ReportResultView data={val} />
             ) : (
-              <p className="mt-1 text-lg font-semibold text-[var(--text)]">{formatValue(val)}</p>
+              <p className="ds-display mt-1.5 text-2xl leading-none tabular-nums text-[var(--text)]">{formatValue(val)}</p>
             )}
-          </Card>
+          </div>
         ))}
       </div>
     );
   }
 
   return (
-    <Card>
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3">
       <p className="font-semibold text-[var(--text)]">{formatValue(data)}</p>
-    </Card>
+    </div>
   );
 }
 
@@ -112,7 +112,7 @@ export default function ReportsPage() {
         description="Внутренние отчёты без внешних BI"
       />
 
-      <div className="flex flex-wrap gap-2">
+      <div className="ds-card flex flex-wrap gap-2 p-3">
         {REPORTS.map((r) => (
           <Button key={r.id} variant="ghost" disabled={loading} onClick={() => run(r.id)}>
             {r.label}

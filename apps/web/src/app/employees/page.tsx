@@ -40,7 +40,21 @@ export default function EmployeesPage() {
   const { branches, branchId } = useBranch();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [payroll, setPayroll] = useState<unknown[]>([]);
+  const [payroll, setPayroll] = useState<{
+    id: string;
+    amount: string;
+    periodFrom: string;
+    employee?: { firstName: string; lastName: string };
+    detailsJson?: { payments?: number; discount?: number; lab?: number; base?: number; percent?: number } | null;
+  }[]>([]);
+  const [percent, setPercent] = useState('30');
+  const [doctorId, setDoctorId] = useState('');
+  const [periodFrom, setPeriodFrom] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [periodTo, setPeriodTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [payNote, setPayNote] = useState('');
   const [editEmp, setEditEmp] = useState<Employee | null>(null);
   const [editForm, setEditForm] = useState({ specialization: '', status: 'ACTIVE', branchIds: [] as string[] });
   const [schedModal, setSchedModal] = useState(false);
@@ -62,7 +76,7 @@ export default function EmployeesPage() {
     api<Employee[]>('/employees').then(setEmployees);
     api<{ code: string; name: string }[]>('/employees/roles').then(setRoles);
     api<Schedule[]>(`/employees/schedules${branchId ? `?branchId=${branchId}` : ''}`).then(setSchedules);
-    api<unknown[]>('/employees/payroll').then(setPayroll);
+    api<typeof payroll>('/employees/payroll').then(setPayroll);
   }, [branchId]);
 
   useEffect(() => {
@@ -134,17 +148,17 @@ export default function EmployeesPage() {
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2" padding={false}>
+      <div className="grid items-start gap-6 xl:grid-cols-3">
+        <Card className="xl:col-span-2" padding={false}>
           <div className="border-b border-[var(--border)] px-5 py-4">
             <CardHeader title="Команда" description="Нажмите на сотрудника для редактирования" />
           </div>
-          <div className="space-y-2 p-4">
+          <div className="divide-y divide-[var(--border)]">
             {employees.map((e) => (
               <button
                 key={e.id}
                 type="button"
-                className="w-full rounded-xl text-left transition hover:bg-[var(--surface-muted)]"
+                className="w-full text-left transition-colors hover:bg-[var(--surface-muted)]"
                 onClick={() => {
                   setEditEmp(e);
                   setEditForm({
@@ -154,7 +168,7 @@ export default function EmployeesPage() {
                   });
                 }}
               >
-                <ListRow trailing={<Badge variant={e.status === 'ACTIVE' ? 'success' : 'default'}>{label(EMPLOYEE_STATUS, e.status)}</Badge>}>
+                <ListRow className="!rounded-none !border-0 !bg-transparent px-5 py-4" trailing={<Badge variant={e.status === 'ACTIVE' ? 'success' : 'default'}>{label(EMPLOYEE_STATUS, e.status)}</Badge>}>
                   <div className="flex items-center gap-3">
                     <PatientAvatar firstName={e.firstName} lastName={e.lastName} size="sm" />
                     <div className="min-w-0">
@@ -168,25 +182,77 @@ export default function EmployeesPage() {
             ))}
           </div>
         </Card>
-        <Card>
+        <Card className="xl:sticky xl:top-6">
           <CardHeader title="Графики" description="Текущий филиал" />
-          <div className="space-y-2">
+          <div className="overflow-hidden rounded-xl border border-[var(--border)]">
             {schedules.map((s) => (
-              <ListRow key={s.id}>
+              <ListRow key={s.id} className="!rounded-none !border-x-0 !border-t-0 last:!border-b-0">
                 <p className="font-medium text-[var(--text)]">
                   {s.employee.lastName} · {DAY_NAMES[s.dayOfWeek]}
                 </p>
                 <p className="text-[var(--muted)]">{s.startsAt}–{s.endsAt}</p>
               </ListRow>
             ))}
-            {!schedules.length && <p className="text-sm text-[var(--muted)]">График не задан</p>}
+            {!schedules.length && <p className="px-4 py-6 text-center text-sm text-[var(--muted)]">График не задан</p>}
           </div>
           <div className="mt-6 border-t border-[var(--border)] pt-6">
-            <CardHeader title="Зарплата" />
-            <div className="space-y-2">
-              {(payroll as { amount: string; periodFrom: string }[]).map((p, i) => (
-                <ListRow key={i} trailing={<span className="font-semibold text-[var(--accent)]">{Number(p.amount).toLocaleString('ru-RU')} ₽</span>}>
-                  <p className="font-medium">{new Date(p.periodFrom).toLocaleDateString('ru-RU')}</p>
+            <CardHeader title="Процент врача" description="От оплат по его приёмам за период" />
+            <div className="grid gap-2">
+              <Select aria-label="Врач" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
+                <option value="">Врач</option>
+                {employees.map((doctor) => (
+                  <option key={doctor.id} value={doctor.id}>{doctor.lastName} {doctor.firstName}</option>
+                ))}
+              </Select>
+              <Input type="number" min={1} max={100} aria-label="Процент" value={percent} onChange={(e) => setPercent(e.target.value)} />
+              <Button
+                size="sm"
+                disabled={!doctorId}
+                onClick={async () => {
+                  const doctor = employees.find((item) => item.id === doctorId);
+                  await api('/finance/payroll-rules', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      name: `${doctor?.lastName ?? 'Врач'} ${percent}%`,
+                      employeeId: doctorId,
+                      percent: Number(percent),
+                    }),
+                  });
+                  setPayNote('Правило сохранено');
+                }}
+              >
+                Сохранить процент
+              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="date" aria-label="Период с" value={periodFrom} onChange={(e) => setPeriodFrom(e.target.value)} />
+                <Input type="date" aria-label="Период по" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)} />
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={async () => {
+                  const result = await api<{ count: number }>('/finance/payroll/accrue', {
+                    method: 'POST',
+                    body: JSON.stringify({ periodFrom, periodTo }),
+                  });
+                  setPayNote(`Начислено записей: ${result.count}`);
+                  load();
+                }}
+              >
+                Начислить за период
+              </Button>
+              {payNote && <p className="text-xs text-[var(--muted)]">{payNote}</p>}
+            </div>
+            <div className="mt-4 overflow-hidden rounded-xl border border-[var(--border)]">
+              {payroll.map((p) => (
+                <ListRow key={p.id} className="!rounded-none !border-x-0 !border-t-0 last:!border-b-0" trailing={<span className="font-semibold text-[var(--accent)]">{Number(p.amount).toLocaleString('ru-RU')} ₽</span>}>
+                  <p className="font-medium">{p.employee ? `${p.employee.lastName} ${p.employee.firstName}` : 'Сотрудник'}</p>
+                  <p className="text-xs text-[var(--muted)]">
+                    {new Date(p.periodFrom).toLocaleDateString('ru-RU')}
+                    {p.detailsJson?.base != null
+                      ? ` · оплаты ${Number(p.detailsJson.payments ?? 0).toLocaleString('ru-RU')} − скидка ${Number(p.detailsJson.discount ?? 0).toLocaleString('ru-RU')} − лаба ${Number(p.detailsJson.lab ?? 0).toLocaleString('ru-RU')}`
+                      : ''}
+                  </p>
                 </ListRow>
               ))}
             </div>
@@ -205,7 +271,7 @@ export default function EmployeesPage() {
           </div>
           <div>
             <Label>Филиалы</Label>
-            <div className="space-y-1 rounded-xl border border-[var(--border)] p-2">
+            <div className="ds-card space-y-1 p-2">
               {branches.map((b) => (
                 <label key={b.id} className="flex items-center gap-2 text-sm">
                   <input
@@ -253,7 +319,7 @@ export default function EmployeesPage() {
           </div>
           <div>
             <Label>Филиалы</Label>
-            <div className="space-y-1 rounded-xl border border-[var(--border)] p-2">
+            <div className="ds-card space-y-1 p-2">
               {branches.map((b) => (
                 <label key={b.id} className="flex items-center gap-2 text-sm">
                   <input

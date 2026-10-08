@@ -49,14 +49,14 @@ export default function CommunicationsPage() {
         action={<Button onClick={() => setModal(true)}>+ Сообщение</Button>}
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Диалоги" description="Переписка с пациентами" />
           <div className="space-y-2">
             {threadList.length ? threadList.map((t) => (
               <ListRow key={t.id}>
                 <Badge variant="accent">{t.channel}</Badge>
-                <p className="mt-1.5 text-[var(--muted)] line-clamp-2">{t.messages?.[0]?.body ?? '—'}</p>
+                <p className="mt-1.5 line-clamp-2 text-[var(--text-secondary)]">{t.messages?.[0]?.body ?? '—'}</p>
               </ListRow>
             )) : (
               <EmptyState icon={MessageSquare} title="Нет диалогов" description="Создайте первое обращение" />
@@ -68,8 +68,8 @@ export default function CommunicationsPage() {
           <div className="space-y-2">
             {callList.length ? callList.map((c) => (
               <ListRow key={c.id} trailing={<Badge>{c.durationSec ? `${c.durationSec}с` : '—'}</Badge>}>
-                <p className="font-medium text-[var(--text)]">{c.phone}</p>
-                <p className="text-[var(--muted)]">{new Date(c.createdAt).toLocaleDateString('ru-RU')}</p>
+                <p className="font-medium tabular-nums text-[var(--text)]">{c.phone}</p>
+                <p className="mt-0.5 tabular-nums text-[var(--muted)]">{new Date(c.createdAt).toLocaleDateString('ru-RU')}</p>
               </ListRow>
             )) : (
               <EmptyState icon={Phone} title="Нет звонков" description="Звонки появятся в журнале" />

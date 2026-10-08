@@ -23,8 +23,22 @@ export class WidgetController {
     @Query('branchId') branchId: string,
     @Query('from') from: string,
     @Query('to') to: string,
+    @Query('durationMin') durationMin?: string,
   ) {
-    return this.svc.publicSlots(orgSlug, branchId, from, to);
+    return this.svc.publicSlots(orgSlug, branchId, from, to, durationMin ? +durationMin : 30);
+  }
+
+  @Get(':orgSlug/visits')
+  visits(@Param('orgSlug') orgSlug: string, @Query('phone') phone: string) {
+    return this.svc.visitsByPhone(orgSlug, phone || '');
+  }
+
+  @Post(':orgSlug/reschedule')
+  reschedule(
+    @Param('orgSlug') orgSlug: string,
+    @Body() body: { appointmentId: string; phone: string; startsAt: string; endsAt: string },
+  ) {
+    return this.svc.reschedule(orgSlug, body);
   }
 
   @Post(':orgSlug/book')

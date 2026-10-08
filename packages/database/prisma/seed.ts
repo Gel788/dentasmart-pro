@@ -50,7 +50,7 @@ async function main() {
   const org = await prisma.organization.upsert({
     where: { slug: 'demo-clinic' },
     create: {
-      name: 'DentaSmart Demo Clinic',
+      name: 'Sedrakoich dent Demo Clinic',
       slug: 'demo-clinic',
       phone: '+7 (495) 000-00-00',
       email: 'demo@dentasmart.local',
@@ -234,6 +234,7 @@ async function main() {
     gender?: 'MALE' | 'FEMALE';
     birthDate?: Date;
     notes?: string;
+    source?: string;
   };
 
   const DEMO_PATIENTS: DemoPatient[] = [
@@ -264,7 +265,9 @@ async function main() {
   await prisma.waitlistEntry.deleteMany({ where: { organizationId: org.id, patientId: { in: patientIds } } });
   await prisma.appointment.deleteMany({ where: { organizationId: org.id, patientId: { in: patientIds } } });
 
-  for (const p of DEMO_PATIENTS) {
+  const SOURCES = ['REFERRAL', 'SITE', 'CALL', 'WALK_IN', 'ADS', 'DOCTOR'];
+  for (const [i, p] of DEMO_PATIENTS.entries()) {
+    const source = p.source ?? (i % 4 === 3 ? null : SOURCES[i % SOURCES.length]);
     await prisma.patient.upsert({
       where: { id: p.id },
       create: {
@@ -278,6 +281,7 @@ async function main() {
         gender: p.gender,
         birthDate: p.birthDate,
         notes: p.notes,
+        source,
       },
       update: {
         firstName: p.firstName,
@@ -288,6 +292,7 @@ async function main() {
         gender: p.gender,
         birthDate: p.birthDate,
         notes: p.notes,
+        source,
       },
     });
   }
@@ -368,6 +373,7 @@ async function main() {
       endsAt: apptEnd(yesterday, 30),
       status: 'NO_SHOW',
       notes: 'seed:yesterday',
+      noShowReason: 'Не взял трубку',
     },
   });
 
@@ -669,7 +675,7 @@ async function main() {
       patientId: 'seed-patient-petr',
       appointmentId: petrAppt!.id,
       channel: 'SMS',
-      message: 'Напоминание: не забудьте про визит в DentaSmart Demo Clinic',
+      message: 'Напоминание: не забудьте про визит в Sedrakoich dent Demo Clinic',
       scheduledAt: new Date(),
       status: 'PENDING',
     },
@@ -771,7 +777,7 @@ async function main() {
       organizationId: org.id,
       name: 'Напоминание о визите',
       channel: 'SMS',
-      body: 'Ждём вас завтра в {{time}} — DentaSmart',
+      body: 'Ждём вас завтра в {{time}} — Sedrakoich dent',
     },
   });
 

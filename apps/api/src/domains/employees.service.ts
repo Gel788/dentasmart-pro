@@ -44,6 +44,7 @@ export class EmployeesService {
   payroll(orgId: string) {
     return this.prisma.payrollEntry.findMany({
       where: { employee: { user: { organizationId: orgId } } },
+      include: { employee: { select: { firstName: true, lastName: true } } },
       orderBy: { periodTo: 'desc' },
       take: 20,
     });

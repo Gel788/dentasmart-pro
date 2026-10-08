@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveBranchId } from '../common/resolve-branch';
+import { consumeStock } from './stock-consume';
 
 @Injectable()
 export class WarehouseService {
@@ -54,6 +56,16 @@ export class WarehouseService {
   }
 
   addMovement(orgId: string, data: { itemId: string; branchId: string; type: string; quantity: number; notes?: string }) {
+    if (data.type === 'WRITE_OFF' || data.type === 'TREATMENT_USE') {
+      return consumeStock(this.prisma, {
+        organizationId: orgId,
+        itemId: data.itemId,
+        branchId: data.branchId,
+        quantity: data.quantity,
+        type: data.type,
+        notes: data.notes,
+      });
+    }
     return this.prisma.stockMovement.create({
       data: {
         organizationId: orgId,
@@ -66,9 +78,39 @@ export class WarehouseService {
     });
   }
 
-  getActiveInventory(orgId: string, branchId: string) {
+  expiring(orgId: string) {
+    const until = new Date();
+    until.setDate(until.getDate() + 30);
+    return this.prisma.stockBatch.findMany({
+      where: {
+        quantity: { gt: 0 },
+        expiresAt: { lte: until },
+        item: { organizationId: orgId },
+      },
+      include: { item: { select: { name: true } } },
+      orderBy: { expiresAt: 'asc' },
+    });
+  }
+
+  async materialCost(orgId: string) {
+    const start = new Date();
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    const sum = await this.prisma.stockMovement.aggregate({
+      where: {
+        organizationId: orgId,
+        type: { in: ['TREATMENT_USE', 'WRITE_OFF'] },
+        createdAt: { gte: start },
+      },
+      _sum: { costAmount: true },
+    });
+    return { monthCost: Number(sum._sum.costAmount ?? 0) };
+  }
+
+  async getActiveInventory(orgId: string, branchId?: string) {
+    const id = await resolveBranchId(this.prisma, orgId, branchId);
     return this.prisma.inventorySession.findFirst({
-      where: { organizationId: orgId, branchId, status: 'IN_PROGRESS' },
+      where: { organizationId: orgId, branchId: id, status: 'IN_PROGRESS' },
       include: { lines: { include: { item: true } } },
     });
   }
@@ -142,8 +184,10 @@ export class WarehouseService {
   }
 
   createMaterialNorm(orgId: string, data: { serviceId: string; itemId: string; quantity: number }) {
-    return this.prisma.serviceMaterialNorm.create({
-      data: { organizationId: orgId, serviceId: data.serviceId, itemId: data.itemId, quantity: data.quantity },
+    return this.prisma.serviceMaterialNorm.upsert({
+      where: { serviceId_itemId: { serviceId: data.serviceId, itemId: data.itemId } },
+      create: { organizationId: orgId, serviceId: data.serviceId, itemId: data.itemId, quantity: data.quantity },
+      update: { quantity: data.quantity },
       include: { service: true, item: true },
     });
   }

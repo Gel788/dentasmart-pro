@@ -36,6 +36,38 @@ export class IntegrationsService {
     });
   }
 
+  journal(orgId: string) {
+    return this.prisma.integrationLog.findMany({
+      where: { organizationId: orgId },
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+    });
+  }
+
+  async dispatch(orgId: string, data: { provider: string; action: string }) {
+    const config = await this.prisma.integrationConfig.findUnique({
+      where: { organizationId_provider: { organizationId: orgId, provider: data.provider as never } },
+    });
+    const blocked = data.provider === 'ATOL' || data.provider === 'EGISZ';
+    const status = !config?.isActive || blocked ? 'SKIPPED' : 'QUEUED';
+    const message = !config?.isActive
+      ? 'Провайдер выключен. Во внешнюю систему ничего не ушло.'
+      : blocked
+        ? data.provider === 'ATOL'
+          ? 'Касса 54-ФЗ не подключена к оператору. Чек не отправлен, запись только в журнале.'
+          : 'ЕГИСЗ не подключена. Документ не выгружен, запись только в журнале.'
+        : 'Поставлено в очередь. Внешний API не вызывался.';
+    return this.prisma.integrationLog.create({
+      data: {
+        organizationId: orgId,
+        provider: data.provider as never,
+        action: data.action,
+        status: status as never,
+        message,
+      },
+    });
+  }
+
   createWebhook(orgId: string, data: { url: string; events: string[]; secret: string }) {
     return this.prisma.webhookEndpoint.create({
       data: { organizationId: orgId, url: data.url, events: data.events, secret: data.secret },

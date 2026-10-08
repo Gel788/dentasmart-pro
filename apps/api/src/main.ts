@@ -12,6 +12,12 @@ import { join } from 'path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
+  if (process.env.NODE_ENV === 'production') {
+    const secret = process.env.JWT_SECRET ?? '';
+    if (secret.length < 24 || secret.includes('change-me')) {
+      throw new Error('Для продакшена задайте длинный JWT_SECRET');
+    }
+  }
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
 
@@ -30,7 +36,7 @@ async function bootstrap() {
   );
 
   const config = new DocumentBuilder()
-    .setTitle('DentaSmart Pro API')
+    .setTitle('Sedrakoich dent API')
     .setDescription('REST API для CRM стоматологической клиники')
     .setVersion('0.1')
     .addBearerAuth()

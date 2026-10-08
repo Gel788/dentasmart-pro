@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AuthUser } from '@dentasmart/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { consumeStock } from '../domains/stock-consume';
 import { AuditService } from '../common/audit.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -57,32 +58,13 @@ export class AppointmentsService {
     });
     if (!branch) throw new NotFoundException('Филиал не найден');
 
-    const conflict = await this.prisma.appointment.findFirst({
-      where: {
-        branchId: dto.branchId,
-        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
-        OR: [
-          dto.doctorId
-            ? {
-                doctorId: dto.doctorId,
-                startsAt: { lt: endsAt },
-                endsAt: { gt: startsAt },
-              }
-            : undefined,
-          dto.cabinetId
-            ? {
-                cabinetId: dto.cabinetId,
-                startsAt: { lt: endsAt },
-                endsAt: { gt: startsAt },
-              }
-            : undefined,
-        ].filter(Boolean) as object[],
-      },
+    await this.assertSlot({
+      branchId: dto.branchId,
+      startsAt,
+      endsAt,
+      doctorId: dto.doctorId,
+      cabinetId: dto.cabinetId,
     });
-
-    if (conflict) {
-      throw new BadRequestException('Слот занят — выберите другое время');
-    }
 
     const appointment = await this.prisma.appointment.create({
       data: {
@@ -130,32 +112,14 @@ export class AppointmentsService {
       dto.doctorId !== undefined ? (dto.doctorId ? dto.doctorId : null) : appt.doctorId;
     const cabinetId = dto.cabinetId !== undefined ? dto.cabinetId : appt.cabinetId;
 
-    const conflict = await this.prisma.appointment.findFirst({
-      where: {
-        id: { not: id },
-        branchId,
-        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
-        OR: [
-          doctorId
-            ? {
-                doctorId,
-                startsAt: { lt: endsAt },
-                endsAt: { gt: startsAt },
-              }
-            : undefined,
-          cabinetId
-            ? {
-                cabinetId,
-                startsAt: { lt: endsAt },
-                endsAt: { gt: startsAt },
-              }
-            : undefined,
-        ].filter(Boolean) as object[],
-      },
+    await this.assertSlot({
+      branchId,
+      startsAt,
+      endsAt,
+      doctorId,
+      cabinetId,
+      ignoreId: id,
     });
-    if (conflict) {
-      throw new BadRequestException('Слот занят — выберите другое время');
-    }
 
     const updated = await this.prisma.appointment.update({
       where: { id },
@@ -167,6 +131,7 @@ export class AppointmentsService {
         cabinetId,
         serviceId: dto.serviceId !== undefined ? dto.serviceId : appt.serviceId,
         notes: dto.notes !== undefined ? dto.notes : appt.notes,
+        noShowReason: dto.noShowReason !== undefined ? dto.noShowReason : appt.noShowReason,
       },
       include: {
         patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
@@ -198,23 +163,14 @@ export class AppointmentsService {
       where: { organizationId: orgId, serviceId },
     });
     for (const norm of norms) {
-      await this.prisma.stockMovement.create({
-        data: {
-          organizationId: orgId,
-          itemId: norm.itemId,
-          branchId,
-          type: 'TREATMENT_USE',
-          quantity: norm.quantity,
-          notes,
-        },
+      await consumeStock(this.prisma, {
+        organizationId: orgId,
+        itemId: norm.itemId,
+        branchId,
+        quantity: Number(norm.quantity),
+        type: 'TREATMENT_USE',
+        notes,
       });
-      const batch = await this.prisma.stockBatch.findFirst({
-        where: { itemId: norm.itemId, branchId },
-      });
-      if (batch) {
-        const next = Math.max(0, Number(batch.quantity) - Number(norm.quantity));
-        await this.prisma.stockBatch.update({ where: { id: batch.id }, data: { quantity: next } });
-      }
     }
   }
 
@@ -225,29 +181,67 @@ export class AppointmentsService {
         patient: { select: { id: true, firstName: true, lastName: true } },
         service: { select: { id: true, name: true, basePrice: true } },
         doctor: { select: { id: true, firstName: true, lastName: true } },
+        visitNote: true,
       },
     });
     if (!appt) throw new NotFoundException('Запись не найдена');
 
     const [invoice, plan] = await Promise.all([
       this.prisma.invoice.findFirst({
-        where: { appointmentId, status: { notIn: ['CANCELLED'] } },
+        where: {
+          status: { notIn: ['CANCELLED'] },
+          OR: [{ appointmentId }, { treatmentPlan: { appointmentId } }],
+        },
+        include: { items: { orderBy: { title: 'asc' } } },
+        orderBy: { createdAt: 'desc' },
       }),
       this.prisma.treatmentPlan.findFirst({
-        where: { appointmentId, status: { notIn: ['CANCELLED'] } },
-        include: { items: true },
+        where: { appointmentId, status: { notIn: ['CANCELLED', 'REJECTED'] } },
+        include: {
+          items: {
+            orderBy: { sortOrder: 'asc' },
+            include: { invoiceItem: { select: { id: true } } },
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
       }),
     ]);
 
-    return { appointment: appt, invoice, plan };
+    return { appointment: appt, invoice, plan, visitNote: appt.visitNote };
   }
 
-  async updateStatus(orgId: string, id: string, status: string, userId: string) {
+  async saveVisitNote(
+    orgId: string,
+    appointmentId: string,
+    data: {
+      complaints?: string;
+      anamnesis?: string;
+      objective?: string;
+      diagnosis?: string;
+      treatment?: string;
+      recommendations?: string;
+    },
+  ) {
+    const appt = await this.prisma.appointment.findFirst({
+      where: { id: appointmentId, organizationId: orgId },
+    });
+    if (!appt) throw new NotFoundException('Запись не найдена');
+    return this.prisma.visitNote.upsert({
+      where: { appointmentId },
+      create: { appointmentId, ...data },
+      update: data,
+    });
+  }
+
+  async updateStatus(orgId: string, id: string, status: string, userId: string, noShowReason?: string) {
     const appt = await this.prisma.appointment.findFirst({ where: { id, organizationId: orgId } });
     if (!appt) throw new NotFoundException();
     const updated = await this.prisma.appointment.update({
       where: { id },
-      data: { status: status as never },
+      data: {
+        status: status as never,
+        ...(noShowReason !== undefined ? { noShowReason } : {}),
+      },
       include: {
         patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
         doctor: true,
@@ -308,5 +302,217 @@ export class AppointmentsService {
       day.setDate(day.getDate() + 1);
     }
     return slots.slice(0, 40);
+  }
+
+  private async assertSlot(opts: {
+    branchId: string;
+    startsAt: Date;
+    endsAt: Date;
+    doctorId?: string | null;
+    cabinetId?: string | null;
+    ignoreId?: string;
+  }) {
+    if (opts.doctorId || opts.cabinetId) {
+      const conflict = await this.prisma.appointment.findFirst({
+        where: {
+          ...(opts.ignoreId ? { id: { not: opts.ignoreId } } : {}),
+          branchId: opts.branchId,
+          status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+          OR: [
+            opts.doctorId
+              ? { doctorId: opts.doctorId, startsAt: { lt: opts.endsAt }, endsAt: { gt: opts.startsAt } }
+              : undefined,
+            opts.cabinetId
+              ? { cabinetId: opts.cabinetId, startsAt: { lt: opts.endsAt }, endsAt: { gt: opts.startsAt } }
+              : undefined,
+          ].filter(Boolean) as object[],
+        },
+      });
+      if (conflict) throw new BadRequestException('Слот занят — выберите другое время');
+    }
+    if (opts.cabinetId) {
+      const block = await this.prisma.cabinetBlock.findFirst({
+        where: {
+          cabinetId: opts.cabinetId,
+          startsAt: { lt: opts.endsAt },
+          endsAt: { gt: opts.startsAt },
+        },
+      });
+      if (block) throw new BadRequestException(`Кресло закрыто: ${block.reason}`);
+    }
+  }
+
+  async dayBoard(orgId: string, branchId: string, date: string) {
+    const start = new Date(`${date}T00:00:00`);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    const [cabinets, appointments, blocks] = await Promise.all([
+      this.prisma.cabinet.findMany({
+        where: { branchId, branch: { organizationId: orgId }, isActive: true },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true },
+      }),
+      this.prisma.appointment.findMany({
+        where: {
+          organizationId: orgId,
+          branchId,
+          startsAt: { lt: end },
+          endsAt: { gt: start },
+        },
+        include: {
+          patient: { select: { id: true, firstName: true, lastName: true } },
+          doctor: { select: { id: true, firstName: true, lastName: true } },
+          service: { select: { id: true, name: true, durationMin: true } },
+          cabinet: { select: { id: true, name: true } },
+        },
+        orderBy: { startsAt: 'asc' },
+      }),
+      this.prisma.cabinetBlock.findMany({
+        where: { organizationId: orgId, branchId, startsAt: { lt: end }, endsAt: { gt: start } },
+        orderBy: { startsAt: 'asc' },
+      }),
+    ]);
+    return { cabinets, appointments, blocks };
+  }
+
+  async createBlock(
+    orgId: string,
+    data: { branchId: string; cabinetId: string; startsAt: string; endsAt: string; reason: string },
+  ) {
+    const startsAt = new Date(data.startsAt);
+    const endsAt = new Date(data.endsAt);
+    if (endsAt <= startsAt) throw new BadRequestException('Время окончания должно быть позже начала');
+    const cabinet = await this.prisma.cabinet.findFirst({
+      where: { id: data.cabinetId, branchId: data.branchId, branch: { organizationId: orgId } },
+    });
+    if (!cabinet) throw new NotFoundException('Кресло не найдено');
+    const visit = await this.prisma.appointment.findFirst({
+      where: {
+        cabinetId: data.cabinetId,
+        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+        startsAt: { lt: endsAt },
+        endsAt: { gt: startsAt },
+      },
+    });
+    if (visit) throw new BadRequestException('На это время уже есть запись');
+    return this.prisma.cabinetBlock.create({
+      data: {
+        organizationId: orgId,
+        branchId: data.branchId,
+        cabinetId: data.cabinetId,
+        startsAt,
+        endsAt,
+        reason: data.reason.trim(),
+      },
+    });
+  }
+
+  async deleteBlock(orgId: string, id: string) {
+    const block = await this.prisma.cabinetBlock.findFirst({ where: { id, organizationId: orgId } });
+    if (!block) throw new NotFoundException('Блок не найден');
+    await this.prisma.cabinetBlock.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  async listToMake(orgId: string, branchId: string) {
+    const open = await this.prisma.appointmentToMake.findMany({
+      where: { organizationId: orgId, branchId, status: 'OPEN' },
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
+        service: { select: { id: true, name: true, durationMin: true } },
+      },
+      orderBy: { dueAfter: 'asc' },
+    });
+    const covered = new Set(open.map((row) => row.patientId));
+    const future = await this.prisma.appointment.findMany({
+      where: {
+        organizationId: orgId,
+        startsAt: { gte: new Date() },
+        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+      },
+      select: { patientId: true },
+    });
+    for (const row of future) covered.add(row.patientId);
+    const border = new Date();
+    border.setMonth(border.getMonth() - 6);
+    const visits = await this.prisma.appointment.findMany({
+      where: { organizationId: orgId, status: 'COMPLETED' },
+      select: {
+        patientId: true,
+        startsAt: true,
+        patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
+        service: { select: { name: true, code: true } },
+      },
+      orderBy: { startsAt: 'desc' },
+    });
+    const lastVisit = new Map<string, (typeof visits)[number]>();
+    const lastHygiene = new Map<string, Date>();
+    for (const visit of visits) {
+      if (!lastVisit.has(visit.patientId)) lastVisit.set(visit.patientId, visit);
+      const hygiene = visit.service?.code === 'HYGIENE' || /гигиен/i.test(visit.service?.name ?? '');
+      if (hygiene && !lastHygiene.has(visit.patientId)) lastHygiene.set(visit.patientId, visit.startsAt);
+    }
+    const hygieneService = await this.prisma.service.findFirst({
+      where: { organizationId: orgId, isActive: true, OR: [{ code: 'HYGIENE' }, { name: { contains: 'гигиен', mode: 'insensitive' } }] },
+      select: { id: true, name: true, durationMin: true },
+    });
+    const suggested = [...lastVisit.values()]
+      .filter((visit) => {
+        if (covered.has(visit.patientId)) return false;
+        const cleaned = lastHygiene.get(visit.patientId);
+        return !cleaned || cleaned < border;
+      })
+      .slice(0, 12)
+      .map((visit) => ({
+        id: `hygiene:${visit.patientId}`,
+        source: 'SYSTEM' as const,
+        dueAfter: null,
+        notes: 'Гигиены не было больше полугода',
+        patient: visit.patient,
+        service: hygieneService,
+        virtual: true,
+      }));
+    return {
+      items: [
+        ...open.map((row) => ({ ...row, virtual: false })),
+        ...suggested,
+      ],
+    };
+  }
+
+  async createToMake(
+    orgId: string,
+    data: { branchId: string; patientId: string; source: 'RECEPTION' | 'PATIENT' | 'SYSTEM'; serviceId?: string; dueAfter?: string; notes?: string },
+  ) {
+    const patient = await this.prisma.patient.findFirst({ where: { id: data.patientId, organizationId: orgId } });
+    if (!patient) throw new NotFoundException('Пациент не найден');
+    return this.prisma.appointmentToMake.create({
+      data: {
+        organizationId: orgId,
+        branchId: data.branchId,
+        patientId: data.patientId,
+        source: data.source,
+        serviceId: data.serviceId || null,
+        dueAfter: data.dueAfter ? new Date(data.dueAfter) : null,
+        notes: data.notes?.trim() || null,
+      },
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
+        service: { select: { id: true, name: true, durationMin: true } },
+      },
+    });
+  }
+
+  async scheduleToMake(orgId: string, id: string) {
+    const row = await this.prisma.appointmentToMake.findFirst({ where: { id, organizationId: orgId } });
+    if (!row) throw new NotFoundException('Задачи на запись нет');
+    return this.prisma.appointmentToMake.update({ where: { id }, data: { status: 'SCHEDULED' } });
+  }
+
+  async deleteToMake(orgId: string, id: string) {
+    const row = await this.prisma.appointmentToMake.findFirst({ where: { id, organizationId: orgId } });
+    if (!row) throw new NotFoundException('Задачи на запись нет');
+    await this.prisma.appointmentToMake.delete({ where: { id } });
+    return { ok: true };
   }
 }

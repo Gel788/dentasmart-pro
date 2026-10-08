@@ -19,6 +19,12 @@ export class BranchesController {
     return this.branches.findAll(orgId);
   }
 
+  @Get('overview')
+  @RequirePermissions('branch.read')
+  overview(@OrgId() orgId: string) {
+    return this.branches.overview(orgId);
+  }
+
   @Post()
   @RequirePermissions('branch.write')
   create(@OrgId() orgId: string, @Body() body: { name: string; address?: string; phone?: string }) {

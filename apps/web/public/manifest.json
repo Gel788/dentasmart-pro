@@ -1,6 +1,6 @@
 {
-  "name": "DentaSmart Pro",
-  "short_name": "DentaSmart",
+  "name": "Sedrakoich dent",
+  "short_name": "Sedrakoich dent",
   "description": "CRM для стоматологических клиник",
   "start_url": "/dashboard",
   "display": "standalone",

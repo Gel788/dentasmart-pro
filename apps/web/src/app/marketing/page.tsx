@@ -17,6 +17,7 @@ export default function MarketingPage() {
   const [segments, setSegments] = useState<unknown[]>([]);
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({ name: '', channel: 'SMS' });
+  const [runNote, setRunNote] = useState('');
 
   const load = () => {
     api<unknown[]>('/marketing/campaigns').then(setCampaigns);
@@ -39,10 +40,15 @@ export default function MarketingPage() {
         badge="Маркетинг"
         title="Маркетинг"
         description="Кампании и автоцепочки (внутренние)"
-        action={<Button onClick={() => setModal(true)}>+ Кампания</Button>}
+        action={
+          <>
+            <Button variant="ghost" onClick={async () => { await api('/marketing/automation-chains/ensure', { method: 'POST' }); load(); }}>Триггеры клиники</Button>
+            <Button onClick={() => setModal(true)}>+ Кампания</Button>
+          </>
+        }
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Кампании" description="Рассылки и промо-акции" />
           <div className="space-y-2">
@@ -64,20 +70,21 @@ export default function MarketingPage() {
               <ListRow
                 key={ch.id}
                 trailing={
-                  <Button variant="ghost" onClick={async () => {
-                    const r = await api<{ queued: number }>(`/marketing/automation-chains/${ch.id}/run`, { method: 'POST' });
-                    alert(`Очередь: ${r.queued}`);
+                  <Button size="sm" variant="ghost" onClick={async () => {
+                    const r = await api<{ queued: number; matched: number }>(`/marketing/automation-chains/${ch.id}/run`, { method: 'POST' });
+                    setRunNote(`${ch.name}: в напоминания ${r.queued} из ${r.matched}`);
                   }}>Запустить</Button>
                 }
               >
                 <p className="font-medium text-[var(--text)]">{ch.name}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <span className="text-[var(--muted)]">{ch.trigger}</span>
+                  <span className="font-mono text-xs text-[var(--muted)]">{ch.trigger}</span>
                   {ch.isActive && <Badge variant="success">Активна</Badge>}
                 </div>
               </ListRow>
             ))}
           </div>
+          {runNote && <p role="status" className="mt-3 rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)] px-4 py-2.5 text-sm text-[var(--accent-hover)]">{runNote}</p>}
         </Card>
       </div>
 
@@ -88,14 +95,14 @@ export default function MarketingPage() {
             <ListRow
               key={s.id}
               trailing={
-                <Button variant="ghost" onClick={async () => {
+                <Button size="sm" variant="ghost" onClick={async () => {
                   await api(`/marketing/segments/${s.id}/refresh`, { method: 'POST' });
                   load();
                 }}>Обновить</Button>
               }
             >
               <p className="font-medium text-[var(--text)]">{s.name}</p>
-              <p className="text-[var(--muted)]">{s._count.members} участников</p>
+              <p className="mt-0.5 tabular-nums text-[var(--muted)]">{s._count.members} участников</p>
             </ListRow>
           ))}
         </div>

@@ -9,28 +9,45 @@ import { Input, Label, Select } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
 import { api } from '@/lib/api';
+import { useBranch } from '@/lib/branch-context';
+
+const PURPOSE: Record<string, string> = {
+  UNIVERSAL: 'Универсальный',
+  THERAPY: 'Терапия',
+  SURGERY: 'Хирургия',
+  ORTHOPEDICS: 'Ортопедия',
+  HYGIENE: 'Гигиена',
+  IMAGING: 'Рентген',
+};
 
 interface Branch {
   id: string;
   name: string;
   address?: string;
+  visitsToday: number;
+  cashOpen: boolean;
+  _count?: { employees: number };
   cabinets: { id: string; name: string; purpose: string }[];
 }
 
 export default function BranchesPage() {
+  const { refresh, setBranchId } = useBranch();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchModal, setBranchModal] = useState(false);
   const [cabinetModal, setCabinetModal] = useState<string | null>(null);
   const [branchForm, setBranchForm] = useState({ name: '', address: '', phone: '' });
   const [cabinetForm, setCabinetForm] = useState({ name: '', number: '', purpose: 'UNIVERSAL' });
 
-  const load = () => api<Branch[]>('/branches').then(setBranches);
+  const load = () => api<Branch[]>('/branches/overview').then(setBranches);
   useEffect(() => { load(); }, []);
 
   const createBranch = async (e: FormEvent) => {
     e.preventDefault();
-    await api('/branches', { method: 'POST', body: JSON.stringify(branchForm) });
+    const created = await api<{ id: string }>('/branches', { method: 'POST', body: JSON.stringify(branchForm) });
     setBranchModal(false);
+    setBranchForm({ name: '', address: '', phone: '' });
+    await refresh();
+    setBranchId(created.id);
     load();
   };
 
@@ -47,7 +64,7 @@ export default function BranchesPage() {
       <PageHeader
         badge="Сеть"
         title="Филиалы и кабинеты"
-        description="Сеть → филиал → кабинет"
+        description="Карта пациента общая на всю сеть. Расписание, кресла, касса и склад — у каждого филиала свои."
         action={<Button onClick={() => setBranchModal(true)}>+ Филиал</Button>}
       />
 
@@ -56,21 +73,21 @@ export default function BranchesPage() {
           <Card key={b.id}>
             <CardHeader
               title={b.name}
-              description={b.address}
+              description={[b.address, `сегодня ${b.visitsToday}`, b.cashOpen ? 'касса открыта' : 'касса закрыта', `врачей ${b._count?.employees ?? 0}`].filter(Boolean).join(' · ')}
               action={
-                <Button variant="ghost" className="!py-1 text-xs" onClick={() => setCabinetModal(b.id)}>
+                <Button size="sm" variant="ghost" onClick={() => setCabinetModal(b.id)}>
                   + Кабинет
                 </Button>
               }
             />
-            <ul className="mt-2 space-y-2">
+            <ul className="space-y-2">
               {b.cabinets.map((c) => (
                 <li
                   key={c.id}
-                  className="flex items-center justify-between rounded-xl bg-[var(--surface-muted)] px-4 py-3 text-sm"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-sm"
                 >
                   <span className="font-medium text-[var(--text)]">{c.name}</span>
-                  <Badge>{c.purpose}</Badge>
+                  <Badge>{PURPOSE[c.purpose] ?? c.purpose}</Badge>
                 </li>
               ))}
             </ul>
@@ -91,8 +108,8 @@ export default function BranchesPage() {
           <div><Label>Название</Label><Input required value={cabinetForm.name} onChange={(e) => setCabinetForm({ ...cabinetForm, name: e.target.value })} /></div>
           <div><Label>Назначение</Label>
             <Select value={cabinetForm.purpose} onChange={(e) => setCabinetForm({ ...cabinetForm, purpose: e.target.value })}>
-              {['UNIVERSAL', 'THERAPY', 'SURGERY', 'ORTHOPEDICS', 'HYGIENE'].map((p) => (
-                <option key={p} value={p}>{p}</option>
+              {Object.entries(PURPOSE).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
               ))}
             </Select>
           </div>

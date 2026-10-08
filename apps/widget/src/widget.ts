@@ -4,6 +4,8 @@
   const apiBase = script?.dataset.api ?? 'http://localhost:4000/api/v1';
 
   class DentaSmartBooking extends HTMLElement {
+    branchId = '';
+
     connectedCallback() {
       this.attachShadow({ mode: 'open' });
       this.renderLoading();
@@ -16,6 +18,7 @@
           fetch(`${apiBase}/public/widget/${clinic}/config`).then((r) => r.json()),
           fetch(`${apiBase}/public/widget/${clinic}/services`).then((r) => r.json()),
         ]);
+        this.branchId = config.branches?.[0]?.id ?? '';
         this.render(config, services);
       } catch {
         this.renderError();
@@ -32,7 +35,7 @@
       this.shadowRoot.innerHTML = `<style>:host{font-family:system-ui;display:block;padding:16px;border:1px solid #f87171;border-radius:12px}</style><p>Не удалось загрузить виджет</p>`;
     }
 
-    render(config: { organization: { name: string } }, services: { id: string; name: string; basePrice: string }[]) {
+    render(config: { organization: { name: string }; branches?: { id: string }[] }, services: { id: string; name: string; basePrice: string }[]) {
       if (!this.shadowRoot) return;
       const color = config?.config?.primaryColor ?? '#3b9eff';
       const list = services
@@ -78,7 +81,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            branchId: 'seed-branch-main',
+            branchId: this.branchId,
             serviceId: (root.getElementById('svc') as HTMLSelectElement).value,
             firstName: (root.getElementById('fn') as HTMLInputElement).value,
             lastName: (root.getElementById('ln') as HTMLInputElement).value,

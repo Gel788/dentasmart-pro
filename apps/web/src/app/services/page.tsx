@@ -61,23 +61,23 @@ export default function ServicesPage() {
       />
 
       {tab === 'services' && (
-        <div className="mt-6 ds-card overflow-hidden p-0">
+        <div className="ds-card mt-6 overflow-x-auto p-0">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-[var(--border)] bg-[var(--surface-muted)] text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
-                <th className="px-5 py-3.5">Название</th>
-                <th className="px-5 py-3.5">Код</th>
-                <th className="px-5 py-3.5">Мин</th>
-                <th className="px-5 py-3.5">Цена</th>
+              <tr className="border-b border-[var(--border)] bg-[var(--surface-muted)] text-xs font-medium uppercase tracking-[0.12em] text-[var(--muted)]">
+                <th scope="col" className="px-5 py-3">Название</th>
+                <th scope="col" className="px-5 py-3">Код</th>
+                <th scope="col" className="px-5 py-3 text-right">Мин</th>
+                <th scope="col" className="px-5 py-3 text-right">Цена</th>
               </tr>
             </thead>
             <tbody>
               {items.map((s) => (
                 <tr key={s.id} className="ds-table-row">
-                  <td className="px-5 py-4 font-medium">{s.name}</td>
-                  <td className="px-5 py-4 text-[var(--muted)]">{s.code ?? '—'}</td>
-                  <td className="px-5 py-4 text-[var(--muted)]">{s.durationMin}</td>
-                  <td className="px-5 py-4 font-medium">{formatMoney(s.basePrice)}</td>
+                  <td className="px-5 py-3.5 font-medium text-[var(--text)]">{s.name}</td>
+                  <td className="px-5 py-3.5 font-mono text-xs text-[var(--muted)]">{s.code ?? '—'}</td>
+                  <td className="px-5 py-3.5 text-right tabular-nums text-[var(--muted)]">{s.durationMin}</td>
+                  <td className="px-5 py-3.5 text-right font-semibold tabular-nums text-[var(--text)]">{formatMoney(s.basePrice)}</td>
                 </tr>
               ))}
             </tbody>
@@ -90,17 +90,17 @@ export default function ServicesPage() {
           {priceLists.map((pl) => (
             <Card key={pl.id}>
               <CardHeader title={pl.name} description={`${pl.items.length} позиций`} />
-              <ul className="space-y-1 text-sm">
+              <ul className="divide-y divide-[var(--border)] text-sm">
                 {pl.items.map((it, i) => (
-                  <li key={i} className="flex justify-between rounded-lg bg-[var(--surface-muted)]/50 px-3 py-2">
-                    <span>{it.service.name}</span>
-                    <span className="font-medium">{formatMoney(it.price)}</span>
+                  <li key={i} className="flex items-baseline justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                    <span className="text-[var(--text-secondary)]">{it.service.name}</span>
+                    <span className="font-semibold tabular-nums text-[var(--text)]">{formatMoney(it.price)}</span>
                   </li>
                 ))}
               </ul>
             </Card>
           ))}
-          {!priceLists.length && <p className="text-sm text-[var(--muted)]">Прайс-листы из seed или настройки сети</p>}
+          {!priceLists.length && <p className="rounded-xl border border-dashed border-[var(--border)] py-8 text-center text-sm text-[var(--muted)] lg:col-span-2">Прайс-листы из seed или настройки сети</p>}
         </div>
       )}
 

@@ -31,6 +31,18 @@ export class IntegrationsController {
     return this.svc.blockchainAudit(orgId);
   }
 
+  @Get('journal')
+  @RequirePermissions('org.manage')
+  journal(@OrgId() orgId: string) {
+    return this.svc.journal(orgId);
+  }
+
+  @Post('dispatch')
+  @RequirePermissions('org.manage')
+  dispatch(@OrgId() orgId: string, @Body() body: { provider: string; action: string }) {
+    return this.svc.dispatch(orgId, body);
+  }
+
   @Post('configs')
   @RequirePermissions('org.manage')
   upsert(@OrgId() orgId: string, @Body() body: { provider: string; configJson: object; isActive?: boolean }) {

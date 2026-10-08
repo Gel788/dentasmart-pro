@@ -22,14 +22,14 @@ export function StatCard({
   tone?: keyof typeof tones;
 }) {
   return (
-    <div className="ds-card flex gap-4 p-5">
-      <div className={clsx('flex h-12 w-12 shrink-0 items-center justify-center rounded-xl', tones[tone])}>
-        <Icon size={22} strokeWidth={2} />
-      </div>
+    <div className="ds-card flex items-start justify-between gap-4 p-5">
       <div className="min-w-0">
-        <p className="text-sm font-medium text-[var(--muted)]">{label}</p>
-        <p className="mt-1 text-2xl font-bold tracking-tight text-[var(--text)]">{value}</p>
-        {hint && <p className="mt-0.5 text-xs text-[var(--muted)]">{hint}</p>}
+        <p className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--muted)]">{label}</p>
+        <p className="ds-display mt-2 text-[1.7rem] leading-none text-[var(--text)]">{value}</p>
+        {hint && <p className="mt-2 text-xs text-[var(--muted)]">{hint}</p>}
+      </div>
+      <div className={clsx('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', tones[tone])}>
+        <Icon size={16} strokeWidth={1.75} />
       </div>
     </div>
   );

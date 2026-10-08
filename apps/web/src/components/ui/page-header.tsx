@@ -10,16 +10,12 @@ export function PageHeader({
   badge?: string;
 }) {
   return (
-    <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <header className="mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--border)] pb-6">
       <div>
-        {badge && (
-          <span className="mb-2 inline-block rounded-full bg-[var(--accent-soft)] px-3 py-0.5 text-xs font-medium text-[var(--accent-hover)]">
-            {badge}
-          </span>
-        )}
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--text)] md:text-3xl">{title}</h1>
+        {badge && <p className="ds-kicker mb-2">{badge}</p>}
+        <h1 className="ds-display text-[1.75rem] leading-none text-[var(--text)] md:text-[2.15rem]">{title}</h1>
         {description && (
-          <div className="mt-1.5 max-w-2xl text-sm text-[var(--muted)]">{description}</div>
+          <div className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">{description}</div>
         )}
       </div>
       {action && <div className="flex flex-wrap items-center gap-2">{action}</div>}

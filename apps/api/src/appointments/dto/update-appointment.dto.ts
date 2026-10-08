@@ -36,4 +36,9 @@ export class UpdateAppointmentDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  noShowReason?: string;
 }

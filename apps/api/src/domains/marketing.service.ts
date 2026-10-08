@@ -1,6 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+const TRIGGER_TEXT: Record<string, string> = {
+  NO_VISIT_6M: 'Давно не были в клинике. Запишитесь на осмотр.',
+  NO_VISIT_12M: 'Год без визита. Пора проверить зубы.',
+  BIRTHDAY: 'С днём рождения. Ждём вас на приём.',
+  AFTER_TREATMENT: 'Как самочувствие после лечения? Напишите, если есть боль.',
+  ABANDONED_BOOKING: 'Вы не пришли на приём. Можем перенести запись.',
+};
+
+const CLINIC_TRIGGERS = [
+  { name: 'Давно не были', trigger: 'NO_VISIT_6M' },
+  { name: 'Неявка', trigger: 'ABANDONED_BOOKING' },
+  { name: 'После лечения', trigger: 'AFTER_TREATMENT' },
+];
+
 @Injectable()
 export class MarketingService {
   constructor(private readonly prisma: PrismaService) {}
@@ -76,27 +90,99 @@ export class MarketingService {
     });
   }
 
+  async ensureClinicTriggers(orgId: string) {
+    for (const item of CLINIC_TRIGGERS) {
+      const existing = await this.prisma.automationChain.findFirst({
+        where: { organizationId: orgId, name: item.name },
+      });
+      if (!existing) {
+        await this.prisma.automationChain.create({
+          data: { organizationId: orgId, name: item.name, trigger: item.trigger as never, stepsJson: { channel: 'SMS' } },
+        });
+      }
+    }
+    return this.listChains(orgId);
+  }
+
   async runChain(orgId: string, chainId: string) {
     const chain = await this.prisma.automationChain.findFirst({
       where: { id: chainId, organizationId: orgId, isActive: true },
     });
-    if (!chain) return { queued: 0 };
-    const patients = await this.prisma.patient.findMany({
-      where: { organizationId: orgId, isActive: true },
-      take: 50,
-    });
+    if (!chain) return { queued: 0, chain: '' };
+    const patients = await this.audience(orgId, chain.trigger);
+    const message = TRIGGER_TEXT[chain.trigger] ?? chain.name;
     let queued = 0;
-    for (const p of patients) {
-      if (!p.phone && !p.email) continue;
-      await this.prisma.patientCommunication.create({
+    for (const patient of patients) {
+      if (!patient.phone && !patient.email) continue;
+      const already = await this.prisma.reminder.findFirst({
+        where: { organizationId: orgId, patientId: patient.id, message, status: 'PENDING' },
+      });
+      if (already) continue;
+      await this.prisma.reminder.create({
         data: {
-          patientId: p.id,
-          channel: 'SMS',
-          summary: `[${chain.name}] автоцепочка ${chain.trigger}`,
+          organizationId: orgId,
+          patientId: patient.id,
+          channel: patient.phone ? 'SMS' : 'EMAIL',
+          message,
+          scheduledAt: new Date(),
         },
       });
       queued++;
     }
-    return { queued, chain: chain.name };
+    return { queued, matched: patients.length, chain: chain.name };
   }
+
+  private async audience(orgId: string, trigger: string) {
+    if (trigger === 'NO_VISIT_6M' || trigger === 'NO_VISIT_12M') {
+      const border = new Date();
+      border.setMonth(border.getMonth() - (trigger === 'NO_VISIT_12M' ? 12 : 6));
+      const visits = await this.prisma.appointment.findMany({
+        where: { organizationId: orgId, status: 'COMPLETED' },
+        select: {
+          patientId: true,
+          startsAt: true,
+          patient: { select: { id: true, phone: true, email: true } },
+        },
+        orderBy: { startsAt: 'desc' },
+      });
+      const last = new Map<string, (typeof visits)[number]>();
+      for (const visit of visits) if (!last.has(visit.patientId)) last.set(visit.patientId, visit);
+      return [...last.values()].filter((visit) => visit.startsAt < border).map((visit) => visit.patient);
+    }
+    if (trigger === 'BIRTHDAY') {
+      const today = new Date();
+      const patients = await this.prisma.patient.findMany({
+        where: { organizationId: orgId, isActive: true, birthDate: { not: null } },
+        select: { id: true, phone: true, email: true, birthDate: true },
+      });
+      return patients.filter((patient) => patient.birthDate
+        && patient.birthDate.getDate() === today.getDate()
+        && patient.birthDate.getMonth() === today.getMonth());
+    }
+    if (trigger === 'AFTER_TREATMENT') {
+      const since = new Date();
+      since.setDate(since.getDate() - 2);
+      const visits = await this.prisma.appointment.findMany({
+        where: { organizationId: orgId, status: 'COMPLETED', startsAt: { gte: since } },
+        select: { patient: { select: { id: true, phone: true, email: true } } },
+      });
+      return uniquePatients(visits.map((visit) => visit.patient));
+    }
+    const since = new Date();
+    since.setDate(since.getDate() - 14);
+    const missed = await this.prisma.appointment.findMany({
+      where: { organizationId: orgId, status: 'NO_SHOW', startsAt: { gte: since } },
+      select: { patient: { select: { id: true, phone: true, email: true } } },
+    });
+    return uniquePatients(missed.map((visit) => visit.patient));
+  }
+}
+
+function uniquePatients<T extends { id: string }>(patients: T[]) {
+  const seen = new Set<string>();
+  return patients.filter((patient) => {
+    if (seen.has(patient.id)) return false;
+    seen.add(patient.id);
+    return true;
+  });
 }

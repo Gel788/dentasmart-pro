@@ -16,11 +16,13 @@ export default function IntegrationsPage() {
   const [configs, setConfigs] = useState<{ provider: string; isActive: boolean; configJson: object }[]>([]);
   const [webhooks, setWebhooks] = useState<unknown[]>([]);
   const [chain, setChain] = useState<unknown[]>([]);
+  const [journal, setJournal] = useState<{ id: string; provider: string; action: string; status: string; message: string; createdAt: string }[]>([]);
 
   const load = () => {
     api<typeof configs>('/integrations').then(setConfigs);
     api<unknown[]>('/integrations/webhooks').then(setWebhooks);
     api<unknown[]>('/integrations/blockchain-audit').then(setChain);
+    api<typeof journal>('/integrations/journal').then(setJournal);
   };
 
   useEffect(() => { load(); }, []);
@@ -41,17 +43,17 @@ export default function IntegrationsPage() {
         description="Заглушки провайдеров — включите для демо, реальные API подключите позже"
       />
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         {PROVIDERS.map((p) => {
           const cfg = configs.find((c) => c.provider === p);
           return (
             <Card key={p} hover className="flex items-center justify-between gap-4">
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent)]">
-                  <Plug size={18} />
+                <div className={cfg?.isActive ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]' : 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--muted)]'}>
+                  <Plug size={16} strokeWidth={1.75} />
                 </div>
                 <div>
-                  <p className="font-semibold text-[var(--text)]">{p}</p>
+                  <p className="font-mono text-sm font-semibold text-[var(--text)]">{p}</p>
                   <div className="mt-1">
                     <Badge variant={cfg?.isActive ? 'success' : 'default'}>
                       {cfg?.isActive ? 'Включено (stub)' : 'Выключено'}
@@ -59,7 +61,7 @@ export default function IntegrationsPage() {
                   </div>
                 </div>
               </div>
-              <Button variant={cfg?.isActive ? 'primary' : 'ghost'} onClick={() => toggle(p, !cfg?.isActive)}>
+              <Button size="sm" variant={cfg?.isActive ? 'primary' : 'ghost'} aria-pressed={!!cfg?.isActive} onClick={() => toggle(p, !cfg?.isActive)}>
                 {cfg?.isActive ? 'Вкл' : 'Выкл'}
               </Button>
             </Card>
@@ -67,13 +69,42 @@ export default function IntegrationsPage() {
         })}
       </div>
 
-      <Card className="mt-8">
+      <Card className="mt-6">
+        <CardHeader
+          title="Журнал отправок"
+          description="ЕГИСЗ и касса 54-ФЗ пишутся сюда и не уходят наружу, пока оператор не подключён"
+          action={
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={async () => {
+                await api('/integrations/dispatch', { method: 'POST', body: JSON.stringify({ provider: 'ATOL', action: 'sell' }) });
+                await api('/integrations/dispatch', { method: 'POST', body: JSON.stringify({ provider: 'EGISZ', action: 'semd' }) });
+                load();
+              }}
+            >
+              Проверить отправку
+            </Button>
+          }
+        />
+        <div className="space-y-2">
+          {journal.map((row) => (
+            <ListRow key={row.id} trailing={<Badge variant={row.status === 'QUEUED' ? 'accent' : 'warning'}>{row.status === 'SKIPPED' ? 'Не отправлено' : row.status === 'QUEUED' ? 'В очереди' : 'Ошибка'}</Badge>}>
+              <p className="font-mono text-xs font-semibold text-[var(--text)]">{row.provider} · {row.action}</p>
+              <p className="mt-0.5 text-[var(--muted)]">{row.message}</p>
+            </ListRow>
+          ))}
+          {!journal.length && <p className="rounded-xl border border-dashed border-[var(--border)] py-8 text-center text-sm text-[var(--muted)]">Журнал пуст</p>}
+        </div>
+      </Card>
+
+      <Card className="mt-6">
         <CardHeader title="Webhooks" description="Исходящие уведомления" />
         <div className="space-y-2">
           {(webhooks as { url: string; events: string[]; isActive: boolean }[]).map((w, i) => (
             <ListRow key={i} trailing={w.isActive ? <Badge variant="success">Активен</Badge> : <Badge>Неактивен</Badge>}>
-              <p className="font-medium text-[var(--text)]">{w.url}</p>
-              <p className="text-[var(--muted)]">{w.events.join(', ')}</p>
+              <p className="truncate font-mono text-xs font-semibold text-[var(--text)]">{w.url}</p>
+              <p className="mt-0.5 text-[var(--muted)]">{w.events.join(', ')}</p>
             </ListRow>
           ))}
         </div>
@@ -81,7 +112,7 @@ export default function IntegrationsPage() {
 
       <Card className="mt-6">
         <CardHeader title="Blockchain-аудит медкарт" description="Цепочка хешей записей" />
-        <div className="max-h-40 space-y-2 overflow-auto">
+        <div className="max-h-56 space-y-2 overflow-auto">
           {(chain as { recordType: string; contentHash: string; chainedAt: string }[]).map((h, i) => (
             <ListRow key={i}>
               <p className="font-mono text-xs font-medium text-[var(--text)]">{h.recordType}</p>

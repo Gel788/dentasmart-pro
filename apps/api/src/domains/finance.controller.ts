@@ -7,6 +7,9 @@ import { OrgId } from '../common/org.decorator';
 import { CurrentUser } from '../common/current-user.decorator';
 import { AuthUser } from '@dentasmart/shared';
 import { FinanceService } from './finance.service';
+import { InvoiceFromPlanDto } from './dto/invoice-from-plan.dto';
+import { AccruePayrollDto } from './dto/accrue-payroll.dto';
+import { CreatePolicyDto } from './dto/create-policy.dto';
 
 @ApiTags('finance')
 @ApiBearerAuth()
@@ -59,14 +62,33 @@ export class FinanceController {
 
   @Post('invoices/from-plan/:planId')
   @RequirePermissions('finance.write')
-  invoiceFromPlan(@OrgId() orgId: string, @Param('planId') planId: string) {
-    return this.svc.createInvoiceFromPlan(orgId, planId);
+  invoiceFromPlan(@OrgId() orgId: string, @Param('planId') planId: string, @Body() body: InvoiceFromPlanDto) {
+    return this.svc.createInvoiceFromPlan(orgId, planId, body);
   }
 
   @Post('invoices/from-appointment/:appointmentId')
   @RequirePermissions('finance.write')
   invoiceFromAppointment(@OrgId() orgId: string, @Param('appointmentId') appointmentId: string) {
     return this.svc.createInvoiceFromAppointment(orgId, appointmentId);
+  }
+
+  @Post('payments/:id/refund')
+  @RequirePermissions('finance.write')
+  refund(@OrgId() orgId: string, @Param('id') id: string, @Body() body: { amount: number }) {
+    return this.svc.refundPayment(orgId, id, Number(body.amount));
+  }
+
+  @Post('invoices/:id/discount')
+  @RequirePermissions('finance.write')
+  discount(@OrgId() orgId: string, @Param('id') id: string, @Body() body: { discountAmount: number }) {
+    return this.svc.setDiscount(orgId, id, Number(body.discountAmount));
+  }
+
+  @Get('dms-registry')
+  @RequirePermissions('finance.read')
+  dmsRegistry(@OrgId() orgId: string, @Query('from') from: string, @Query('to') to: string) {
+    const today = new Date().toISOString().slice(0, 10);
+    return this.svc.dmsRegistry(orgId, from || `${today.slice(0, 8)}01`, to || today);
   }
 
   @Post('payments')
@@ -87,7 +109,7 @@ export class FinanceController {
   @Get('cash-shift/current')
   @RequirePermissions('finance.read')
   currentShift(@OrgId() orgId: string, @Query('branchId') branchId: string) {
-    return this.svc.getOpenShift(orgId, branchId || 'seed-branch-main');
+    return this.svc.getOpenShift(orgId, branchId);
   }
 
   @Get('cash-shifts')
@@ -187,6 +209,24 @@ export class FinanceController {
   @RequirePermissions('finance.read')
   payrollEntries(@OrgId() orgId: string) {
     return this.svc.listPayrollEntries(orgId);
+  }
+
+  @Post('payroll/accrue')
+  @RequirePermissions('finance.write')
+  accrue(@OrgId() orgId: string, @Body() body: AccruePayrollDto) {
+    return this.svc.accruePayroll(orgId, body.periodFrom, body.periodTo);
+  }
+
+  @Get('policies')
+  @RequirePermissions('finance.read')
+  policies(@OrgId() orgId: string) {
+    return this.svc.listPolicies(orgId);
+  }
+
+  @Post('policies')
+  @RequirePermissions('finance.write')
+  createPolicy(@OrgId() orgId: string, @Body() body: CreatePolicyDto) {
+    return this.svc.createPolicy(orgId, body);
   }
 
   @Get('loyalty')

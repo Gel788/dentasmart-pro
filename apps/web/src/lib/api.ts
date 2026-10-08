@@ -19,7 +19,39 @@ export function assetUrl(path: string) {
   return `${API_ORIGIN}${path}`;
 }
 
-export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+let refreshInFlight: Promise<boolean> | null = null;
+
+function refreshAccess(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const refreshToken = localStorage.getItem('dsp_refresh');
+    if (!refreshToken) return false;
+    const res = await fetch(`${API_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { accessToken?: string; refreshToken?: string };
+    if (!data.accessToken) return false;
+    setToken(data.accessToken);
+    if (data.refreshToken) localStorage.setItem('dsp_refresh', data.refreshToken);
+    return true;
+  })().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+function endSession() {
+  clearToken();
+  localStorage.removeItem('dsp_refresh');
+  if (!window.location.pathname.startsWith('/login')) {
+    window.location.assign('/login');
+  }
+}
+
+export async function api<T>(path: string, options: RequestInit = {}, retried = false): Promise<T> {
   const token = getToken();
   const headers: HeadersInit = { ...(options.headers ?? {}) };
 
@@ -33,9 +65,18 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
 
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
 
+  const canRefresh = path !== '/auth/login' && path !== '/auth/refresh';
+  if (res.status === 401 && canRefresh && !retried && typeof window !== 'undefined') {
+    const renewed = await refreshAccess();
+    if (renewed) return api<T>(path, options, true);
+    endSession();
+    return new Promise(() => {});
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(err.message ?? 'Ошибка API');
+    const message = Array.isArray(err.message) ? err.message.join(', ') : err.message;
+    throw new Error(message ?? 'Ошибка API');
   }
 
   return res.json();

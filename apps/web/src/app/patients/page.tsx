@@ -181,9 +181,10 @@ export default function PatientsPage() {
       </div>
 
       {data && data.total > PAGE_SIZE && (
-        <div className="mt-4 flex items-center justify-between">
+        <div className="ds-card mt-4 flex items-center justify-between px-5 py-3">
           <p className="text-sm text-[var(--muted)]">
-            Страница {page} из {totalPages}
+            Страница <span className="tabular-nums text-[var(--text-secondary)]">{page}</span> из{' '}
+            <span className="tabular-nums text-[var(--text-secondary)]">{totalPages}</span>
           </p>
           <div className="flex gap-2">
             <Button variant="ghost" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>

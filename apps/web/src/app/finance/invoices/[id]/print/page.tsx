@@ -33,16 +33,16 @@ export default function InvoicePrintPage() {
 
   return (
     <Protected>
-      <div className="mb-6 flex gap-2 print:hidden">
+      <div className="mx-auto mb-4 flex max-w-3xl justify-end gap-2 print:hidden">
         <Button onClick={() => window.print()}>Печать</Button>
         <Button variant="ghost" onClick={() => window.close()}>Закрыть</Button>
       </div>
-      <article className="mx-auto max-w-2xl rounded-2xl border border-[var(--border)] bg-white p-10 text-[var(--text)] shadow-sm print:border-0 print:shadow-none">
+      <article className="ds-card mx-auto max-w-3xl p-6 text-[var(--text)] sm:p-10 print:fixed print:inset-0 print:z-[100] print:max-w-none print:overflow-visible print:rounded-none print:border-0 print:bg-[var(--surface)] print:p-10">
         <header className="border-b border-[var(--border)] pb-6">
           <h1 className="text-2xl font-bold">{inv.organization.name}</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">Счёт на оплату</p>
         </header>
-        <div className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
+        <div className="mt-6 grid gap-x-8 gap-y-5 text-sm sm:grid-cols-2">
           <div>
             <p className="text-[var(--muted)]">Номер</p>
             <p className="font-semibold">{inv.number}</p>
@@ -61,17 +61,17 @@ export default function InvoicePrintPage() {
             <p className="font-semibold">{label(INVOICE_STATUS, inv.status)}</p>
           </div>
         </div>
-        <div className="mt-8 rounded-xl bg-[var(--surface-muted)] p-6">
+        <div className="mt-8 border-y border-[var(--border)] bg-[var(--surface-muted)] px-4 py-5 print:bg-[var(--surface)]">
           <p className="text-sm text-[var(--muted)]">К оплате</p>
           <p className="text-3xl font-bold text-[var(--accent)]">{formatMoney(inv.totalAmount)}</p>
           <p className="mt-2 text-sm">Оплачено: {formatMoney(inv.paidAmount)}</p>
         </div>
         {inv.payments.length > 0 && (
           <div className="mt-8">
-            <h2 className="mb-2 font-semibold">Платежи</h2>
-            <ul className="space-y-1 text-sm">
+            <h2 className="mb-3 font-semibold">Платежи</h2>
+            <ul className="border-t border-[var(--border)] text-sm">
               {inv.payments.map((p, i) => (
-                <li key={i} className="flex justify-between border-b border-[var(--border)] py-2">
+                <li key={i} className="ds-table-row flex justify-between gap-4 py-3">
                   <span>{new Date(p.paidAt).toLocaleString('ru-RU')}</span>
                   <span>{formatMoney(p.amount)} · {p.method}</span>
                 </li>

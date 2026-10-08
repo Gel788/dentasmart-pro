@@ -23,6 +23,8 @@ import { RemindersController } from './reminders.controller';
 import { RemindersService } from './reminders.service';
 import { IntegrationsController } from './integrations.controller';
 import { IntegrationsService } from './integrations.service';
+import { SterilizationController } from './sterilization.controller';
+import { SterilizationService } from './sterilization.service';
 
 @Module({
   controllers: [
@@ -38,6 +40,7 @@ import { IntegrationsService } from './integrations.service';
     WidgetController,
     RemindersController,
     IntegrationsController,
+    SterilizationController,
   ],
   providers: [
     ClinicalService,
@@ -52,6 +55,7 @@ import { IntegrationsService } from './integrations.service';
     WidgetService,
     RemindersService,
     IntegrationsService,
+    SterilizationService,
   ],
 })
 export class DomainsModule {}

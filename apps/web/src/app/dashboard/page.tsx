@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Users, Wallet, CreditCard, CheckCircle2, TrendingUp, Lightbulb, Sparkles } from 'lucide-react';
+import { Users, Wallet, CreditCard, CheckCircle2, TrendingUp, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Protected } from '@/components/protected';
 import { PageHeader } from '@/components/ui/page-header';
@@ -25,7 +25,26 @@ const insightLabels: Record<string, string> = {
   REVENUE_FORECAST: 'Прогноз выручки',
   STAFFING: 'Загрузка персонала',
   ADMIN_SUGGESTION: 'Рекомендация',
+  VOICE_NOTE: 'Голосовая заметка',
 };
+
+function insightText(type: string, payload: Record<string, unknown>) {
+  if (type === 'VOICE_NOTE' && payload.transcript) return String(payload.transcript);
+  if (type === 'CHURN_RISK' && payload.recommendation) return String(payload.recommendation);
+  if (type === 'REVENUE_FORECAST') {
+    const parts = [
+      payload.month ? String(payload.month) : '',
+      payload.forecast != null ? formatMoney(Number(payload.forecast)) : '',
+    ].filter(Boolean);
+    return parts.join(' · ') || '—';
+  }
+  const text = Object.values(payload)
+    .filter((value) => typeof value === 'string' || typeof value === 'number')
+    .slice(0, 2)
+    .map(String)
+    .join(' · ');
+  return text || '—';
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -50,13 +69,10 @@ export default function DashboardPage() {
 
       <Link
         href="/reception"
-        className="mb-8 flex flex-col gap-4 rounded-2xl border border-[var(--accent)]/30 bg-gradient-to-r from-[var(--accent-soft)] via-[var(--surface)] to-[var(--blue-soft)] p-6 shadow-[var(--shadow-card)] transition hover:border-[var(--accent)] sm:flex-row sm:items-center sm:justify-between"
+        className="ds-card-hover mb-8 flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between"
       >
         <div>
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
-            <Sparkles size={14} />
-            Главный экран дня
-          </p>
+          <p className="text-xs font-medium text-[var(--muted)]">Главный экран дня</p>
           <h2 className="mt-1 text-xl font-bold text-[var(--text)]">Рабочий стол ресепшн</h2>
           <p className="mt-1 text-sm text-[var(--muted)]">Записи на сегодня, очередь и приём в один клик</p>
         </div>
@@ -133,17 +149,14 @@ export default function DashboardPage() {
             {data.aiInsights.slice(0, 4).map((ins, i) => (
               <div
                 key={i}
-                className="rounded-xl border border-[var(--border)] bg-gradient-to-br from-[var(--surface-muted)] to-[var(--surface)] p-4"
+                className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4"
               >
-                <p className="text-sm font-semibold text-[var(--accent)]">
-                  {insightLabels[ins.type] ?? ins.type}
+                <p className="text-sm font-semibold text-[var(--text)]">
+                  {insightLabels[ins.type] ?? 'Заметка'}
                 </p>
                 <p className="mt-2 text-sm text-[var(--text-secondary)]">
                   {typeof ins.payload === 'object' && ins.payload !== null
-                    ? Object.entries(ins.payload)
-                        .slice(0, 2)
-                        .map(([k, v]) => `${k}: ${String(v)}`)
-                        .join(' · ')
+                    ? insightText(ins.type, ins.payload)
                     : '—'}
                 </p>
                 {ins.confidence != null && (

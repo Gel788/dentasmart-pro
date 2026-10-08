@@ -61,6 +61,12 @@ export class MarketingController {
     return this.svc.refreshSegment(orgId, id);
   }
 
+  @Post('automation-chains/ensure')
+  @RequirePermissions('marketing.write')
+  ensure(@OrgId() orgId: string) {
+    return this.svc.ensureClinicTriggers(orgId);
+  }
+
   @Post('automation-chains/:id/run')
   @RequirePermissions('marketing.write')
   runChain(@OrgId() orgId: string, @Param('id') id: string) {

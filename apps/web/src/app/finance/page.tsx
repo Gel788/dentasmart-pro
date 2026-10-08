@@ -34,6 +34,11 @@ function FinancePageContent() {
   const [payForm, setPayForm] = useState({ patientId: '', amount: '', method: 'CASH', invoiceId: '' });
   const [shift, setShift] = useState<{ id: string; status: string; openingCash: string; openedAt: string } | null>(null);
   const [closeCash, setCloseCash] = useState('');
+  const [openingCash, setOpeningCash] = useState('');
+  const [policies, setPolicies] = useState<unknown[]>([]);
+  const [policyForm, setPolicyForm] = useState({ patientId: '', insurerName: '', number: '', limitAmount: '', validTo: '', letterNumber: '' });
+  const [discounts, setDiscounts] = useState<Record<string, string>>({});
+  const [registry, setRegistry] = useState<{ id: string; amount: string; patient: { lastName: string; firstName: string }; insurer: string | null; policyNumber: string | null; letterNumber: string | null }[]>([]);
   const [deposits, setDeposits] = useState<unknown[]>([]);
   const [installments, setInstallments] = useState<unknown[]>([]);
   const [families, setFamilies] = useState<unknown[]>([]);
@@ -59,6 +64,7 @@ function FinancePageContent() {
     api<unknown[]>('/finance/installments').then(setInstallments);
     api<unknown[]>('/finance/family-groups').then(setFamilies);
     api<unknown[]>('/finance/payroll-rules').then(setPayrollRules);
+    api<unknown[]>('/finance/policies').then(setPolicies);
     api<unknown[]>('/finance/promo-codes').then(setPromos);
   };
 
@@ -135,7 +141,7 @@ function FinancePageContent() {
   return (
     <Protected>
       {prePatientId && (
-        <div className="mb-4 rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)]/40 px-4 py-3 text-sm text-[var(--text-secondary)]">
+        <div className="ds-card mb-6 flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm text-[var(--text-secondary)]">
           Фильтр по пациенту из карточки ·{' '}
           <a href="/finance" className="font-medium text-[var(--accent)] hover:underline">
             сбросить
@@ -160,8 +166,8 @@ function FinancePageContent() {
       <Card className="mb-6">
         <CardHeader title="Кассовая смена" description="Внутренний учёт наличных по филиалу" />
         {shift?.status === 'OPEN' ? (
-          <div className="mt-3 flex flex-wrap items-end gap-3">
-            <p className="text-sm text-[var(--muted)]">
+          <div className="flex flex-wrap items-end gap-3 border-t border-[var(--border)] pt-4">
+            <p className="min-w-[240px] flex-1 text-sm text-[var(--muted)]">
               Открыта с {new Date(shift.openedAt).toLocaleString('ru-RU')} · в кассе: {formatMoney(shift.openingCash)}
             </p>
             <Input placeholder="Сумма в кассе при закрытии" type="number" value={closeCash} onChange={(e) => setCloseCash(e.target.value)} className="max-w-xs" />
@@ -179,18 +185,32 @@ function FinancePageContent() {
             </Button>
           </div>
         ) : (
-          <Button
-            className="mt-3"
-            onClick={async () => {
-              await api('/finance/cash-shift/open', {
-                method: 'POST',
-                body: JSON.stringify({ branchId, openingCash: 5000 }),
-              });
-              load();
-            }}
-          >
-            Открыть смену (5000 ₽)
-          </Button>
+          <div className="flex flex-wrap items-end gap-3 border-t border-[var(--border)] pt-4">
+            <div className="min-w-[220px] flex-1">
+              <Label>Наличные в кассе</Label>
+              <Input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={openingCash}
+                onChange={(e) => setOpeningCash(e.target.value)}
+                aria-label="Наличные при открытии смены"
+              />
+            </div>
+            <Button
+              disabled={openingCash === '' || Number(openingCash) < 0}
+              onClick={async () => {
+                await api('/finance/cash-shift/open', {
+                  method: 'POST',
+                  body: JSON.stringify({ branchId, openingCash: Number(openingCash) }),
+                });
+                setOpeningCash('');
+                load();
+              }}
+            >
+              Открыть смену
+            </Button>
+          </div>
         )}
       </Card>
 
@@ -204,7 +224,7 @@ function FinancePageContent() {
       />
 
       {summary && (
-        <div className="mb-8 mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-6 mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Дебиторка" value={formatMoney(summary.receivable)} icon={Wallet} tone="amber" />
           <StatCard label="Выручка сегодня" value={formatMoney(summary.revenueToday ?? 0)} icon={CreditCard} tone="teal" />
           <StatCard label="Открытых счетов" value={summary.openInvoices} icon={Receipt} tone="blue" />
@@ -213,13 +233,14 @@ function FinancePageContent() {
       )}
 
       {financeTab === 'main' && (
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader title="Счета" />
-          <div className="space-y-2">
-            {(invoices as { id: string; number: string; totalAmount: string; paidAmount: string; status: string; patient: { id: string; lastName: string; firstName: string } }[]).map((inv) => (
+          <div className="overflow-hidden rounded-xl border border-[var(--border)]">
+            {(invoices as { id: string; number: string; totalAmount: string; paidAmount: string; discountAmount?: string; status: string; patient: { id: string; lastName: string; firstName: string } }[]).map((inv) => (
               <ListRow
                 key={inv.id}
+                className="!rounded-none !border-x-0 !border-t-0 last:!border-b-0"
                 trailing={
                   <div className="flex flex-col items-end gap-2">
                     <Badge variant={inv.status === 'PAID' ? 'success' : 'warning'}>{label(INVOICE_STATUS, inv.status)}</Badge>
@@ -232,7 +253,34 @@ function FinancePageContent() {
                 }
               >
                 <p className="font-medium">{inv.number} — {inv.patient.lastName} {inv.patient.firstName}</p>
-                <p className="text-[var(--muted)]">{formatMoney(inv.paidAmount)} / {formatMoney(inv.totalAmount)}</p>
+                <p className="text-[var(--muted)]">
+                  {formatMoney(inv.paidAmount)} / {formatMoney(inv.totalAmount)}
+                  {Number(inv.discountAmount) > 0 ? ` · скидка ${formatMoney(inv.discountAmount ?? 0)}` : ''}
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    className="max-w-[120px]"
+                    placeholder="Скидка"
+                    aria-label={`Скидка ${inv.number}`}
+                    value={discounts[inv.id] ?? ''}
+                    onChange={(e) => setDiscounts((prev) => ({ ...prev, [inv.id]: e.target.value }))}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={async () => {
+                      await api(`/finance/invoices/${inv.id}/discount`, {
+                        method: 'POST',
+                        body: JSON.stringify({ discountAmount: Number(discounts[inv.id] || 0) }),
+                      });
+                      load();
+                    }}
+                  >
+                    Скидка
+                  </Button>
+                </div>
                 <a href={`/finance/invoices/${inv.id}/print`} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-[var(--accent)] hover:underline">Печать</a>
               </ListRow>
             ))}
@@ -240,10 +288,28 @@ function FinancePageContent() {
         </Card>
         <Card>
           <CardHeader title="Оплаты" />
-          <div className="space-y-2">
+          <div className="overflow-hidden rounded-xl border border-[var(--border)]">
             {(payments as { id: string; amount: string; method: string; paidAt: string }[]).map((p) => (
-              <ListRow key={p.id}>
-                <p className="font-medium">{formatMoney(p.amount)}</p>
+              <ListRow
+                key={p.id}
+                className="!rounded-none !border-x-0 !border-t-0 last:!border-b-0"
+                trailing={Number(p.amount) > 0 ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={async () => {
+                      await api(`/finance/payments/${p.id}/refund`, {
+                        method: 'POST',
+                        body: JSON.stringify({ amount: Number(p.amount) }),
+                      });
+                      load();
+                    }}
+                  >
+                    Вернуть
+                  </Button>
+                ) : undefined}
+              >
+                <p className="font-medium">{Number(p.amount) < 0 ? 'Возврат ' : ''}{formatMoney(Math.abs(Number(p.amount)))}</p>
                 <p className="text-[var(--muted)]">{label(PAYMENT_METHOD, p.method)} · {new Date(p.paidAt).toLocaleDateString('ru-RU')}</p>
               </ListRow>
             ))}
@@ -253,12 +319,12 @@ function FinancePageContent() {
       )}
 
       {financeTab === 'extra' && (
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Депозиты" action={<Button size="sm" variant="ghost" onClick={() => setDepositModal(true)}>Пополнить</Button>} />
           <ul className="space-y-2 text-sm">
             {(deposits as { patient: { firstName: string; lastName: string }; balance: string }[]).map((d, i) => (
-              <li key={i} className="flex justify-between rounded-xl bg-[var(--surface-muted)]/50 px-3 py-2">
+              <li key={i} className="ds-table-row flex justify-between gap-3 px-3 py-2.5 last:border-b-0">
                 <span>{d.patient.lastName} {d.patient.firstName}</span>
                 <span className="font-semibold text-[var(--accent)]">{formatMoney(d.balance)}</span>
               </li>
@@ -269,7 +335,7 @@ function FinancePageContent() {
           <CardHeader title="Рассрочки" action={<Button size="sm" variant="ghost" onClick={() => setInstallmentModal(true)}>Создать</Button>} />
           <ul className="space-y-2 text-sm">
             {(installments as { patient: { lastName: string }; totalAmount: string; status: string }[]).map((p, i) => (
-              <li key={i} className="flex justify-between rounded-xl bg-[var(--surface-muted)]/50 px-3 py-2">
+              <li key={i} className="ds-table-row flex justify-between gap-3 px-3 py-2.5 last:border-b-0">
                 <span>{p.patient.lastName}</span>
                 <span>{formatMoney(p.totalAmount)} · <Badge>{label(INSTALLMENT_STATUS, p.status)}</Badge></span>
               </li>
@@ -280,7 +346,7 @@ function FinancePageContent() {
           <CardHeader title="Семейные счета" action={<Button size="sm" variant="ghost" onClick={() => setFamilyModal(true)}>+ Группа</Button>} />
           <ul className="space-y-2 text-sm">
             {(families as { name: string; members: { patient: { lastName: string } }[] }[]).map((f, i) => (
-              <li key={i} className="rounded-xl bg-[var(--surface-muted)]/50 px-3 py-2">
+              <li key={i} className="ds-table-row px-3 py-2.5 last:border-b-0">
                 <span className="font-medium">{f.name}</span>
                 <span className="text-[var(--muted)]"> — {f.members.map((m) => m.patient.lastName).join(', ')}</span>
               </li>
@@ -291,7 +357,7 @@ function FinancePageContent() {
           <CardHeader title="Промокоды" action={<Button size="sm" variant="ghost" onClick={() => setPromoModal(true)}>+ Код</Button>} />
           <ul className="space-y-2 text-sm">
             {(promos as { code: string; discountPct?: string; isActive: boolean }[]).map((pr, i) => (
-              <li key={i} className="flex justify-between rounded-xl bg-[var(--surface-muted)]/50 px-3 py-2">
+              <li key={i} className="ds-table-row flex justify-between gap-3 px-3 py-2.5 last:border-b-0">
                 <span className="font-mono font-medium">{pr.code}</span>
                 <span>{pr.discountPct ?? 0}% · {pr.isActive ? 'активен' : 'выкл'}</span>
               </li>
@@ -299,10 +365,73 @@ function FinancePageContent() {
           </ul>
         </Card>
         <Card>
+          <CardHeader title="Полисы ДМС" />
+          <form
+            className="mb-3 grid gap-2"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              await api('/finance/policies', {
+                method: 'POST',
+                body: JSON.stringify({
+                  patientId: policyForm.patientId,
+                  insurerName: policyForm.insurerName,
+                  number: policyForm.number,
+                  limitAmount: Number(policyForm.limitAmount),
+                  validTo: policyForm.validTo || undefined,
+                  letterNumber: policyForm.letterNumber || undefined,
+                }),
+              });
+              setPolicyForm({ patientId: '', insurerName: '', number: '', limitAmount: '', validTo: '', letterNumber: '' });
+              load();
+            }}
+          >
+            <Select required aria-label="Пациент полиса" value={policyForm.patientId} onChange={(e) => setPolicyForm({ ...policyForm, patientId: e.target.value })}>
+              <option value="">Пациент</option>
+              {patients.map((p) => <option key={p.id} value={p.id}>{p.lastName} {p.firstName}</option>)}
+            </Select>
+            <Input required placeholder="Страховая" aria-label="Страховая" value={policyForm.insurerName} onChange={(e) => setPolicyForm({ ...policyForm, insurerName: e.target.value })} />
+            <Input required placeholder="Номер полиса" aria-label="Номер полиса" value={policyForm.number} onChange={(e) => setPolicyForm({ ...policyForm, number: e.target.value })} />
+            <Input required type="number" min={1} placeholder="Лимит, ₽" aria-label="Лимит полиса" value={policyForm.limitAmount} onChange={(e) => setPolicyForm({ ...policyForm, limitAmount: e.target.value })} />
+            <Input type="date" aria-label="Полис до" value={policyForm.validTo} onChange={(e) => setPolicyForm({ ...policyForm, validTo: e.target.value })} />
+            <Input placeholder="Гарантийное письмо" aria-label="Номер гарантийного письма" value={policyForm.letterNumber} onChange={(e) => setPolicyForm({ ...policyForm, letterNumber: e.target.value })} />
+            <Button type="submit" size="sm">Сохранить полис</Button>
+          </form>
+          <ul className="space-y-2 text-sm">
+            {(policies as { id: string; number: string; letterNumber?: string | null; limitAmount: string; insurer: { name: string }; patient: { lastName: string; firstName: string } }[]).map((policy) => (
+              <li key={policy.id} className="ds-table-row px-3 py-2.5 last:border-b-0">
+                <span className="font-medium">{policy.patient.lastName} {policy.patient.firstName}</span>
+                <span className="text-[var(--muted)]"> · {policy.insurer.name} · {policy.number} · {formatMoney(policy.limitAmount)}{policy.letterNumber ? ` · письмо ${policy.letterNumber}` : ''}</span>
+              </li>
+            ))}
+          </ul>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="mt-3"
+            onClick={async () => {
+              const now = new Date();
+              const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+              const to = now.toISOString().slice(0, 10);
+              setRegistry(await api(`/finance/dms-registry?from=${from}&to=${to}`));
+            }}
+          >
+            Реестр ДМС за месяц
+          </Button>
+          {!!registry.length && (
+            <ul className="mt-2 space-y-1 text-sm">
+              {registry.map((row) => (
+                <li key={row.id}>
+                  {row.patient.lastName} {row.patient.firstName} · {row.insurer ?? 'без полиса'} · {row.letterNumber ?? 'без письма'} · {formatMoney(row.amount)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+        <Card>
           <CardHeader title="Правила зарплаты" />
           <ul className="space-y-2 text-sm">
             {(payrollRules as { name: string; ruleType: string }[]).map((r, i) => (
-              <li key={i} className="flex justify-between rounded-xl bg-[var(--surface-muted)]/50 px-3 py-2">
+              <li key={i} className="ds-table-row flex justify-between gap-3 px-3 py-2.5 last:border-b-0">
                 <span>{r.name}</span>
                 <Badge>{r.ruleType}</Badge>
               </li>
@@ -404,7 +533,7 @@ function FinancePageContent() {
           <div><Label>Название</Label><Input required value={familyForm.name} onChange={(e) => setFamilyForm({ ...familyForm, name: e.target.value })} /></div>
           <div>
             <Label>Участники</Label>
-            <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-[var(--border)] p-2">
+            <div className="ds-card max-h-48 space-y-1 overflow-y-auto p-2">
               {patients.map((p) => (
                 <label key={p.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-[var(--surface-muted)]">
                   <input

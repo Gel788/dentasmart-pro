@@ -4,6 +4,7 @@ import { AuthUser } from '@dentasmart/shared';
 import { CurrentUser } from '../common/current-user.decorator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { RefreshDto } from './dto/refresh.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 @ApiTags('auth')
@@ -24,7 +25,7 @@ export class AuthController {
   }
 
   @Post('refresh')
-  refresh(@Body() body: { refreshToken: string }) {
+  refresh(@Body() body: RefreshDto) {
     return this.authService.refresh(body.refreshToken);
   }
 

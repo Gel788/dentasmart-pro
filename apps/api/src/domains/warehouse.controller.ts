@@ -37,6 +37,18 @@ export class WarehouseController {
     return this.svc.lowStock(orgId);
   }
 
+  @Get('expiring')
+  @RequirePermissions('warehouse.read')
+  expiring(@OrgId() orgId: string) {
+    return this.svc.expiring(orgId);
+  }
+
+  @Get('material-cost')
+  @RequirePermissions('warehouse.read')
+  materialCost(@OrgId() orgId: string) {
+    return this.svc.materialCost(orgId);
+  }
+
   @Post('items')
   @RequirePermissions('warehouse.write')
   createItem(@OrgId() orgId: string, @Body() body: { name: string; sku?: string; category?: string; minStock?: number }) {
@@ -52,7 +64,7 @@ export class WarehouseController {
   @Get('inventory/active')
   @RequirePermissions('warehouse.read')
   activeInventory(@OrgId() orgId: string, @Query('branchId') branchId: string) {
-    return this.svc.getActiveInventory(orgId, branchId || 'seed-branch-main');
+    return this.svc.getActiveInventory(orgId, branchId);
   }
 
   @Post('inventory/start')

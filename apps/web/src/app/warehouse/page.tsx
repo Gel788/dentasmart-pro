@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { TabBar } from '@/components/ui/tab-bar';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input, Label } from '@/components/ui/input';
+import { Input, Label, Select } from '@/components/ui/input';
 import { ListRow } from '@/components/ui/list-row';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -29,12 +29,27 @@ export default function WarehousePage() {
   const [modal, setModal] = useState(false);
   const [name, setName] = useState('');
   const [norms, setNorms] = useState<unknown[]>([]);
+  const [expiring, setExpiring] = useState<{ id: string; quantity: string; expiresAt: string; costPrice?: string | null; item: { name: string } }[]>([]);
+  const [monthCost, setMonthCost] = useState(0);
+  const [services, setServices] = useState<{ id: string; name: string }[]>([]);
+  const [normForm, setNormForm] = useState({ serviceId: '', itemId: '', quantity: '1' });
   const load = () => {
     if (!branchId) return;
     api<unknown[]>('/warehouse/items').then(setItems);
     api<unknown[]>('/warehouse/low-stock').then(setLow);
     api<typeof session | null>(`/warehouse/inventory/active?branchId=${branchId}`).then(setSession);
     api<unknown[]>('/warehouse/material-norms').then(setNorms);
+    api<typeof expiring>('/warehouse/expiring').then(setExpiring);
+    api<{ monthCost: number }>('/warehouse/material-cost').then((row) => setMonthCost(row.monthCost));
+    api<{ id: string; name: string; code?: string | null }[]>('/services').then((list) => {
+      const seen = new Set<string>();
+      setServices(list.filter((service) => {
+        const key = service.code || service.name;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }));
+    });
   };
 
   useEffect(() => {
@@ -86,7 +101,7 @@ export default function WarehousePage() {
         title="Материалы и остатки"
         description="Инвентаризация и нормы расхода по услугам"
         action={
-          <>
+          <div className="flex flex-wrap items-center gap-2">
             <TabBar
               tabs={[
                 { id: 'stock' as Tab, label: 'Остатки' },
@@ -97,19 +112,35 @@ export default function WarehousePage() {
               onChange={setTab}
             />
             <Button onClick={() => setModal(true)}>+ Позиция</Button>
-          </>
+          </div>
         }
       />
 
       {tab === 'stock' && (
         <>
+          <p className="ds-card mb-4 px-4 py-3 text-sm text-[var(--text-secondary)]">
+            Себестоимость списаний в этом месяце: <span className="font-semibold text-[var(--text)]">{monthCost.toLocaleString('ru-RU')} ₽</span>
+          </p>
+          {!!expiring.length && (
+            <div className="mb-4 border-l-4 border-[var(--warning)] bg-[var(--warning-soft)] px-4 py-3">
+              <p className="text-sm font-medium text-[var(--warning)]">Срок годности до 30 дней</p>
+              <ul className="mt-2 space-y-1 text-sm text-[var(--text-secondary)]">
+                {expiring.map((batch) => (
+                  <li key={batch.id}>
+                    {batch.item.name} · {Number(batch.quantity)} · до {new Date(batch.expiresAt).toLocaleDateString('ru-RU')}
+                    {batch.costPrice ? ` · ${Number(batch.costPrice).toLocaleString('ru-RU')} ₽` : ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {!!lowCount && <LowStockBanner count={lowCount} />}
           {stockItems.length ? (
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="ds-card mt-6 grid overflow-hidden sm:grid-cols-2 xl:grid-cols-3">
               {stockItems.map((it) => {
                 const qty = it.batches?.reduce((s, b) => s + Number(b.quantity), 0) ?? 0;
                 return (
-                  <Card key={it.id} hover>
+                  <Card key={it.id} hover className="!rounded-none !border-x-0 !border-t-0 p-4 sm:border-r sm:last:border-r-0">
                     <p className="font-semibold text-[var(--text)]">{it.name}</p>
                     <p className="mt-1 text-sm text-[var(--muted)]">{it.sku ?? '—'}</p>
                     <p className="mt-2 text-sm">
@@ -128,10 +159,38 @@ export default function WarehousePage() {
       )}
 
       {tab === 'norms' && (
-        <div className="mt-6 space-y-2">
+        <div className="space-y-4">
+          <form
+            className="ds-card grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_160px_auto]"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              await api('/warehouse/material-norms', {
+                method: 'POST',
+                body: JSON.stringify({
+                  serviceId: normForm.serviceId,
+                  itemId: normForm.itemId,
+                  quantity: Number(normForm.quantity),
+                }),
+              });
+              setNormForm({ serviceId: '', itemId: '', quantity: '1' });
+              load();
+            }}
+          >
+            <Select required aria-label="Услуга нормы" value={normForm.serviceId} onChange={(e) => setNormForm({ ...normForm, serviceId: e.target.value })}>
+              <option value="">Услуга</option>
+              {services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}
+            </Select>
+            <Select required aria-label="Материал нормы" value={normForm.itemId} onChange={(e) => setNormForm({ ...normForm, itemId: e.target.value })}>
+              <option value="">Материал</option>
+              {stockItems.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </Select>
+            <Input required type="number" min={0.001} step="0.001" aria-label="Количество нормы" value={normForm.quantity} onChange={(e) => setNormForm({ ...normForm, quantity: e.target.value })} />
+            <Button type="submit">Сохранить норму</Button>
+          </form>
+          <div className="ds-card overflow-hidden">
           {normItems.length ? (
             normItems.map((n) => (
-              <ListRow key={n.id}>
+              <ListRow key={n.id} className="!rounded-none !border-x-0 !border-t-0 last:!border-b-0">
                 <p className="font-medium text-[var(--text)]">{n.service.name}</p>
                 <p className="mt-0.5 text-[var(--muted)]">
                   {n.item.name} · <span className="font-medium text-[var(--text-secondary)]">{n.quantity} шт.</span>
@@ -141,22 +200,23 @@ export default function WarehousePage() {
           ) : (
             <EmptyState icon={Package} title="Нормы не заданы" description="Привяжите расход материалов к услугам" />
           )}
+          </div>
         </div>
       )}
 
       {tab === 'inventory' && (
-        <div className="mt-6">
+        <div>
           {!session ? (
             <Button onClick={startInventory}>Начать инвентаризацию</Button>
           ) : (
             <>
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="ds-card mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <p className="text-sm text-[var(--muted)]">Сверьте фактические остатки</p>
                 <Button onClick={completeInventory}>Завершить и провести</Button>
               </div>
-              <div className="space-y-2">
+              <div className="ds-card overflow-hidden">
                 {session.lines.map((line) => (
-                  <ListRow key={line.id}>
+                  <ListRow key={line.id} className="!rounded-none !border-x-0 !border-t-0 last:!border-b-0">
                     <p className="font-medium text-[var(--text)]">{line.item.name}</p>
                     <p className="mt-0.5 text-[var(--muted)]">Учёт: {line.expectedQty}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -193,7 +253,7 @@ export default function WarehousePage() {
 
 function LowStockBanner({ count }: { count: number }) {
   return (
-    <div className="mt-4 flex items-start gap-3 rounded-xl border border-[var(--warning)]/40 bg-[var(--warning-soft)] px-4 py-3">
+    <div className="mb-4 flex items-start gap-3 border-l-4 border-[var(--warning)] bg-[var(--warning-soft)] px-4 py-3">
       <AlertTriangle size={18} className="mt-0.5 shrink-0 text-[var(--warning)]" />
       <div>
         <p className="text-sm font-medium text-[var(--warning)]">Низкий остаток</p>

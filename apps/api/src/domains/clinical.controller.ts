@@ -13,6 +13,12 @@ import { ClinicalService } from './clinical.service';
 export class ClinicalController {
   constructor(private readonly svc: ClinicalService) {}
 
+  @Get('catalog')
+  @RequirePermissions('medical.read')
+  catalog(@OrgId() orgId: string) {
+    return this.svc.priceCatalog(orgId);
+  }
+
   @Get('treatment-plans')
   @RequirePermissions('medical.read')
   plans(@OrgId() orgId: string, @Query('patientId') patientId?: string) {
@@ -93,8 +99,13 @@ export class ClinicalController {
 
   @Patch('treatment-plans/items/:itemId')
   @RequirePermissions('medical.write')
-  toggleItem(@Param('itemId') itemId: string, @Body() body: { isCompleted: boolean }) {
-    return this.svc.togglePlanItem(itemId, body.isCompleted);
+  toggleItem(
+    @Param('itemId') itemId: string,
+    @Body() body: { isCompleted?: boolean; status?: string; price?: number; serviceId?: string },
+  ) {
+    if (body.price != null || body.serviceId) return this.svc.updatePlanItem(itemId, body);
+    if (body.status) return this.svc.setItemStatus(itemId, body.status);
+    return this.svc.togglePlanItem(itemId, !!body.isCompleted);
   }
 
   @Post('treatment-plans/:planId/recalculate')
@@ -122,7 +133,7 @@ export class ClinicalController {
     @Param('itemId') itemId: string,
     @Body() body: { isCompleted: boolean; branchId?: string },
   ) {
-    return this.svc.completePlanItemWithMaterials(orgId, itemId, body.branchId || 'seed-branch-main', body.isCompleted);
+    return this.svc.completePlanItemWithMaterials(orgId, itemId, body.branchId, body.isCompleted);
   }
 
   @Post('treatment-plans/:planId/diary/photo')
@@ -135,5 +146,73 @@ export class ClinicalController {
   @RequirePermissions('medical.read')
   photos(@Param('patientId') patientId: string) {
     return this.svc.listPhotoPairs(patientId);
+  }
+
+  @Get('patients/:patientId/perio')
+  @RequirePermissions('medical.read')
+  perio(@OrgId() orgId: string, @Param('patientId') patientId: string) {
+    return this.svc.listPerio(orgId, patientId);
+  }
+
+  @Post('patients/:patientId/perio')
+  @RequirePermissions('medical.write')
+  createPerio(
+    @OrgId() orgId: string,
+    @Param('patientId') patientId: string,
+    @Body() body: { notes?: string; teeth: { toothNum: number; missing?: boolean; mobility?: number; furcation?: number; sites?: { position: number; pocket: number; recession: number; bleeding: boolean }[] }[] },
+  ) {
+    return this.svc.createPerio(orgId, patientId, body);
+  }
+
+  @Get('oms/tariffs')
+  @RequirePermissions('medical.read')
+  omsTariffs() {
+    return this.svc.omsTariffs();
+  }
+
+  @Get('patients/:patientId/oms')
+  @RequirePermissions('medical.read')
+  oms(@OrgId() orgId: string, @Param('patientId') patientId: string) {
+    return this.svc.omsState(orgId, patientId);
+  }
+
+  @Post('patients/:patientId/oms/policy')
+  @RequirePermissions('medical.write')
+  omsPolicy(
+    @OrgId() orgId: string,
+    @Param('patientId') patientId: string,
+    @Body() body: { number: string; smoName: string; region?: string; validFrom?: string; validTo?: string },
+  ) {
+    return this.svc.saveOmsPolicy(orgId, patientId, body);
+  }
+
+  @Post('patients/:patientId/oms/cases')
+  @RequirePermissions('medical.write')
+  openOms(
+    @OrgId() orgId: string,
+    @Param('patientId') patientId: string,
+    @Body() body: { branchId: string; doctorId?: string },
+  ) {
+    return this.svc.openOmsCase(orgId, patientId, body.branchId, body.doctorId);
+  }
+
+  @Post('oms/cases/:caseId/lines')
+  @RequirePermissions('medical.write')
+  omsLine(
+    @OrgId() orgId: string,
+    @Param('caseId') caseId: string,
+    @Body() body: { code: string; title: string; toothNum?: number; quantity?: number; tariff?: number },
+  ) {
+    return this.svc.addOmsLine(orgId, caseId, body);
+  }
+
+  @Post('oms/cases/:caseId/close')
+  @RequirePermissions('medical.write')
+  closeOms(
+    @OrgId() orgId: string,
+    @Param('caseId') caseId: string,
+    @Body() body: { icd10: string; result?: string },
+  ) {
+    return this.svc.closeOmsCase(orgId, caseId, body);
   }
 }

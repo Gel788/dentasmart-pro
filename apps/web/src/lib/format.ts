@@ -35,11 +35,29 @@ export const APPOINTMENT_STATUS: Record<string, string> = {
 };
 
 export const PLAN_STATUS: Record<string, string> = {
+  DRAFT: 'Черновик',
   PROPOSED: 'Предложен',
-  ACCEPTED: 'Принят',
+  ACCEPTED: 'Согласован',
   IN_PROGRESS: 'В работе',
-  COMPLETED: 'Завершён',
+  COMPLETED: 'Выполнен',
+  REJECTED: 'Отказ',
   CANCELLED: 'Отменён',
+};
+
+export const PLAN_ITEM_STATUS: Record<string, string> = {
+  PROPOSED: 'Предложена',
+  ACCEPTED: 'Согласована',
+  DONE: 'Выполнена',
+  REJECTED: 'Отказ',
+};
+
+export const PATIENT_SOURCE: Record<string, string> = {
+  SITE: 'Сайт',
+  CALL: 'Звонок',
+  WALK_IN: 'С улицы',
+  REFERRAL: 'Рекомендация',
+  ADS: 'Реклама',
+  DOCTOR: 'Врач',
 };
 
 export const INVOICE_STATUS: Record<string, string> = {

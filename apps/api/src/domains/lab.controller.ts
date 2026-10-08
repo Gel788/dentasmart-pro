@@ -21,7 +21,10 @@ export class LabController {
 
   @Post('orders')
   @RequirePermissions('medical.write')
-  create(@OrgId() orgId: string, @Body() body: { title: string; patientId?: string; doctorId?: string; shade?: string }) {
+  create(
+    @OrgId() orgId: string,
+    @Body() body: { title: string; patientId?: string; doctorId?: string; shade?: string; dueAt?: string; costAmount?: number },
+  ) {
     return this.svc.createOrder(orgId, body);
   }
 
@@ -29,6 +32,12 @@ export class LabController {
   @RequirePermissions('medical.write')
   status(@Param('id') id: string, @Body() body: { status: string }) {
     return this.svc.updateStatus(id, body.status);
+  }
+
+  @Patch('orders/:id/scan')
+  @RequirePermissions('medical.write')
+  scan(@OrgId() orgId: string, @Param('id') id: string, @Body() body: { fileUrl: string }) {
+    return this.svc.attachScan(orgId, id, body.fileUrl);
   }
 
   @Post('orders/:id/messages')

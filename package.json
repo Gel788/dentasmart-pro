@@ -2,7 +2,7 @@
   "name": "dentasmart-pro",
   "version": "0.1.0",
   "private": true,
-  "description": "DentaSmart Pro — CRM для стоматологических клиник",
+  "description": "Sedrakoich dent — CRM для стоматологических клиник",
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",

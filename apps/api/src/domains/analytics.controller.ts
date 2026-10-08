@@ -19,6 +19,18 @@ export class AnalyticsController {
     return this.svc.dashboard(orgId);
   }
 
+  @Get('owner')
+  @RequirePermissions('analytics.read')
+  owner(@OrgId() orgId: string) {
+    return this.svc.owner(orgId);
+  }
+
+  @Get('practice')
+  @RequirePermissions('analytics.read')
+  practice(@OrgId() orgId: string) {
+    return this.svc.practice(orgId);
+  }
+
   @Get('ai-insights')
   @RequirePermissions('analytics.read')
   insights(@OrgId() orgId: string) {

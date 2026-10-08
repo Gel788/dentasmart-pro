@@ -5,18 +5,15 @@ import {
   Calendar,
   Mail,
   Phone,
-  Pencil,
   Stethoscope,
   Wallet,
   AlertCircle,
-  Sparkles,
-  Clock,
   Receipt,
 } from 'lucide-react';
 import { PatientAvatar } from '@/components/patient-avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { formatDate, formatDateOnly, formatMoney, patientAge } from '@/lib/format';
+import { formatDate, formatDateOnly, formatMoney, label, patientAge, PATIENT_SOURCE } from '@/lib/format';
 import { GENDER_LABELS, patientFullName } from '@/lib/patient';
 
 export type PatientSummary = {
@@ -43,6 +40,7 @@ export function PatientProfileHero({
     gender?: string | null;
     tags?: string[];
     notes?: string | null;
+    source?: string | null;
     birthDate?: string | null;
   };
   stats: { visits: number; plans: number; openInvoices: number };
@@ -53,10 +51,9 @@ export function PatientProfileHero({
   const hasDebt = (summary?.balanceDue ?? 0) > 0;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-card)]">
-      <div className="relative overflow-hidden bg-gradient-to-br from-[var(--accent-soft)] via-[var(--surface)] to-[var(--blue-soft)] px-6 py-8 sm:px-10">
-        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-[var(--accent)]/5 blur-3xl" />
-        <div className="relative flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
+    <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+      <div className="border-b border-[var(--border)] border-l-4 border-l-[var(--accent)] px-6 py-8 sm:px-10">
+        <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex gap-5 sm:gap-6">
             <div className="relative">
               <PatientAvatar firstName={patient.firstName} lastName={patient.lastName} size="xl" />
@@ -67,11 +64,8 @@ export function PatientProfileHero({
               )}
             </div>
             <div className="min-w-0">
-              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
-                <Sparkles size={12} />
-                Медкарта
-              </p>
-              <h1 className="mt-1 text-2xl font-bold tracking-tight text-[var(--text)] sm:text-4xl">{name}</h1>
+              <p className="text-xs font-medium text-[var(--muted)]">Медкарта</p>
+              <h1 className="ds-display mt-1 text-2xl text-[var(--text)] sm:text-4xl">{name}</h1>
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--muted)]">
                 {patient.birthDate && (
                   <span>
@@ -104,6 +98,11 @@ export function PatientProfileHero({
                   </a>
                 )}
               </div>
+              {patient.source && (
+                <div className="mt-3">
+                  <Badge variant="accent">{label(PATIENT_SOURCE, patient.source)}</Badge>
+                </div>
+              )}
               {patient.tags && patient.tags.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {patient.tags.map((t) => (
@@ -116,47 +115,40 @@ export function PatientProfileHero({
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 lg:flex-col lg:items-stretch">
-            {onEdit && (
-              <Button variant="ghost" className="justify-center" onClick={onEdit}>
-                <Pencil size={16} />
-                Редактировать
-              </Button>
-            )}
-            <Link href={patient.id ? `/schedule?patientId=${patient.id}` : '/schedule'} className="flex-1 lg:flex-none">
-              <Button variant="ghost" className="w-full justify-center">
-                <Calendar size={16} />
-                Запись
-              </Button>
-            </Link>
-            <Link href={patient.id ? `/reception` : '/reception'} className="flex-1 lg:flex-none">
-              <Button variant="ghost" className="w-full justify-center">
-                <Clock size={16} />
-                Ресепшн
-              </Button>
-            </Link>
+          <div className="flex w-full flex-col gap-2 lg:w-52">
             {summary?.activePlanId ? (
-              <Link href={`/clinical/${summary.activePlanId}`} className="flex-1 lg:flex-none">
+              <Link href={`/clinical/${summary.activePlanId}`}>
                 <Button className="w-full justify-center">
                   <Stethoscope size={16} />
                   План лечения
                 </Button>
               </Link>
             ) : (
-              <Link href="/clinical" className="flex-1 lg:flex-none">
+              <Link href="/clinical">
                 <Button className="w-full justify-center">
                   <Stethoscope size={16} />
                   Новый план
                 </Button>
               </Link>
             )}
-            {patient.id && (
-              <Link href={`/finance?patientId=${patient.id}`} className="flex-1 lg:flex-none">
-                <Button variant={hasDebt ? 'primary' : 'ghost'} className="w-full justify-center">
+            <Link href={patient.id ? `/schedule?patientId=${patient.id}` : '/schedule'}>
+              <Button variant="ghost" className="w-full justify-center">
+                <Calendar size={16} />
+                Записать
+              </Button>
+            </Link>
+            {patient.id && hasDebt && (
+              <Link href={`/finance?patientId=${patient.id}`}>
+                <Button variant="danger" className="w-full justify-center">
                   <Wallet size={16} />
-                  {hasDebt ? 'Оплатить долг' : 'Финансы'}
+                  Оплатить долг
                 </Button>
               </Link>
+            )}
+            {onEdit && (
+              <button type="button" className="text-sm text-[var(--muted)] underline-offset-2 hover:text-[var(--text)] hover:underline" onClick={onEdit}>
+                Редактировать карточку
+              </button>
             )}
           </div>
         </div>
@@ -180,12 +172,9 @@ export function PatientProfileHero({
           { label: 'Планов', value: String(stats.plans), tone: 'text-[var(--text)]', icon: Stethoscope },
           { label: 'Открытых счетов', value: String(stats.openInvoices), tone: 'text-[var(--text)]', icon: Receipt },
         ].map((m) => (
-          <div key={m.label} className="flex items-center gap-3 bg-[var(--surface)] px-5 py-4">
-            <m.icon size={20} className="shrink-0 text-[var(--muted)]" />
-            <div>
-              <p className={`text-xl font-bold tabular-nums ${m.tone}`}>{m.value}</p>
-              <p className="text-xs font-medium text-[var(--muted)]">{m.label}</p>
-            </div>
+          <div key={m.label} className="bg-[var(--surface)] px-5 py-4">
+            <p className={`ds-display text-xl tabular-nums ${m.tone}`}>{m.value}</p>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">{m.label}</p>
           </div>
         ))}
       </div>

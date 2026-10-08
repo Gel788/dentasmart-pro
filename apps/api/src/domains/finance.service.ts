@@ -1,5 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveBranchId } from '../common/resolve-branch';
+
+function localDay(iso: string, end: boolean) {
+  const [year, month, day] = iso.slice(0, 10).split('-').map(Number);
+  return end
+    ? new Date(year, month - 1, day, 23, 59, 59, 999)
+    : new Date(year, month - 1, day, 0, 0, 0, 0);
+}
 
 @Injectable()
 export class FinanceService {
@@ -25,7 +33,7 @@ export class FinanceService {
     return Promise.all([
       this.prisma.invoice.aggregate({
         where: { organizationId: orgId, status: { in: ['ISSUED', 'PARTIAL'] } },
-        _sum: { totalAmount: true, paidAmount: true },
+        _sum: { totalAmount: true, paidAmount: true, discountAmount: true },
         _count: true,
       }),
       this.prisma.payment.aggregate({
@@ -42,7 +50,10 @@ export class FinanceService {
       }),
     ]).then(([invoices, payments, todayPayments]) => ({
       openInvoices: invoices._count,
-      receivable: Number(invoices._sum.totalAmount ?? 0) - Number(invoices._sum.paidAmount ?? 0),
+      receivable:
+        Number(invoices._sum.totalAmount ?? 0) -
+        Number(invoices._sum.paidAmount ?? 0) -
+        Number(invoices._sum.discountAmount ?? 0),
       totalPayments: Number(payments._sum.amount ?? 0),
       paymentCount: payments._count,
       revenueToday: Number(todayPayments._sum.amount ?? 0),
@@ -108,6 +119,7 @@ export class FinanceService {
         patient: true,
         organization: { select: { name: true } },
         payments: { orderBy: { paidAt: 'desc' } },
+        items: { orderBy: { title: 'asc' } },
       },
     });
     if (!inv) throw new NotFoundException('Счёт не найден');
@@ -142,35 +154,95 @@ export class FinanceService {
     });
   }
 
-  async createInvoiceFromPlan(orgId: string, planId: string) {
+  async createInvoiceFromPlan(
+    orgId: string,
+    planId: string,
+    body: { itemIds?: string[]; appointmentId?: string } = {},
+  ) {
     const plan = await this.prisma.treatmentPlan.findFirst({
       where: { id: planId, organizationId: orgId },
-      include: { items: true },
+      include: { items: { include: { invoiceItem: true } } },
     });
     if (!plan) throw new NotFoundException('План лечения не найден');
 
-    const existing = await this.prisma.invoice.findFirst({
-      where: { treatmentPlanId: planId, status: { notIn: ['CANCELLED'] } },
-    });
-    if (existing) return existing;
-
-    const completed = plan.items.filter((i) => i.isCompleted);
-    const billItems = completed.length > 0 ? completed : plan.items;
-    const total = billItems.reduce((s, i) => s + Number(i.price), 0);
-    if (total <= 0) {
-      throw new BadRequestException('Нет этапов с ценой для выставления счёта');
+    const pool = body.itemIds?.length
+      ? plan.items.filter((item) => body.itemIds!.includes(item.id))
+      : plan.items.filter((item) => item.status === 'ACCEPTED' || item.status === 'DONE');
+    const fresh = pool.filter((item) => item.status !== 'REJECTED' && !item.invoiceItem);
+    if (!fresh.length) {
+      throw new BadRequestException('Нет согласованных строк, которые ещё не в наряде');
     }
 
-    return this.createInvoice(orgId, {
-      patientId: plan.patientId,
-      number: this.nextInvoiceNumber(),
-      totalAmount: total,
-      treatmentPlanId: planId,
+    const appointmentId = body.appointmentId || plan.appointmentId || null;
+
+    return this.prisma.$transaction(async (tx) => {
+      let invoice = await tx.invoice.findFirst({
+        where: {
+          organizationId: orgId,
+          treatmentPlanId: planId,
+          status: { in: ['DRAFT', 'ISSUED', 'PARTIAL'] },
+          items: { some: {} },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!invoice) {
+        invoice = await tx.invoice.create({
+          data: {
+            organizationId: orgId,
+            patientId: plan.patientId,
+            treatmentPlanId: planId,
+            appointmentId,
+            number: this.nextInvoiceNumber(),
+            status: 'ISSUED',
+            totalAmount: 0,
+          },
+        });
+      }
+      await tx.invoiceItem.createMany({
+        data: fresh.map((item) => ({
+          invoiceId: invoice!.id,
+          planItemId: item.id,
+          serviceId: item.serviceId,
+          toothNum: item.toothNum,
+          title: item.title,
+          price: item.price,
+        })),
+      });
+      const lines = await tx.invoiceItem.findMany({ where: { invoiceId: invoice.id } });
+      const total = lines.reduce((sum, line) => sum + Number(line.price), 0);
+      const paid = Number(invoice.paidAmount);
+      return tx.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          totalAmount: total,
+          status: paid <= 0 ? 'ISSUED' : paid >= total ? 'PAID' : 'PARTIAL',
+        },
+        include: { items: { orderBy: { title: 'asc' } } },
+      });
     });
   }
 
   createPayment(orgId: string, data: { patientId: string; amount: number; method: string; invoiceId?: string }) {
     return this.prisma.$transaction(async (tx) => {
+      if (data.method === 'DMS') {
+        const policy = await tx.insurancePolicy.findFirst({
+          where: {
+            organizationId: orgId,
+            patientId: data.patientId,
+            OR: [{ validTo: null }, { validTo: { gte: new Date() } }],
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (!policy) throw new BadRequestException('У пациента нет действующего полиса ДМС');
+        const spent = await tx.payment.aggregate({
+          where: { organizationId: orgId, patientId: data.patientId, method: 'DMS' },
+          _sum: { amount: true },
+        });
+        const left = Number(policy.limitAmount) - Number(spent._sum.amount ?? 0);
+        if (data.amount > left + 0.001) {
+          throw new BadRequestException(`По полису осталось ${left.toLocaleString('ru-RU')} ₽`);
+        }
+      }
       const payment = await tx.payment.create({
         data: {
           organizationId: orgId,
@@ -197,25 +269,84 @@ export class FinanceService {
     });
   }
 
+  async setDiscount(orgId: string, invoiceId: string, discountAmount: number) {
+    const invoice = await this.prisma.invoice.findFirst({ where: { id: invoiceId, organizationId: orgId } });
+    if (!invoice) throw new NotFoundException('Счёт не найден');
+    const total = Number(invoice.totalAmount);
+    const discount = Math.min(Math.max(0, discountAmount), total);
+    const paid = Number(invoice.paidAmount);
+    const due = total - discount;
+    return this.prisma.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        discountAmount: discount,
+        status: paid <= 0 ? (invoice.status === 'CANCELLED' ? 'CANCELLED' : 'ISSUED') : paid >= due ? 'PAID' : 'PARTIAL',
+      },
+    });
+  }
+
+  async refundPayment(orgId: string, paymentId: string, amount: number) {
+    return this.prisma.$transaction(async (tx) => {
+      const payment = await tx.payment.findFirst({ where: { id: paymentId, organizationId: orgId } });
+      if (!payment || Number(payment.amount) <= 0) throw new BadRequestException('Оплата для возврата не найдена');
+      const already = await tx.payment.aggregate({
+        where: { refundOfId: paymentId },
+        _sum: { amount: true },
+      });
+      const returned = Math.abs(Number(already._sum.amount ?? 0));
+      const left = Number(payment.amount) - returned;
+      if (amount <= 0 || amount > left + 0.001) {
+        throw new BadRequestException(`К возврату доступно ${left.toLocaleString('ru-RU')} ₽`);
+      }
+      const refund = await tx.payment.create({
+        data: {
+          organizationId: orgId,
+          patientId: payment.patientId,
+          invoiceId: payment.invoiceId,
+          amount: -amount,
+          method: payment.method,
+          refundOfId: payment.id,
+        },
+      });
+      if (payment.invoiceId) {
+        const inv = await tx.invoice.findUnique({ where: { id: payment.invoiceId } });
+        if (inv) {
+          const paid = Math.max(0, Number(inv.paidAmount) - amount);
+          const due = Number(inv.totalAmount) - Number(inv.discountAmount);
+          await tx.invoice.update({
+            where: { id: inv.id },
+            data: {
+              paidAmount: paid,
+              status: paid <= 0 ? 'ISSUED' : paid >= due ? 'PAID' : 'PARTIAL',
+            },
+          });
+        }
+      }
+      return refund;
+    });
+  }
+
   createPromo(orgId: string, data: { code: string; discountPct?: number }) {
     return this.prisma.promoCode.create({
       data: { organizationId: orgId, code: data.code, discountPct: data.discountPct },
     });
   }
 
-  getOpenShift(orgId: string, branchId: string) {
+  async getOpenShift(orgId: string, branchId?: string) {
+    const id = await resolveBranchId(this.prisma, orgId, branchId);
     return this.prisma.cashShift.findFirst({
-      where: { organizationId: orgId, branchId, status: 'OPEN' },
+      where: { organizationId: orgId, branchId: id, status: 'OPEN' },
     });
   }
 
   async openShift(orgId: string, data: { branchId: string; openingCash: number; userId?: string }) {
-    const existing = await this.getOpenShift(orgId, data.branchId);
+    const branchId = await resolveBranchId(this.prisma, orgId, data.branchId);
+    const existing = await this.getOpenShift(orgId, branchId);
     if (existing) throw new BadRequestException('Смена уже открыта');
     return this.prisma.cashShift.create({
       data: {
         organizationId: orgId,
-        branchId: data.branchId,
+        branchId,
         openingCash: data.openingCash,
         openedById: data.userId,
       },
@@ -372,12 +503,170 @@ export class FinanceService {
   }
 
   listPayrollRules(orgId: string) {
-    return this.prisma.payrollRule.findMany({ where: { organizationId: orgId } });
+    return this.prisma.payrollRule.findMany({
+      where: { organizationId: orgId },
+      include: { employee: { select: { firstName: true, lastName: true } } },
+    });
   }
 
-  createPayrollRule(orgId: string, data: { name: string; ruleType: string; paramsJson: object }) {
+  createPayrollRule(
+    orgId: string,
+    data: { name: string; ruleType?: string; paramsJson?: object; employeeId?: string; percent?: number },
+  ) {
+    const percent = data.percent ?? Number((data.paramsJson as { percent?: number } | undefined)?.percent ?? 0);
     return this.prisma.payrollRule.create({
-      data: { organizationId: orgId, name: data.name, ruleType: data.ruleType as never, paramsJson: data.paramsJson },
+      data: {
+        organizationId: orgId,
+        name: data.name,
+        employeeId: data.employeeId,
+        ruleType: (data.ruleType ?? 'PERCENT_REVENUE') as never,
+        paramsJson: { ...(data.paramsJson ?? {}), percent },
+      },
+      include: { employee: { select: { firstName: true, lastName: true } } },
+    });
+  }
+
+  async accruePayroll(orgId: string, periodFrom: string, periodTo: string) {
+    const from = localDay(periodFrom, false);
+    const to = localDay(periodTo, true);
+    const rules = await this.prisma.payrollRule.findMany({
+      where: { organizationId: orgId, isActive: true, ruleType: 'PERCENT_REVENUE', employeeId: { not: null } },
+    });
+    const entries: { id: string; amount: unknown; employee?: { firstName: string; lastName: string } }[] = [];
+    for (const rule of rules) {
+      const percent = Number((rule.paramsJson as { percent?: number }).percent ?? 0);
+      if (!rule.employeeId || percent <= 0) continue;
+      const payments = await this.prisma.payment.findMany({
+        where: {
+          organizationId: orgId,
+          paidAt: { gte: from, lte: to },
+          OR: [
+            { invoice: { appointment: { doctorId: rule.employeeId } } },
+            {
+              invoice: {
+                treatmentPlan: { doctorId: rule.employeeId },
+                OR: [{ appointmentId: null }, { appointment: { doctorId: null } }],
+              },
+            },
+          ],
+        },
+        include: { invoice: { select: { id: true, discountAmount: true } } },
+      });
+      const gross = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+      const seen = new Set<string>();
+      let discount = 0;
+      for (const payment of payments) {
+        if (!payment.invoice || seen.has(payment.invoice.id)) continue;
+        seen.add(payment.invoice.id);
+        const onInvoice = payments
+          .filter((row) => row.invoice?.id === payment.invoice?.id)
+          .reduce((sum, row) => sum + Number(row.amount), 0);
+        discount += Math.min(Number(payment.invoice.discountAmount), Math.max(0, onInvoice));
+      }
+      const lab = await this.prisma.labOrder.aggregate({
+        where: {
+          organizationId: orgId,
+          doctorId: rule.employeeId,
+          status: { not: 'REJECTED' },
+          createdAt: { gte: from, lte: to },
+        },
+        _sum: { costAmount: true },
+      });
+      const labCost = Number(lab._sum.costAmount ?? 0);
+      const base = Math.max(0, Math.round((gross - discount - labCost) * 100) / 100);
+      const amount = Math.round(base * percent) / 100;
+      const existing = await this.prisma.payrollEntry.findFirst({
+        where: { employeeId: rule.employeeId, periodFrom: from, periodTo: to },
+      });
+      const detailsJson = { payments: Math.round(gross * 100) / 100, discount, lab: labCost, base, percent, paymentCount: payments.length };
+      const entry = existing
+        ? await this.prisma.payrollEntry.update({
+            where: { id: existing.id },
+            data: { amount, detailsJson },
+            include: { employee: { select: { firstName: true, lastName: true } } },
+          })
+        : await this.prisma.payrollEntry.create({
+            data: { employeeId: rule.employeeId, periodFrom: from, periodTo: to, amount, detailsJson },
+            include: { employee: { select: { firstName: true, lastName: true } } },
+          });
+      entries.push(entry);
+    }
+    return { count: entries.length, entries };
+  }
+
+  listPolicies(orgId: string) {
+    return this.prisma.insurancePolicy.findMany({
+      where: { organizationId: orgId },
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true } },
+        insurer: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createPolicy(
+    orgId: string,
+    data: { patientId: string; insurerName: string; number: string; limitAmount: number; validTo?: string; letterNumber?: string },
+  ) {
+    const patient = await this.prisma.patient.findFirst({ where: { id: data.patientId, organizationId: orgId } });
+    if (!patient) throw new NotFoundException('Пациент не найден');
+    const insurer = await this.prisma.insurer.upsert({
+      where: { organizationId_name: { organizationId: orgId, name: data.insurerName.trim() } },
+      create: { organizationId: orgId, name: data.insurerName.trim() },
+      update: {},
+    });
+    return this.prisma.insurancePolicy.create({
+      data: {
+        organizationId: orgId,
+        patientId: data.patientId,
+        insurerId: insurer.id,
+        number: data.number.trim(),
+        letterNumber: data.letterNumber?.trim() || null,
+        limitAmount: data.limitAmount,
+        validTo: data.validTo ? new Date(data.validTo) : null,
+      },
+      include: {
+        patient: { select: { firstName: true, lastName: true } },
+        insurer: { select: { name: true } },
+      },
+    });
+  }
+
+  async dmsRegistry(orgId: string, from: string, to: string) {
+    const payments = await this.prisma.payment.findMany({
+      where: {
+        organizationId: orgId,
+        method: 'DMS',
+        amount: { gt: 0 },
+        paidAt: { gte: localDay(from, false), lte: localDay(to, true) },
+      },
+      include: { invoice: { select: { number: true } } },
+      orderBy: { paidAt: 'asc' },
+    });
+    const [policies, patients] = await Promise.all([
+      this.prisma.insurancePolicy.findMany({
+        where: { organizationId: orgId, patientId: { in: payments.map((payment) => payment.patientId) } },
+        include: { insurer: { select: { name: true } } },
+      }),
+      this.prisma.patient.findMany({
+        where: { id: { in: payments.map((payment) => payment.patientId) } },
+        select: { id: true, firstName: true, lastName: true },
+      }),
+    ]);
+    return payments.map((payment) => {
+      const policy = policies.find((row) => row.patientId === payment.patientId);
+      const patient = patients.find((row) => row.id === payment.patientId);
+      return {
+        id: payment.id,
+        paidAt: payment.paidAt,
+        amount: payment.amount,
+        patient: patient ?? { id: payment.patientId, firstName: '', lastName: 'Пациент' },
+        invoiceNumber: payment.invoice?.number ?? null,
+        insurer: policy?.insurer.name ?? null,
+        policyNumber: policy?.number ?? null,
+        letterNumber: policy?.letterNumber ?? null,
+      };
     });
   }
 

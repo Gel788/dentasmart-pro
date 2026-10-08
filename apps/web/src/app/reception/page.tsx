@@ -3,22 +3,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  Calendar,
-  Clock,
-  Phone,
-  Search,
-  UserPlus,
-  Users,
-  Armchair,
-  Sparkles,
-} from 'lucide-react';
+import { Calendar, Search, UserPlus } from 'lucide-react';
 import { Protected } from '@/components/protected';
 import { PatientAvatar } from '@/components/patient-avatar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { PageHeader } from '@/components/ui/page-header';
 import { VisitCompleteModal } from '@/components/visit-complete-modal';
 import { api } from '@/lib/api';
 import { useBranch } from '@/lib/branch-context';
@@ -44,14 +36,14 @@ type DeskData = {
   stats: { todayTotal: number; inClinic: number; inChair: number; waitingArrival: number };
 };
 
-const STATUS_VARIANT: Record<string, 'default' | 'accent' | 'success' | 'warning' | 'danger'> = {
-  SCHEDULED: 'default',
-  CONFIRMED: 'accent',
-  WAITING: 'warning',
-  IN_PROGRESS: 'accent',
-  COMPLETED: 'success',
-  CANCELLED: 'danger',
-  NO_SHOW: 'danger',
+const STATUS_RAIL: Record<string, string> = {
+  SCHEDULED: '#8aa8ae',
+  CONFIRMED: '#1d7ed8',
+  WAITING: '#c47b09',
+  IN_PROGRESS: '#0f9d8a',
+  COMPLETED: '#128a4e',
+  CANCELLED: '#d14343',
+  NO_SHOW: '#d14343',
 };
 
 const QUEUE_VARIANT: Record<string, 'default' | 'accent' | 'success' | 'warning'> = {
@@ -131,51 +123,51 @@ export default function ReceptionDeskPage() {
   };
 
   const queuePatientIds = new Set(desk?.queue.map((q) => q.patient.id) ?? []);
+  const nextId = desk?.appointments.find((appointment) => {
+    const upcoming = new Date(appointment.startsAt) >= new Date();
+    return upcoming && !['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(appointment.status);
+  })?.id;
 
   return (
     <Protected>
-      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[var(--accent)]">
-            <Sparkles size={14} />
-            Рабочий стол
-          </p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-[var(--text)]">Ресепшн сегодня</h1>
-          <p className="mt-1 capitalize text-[var(--muted)]">{clock}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/patients">
-            <Button variant="ghost">
-              <UserPlus size={16} />
-              Пациент
-            </Button>
-          </Link>
-          <Link href="/schedule">
-            <Button>
-              <Calendar size={16} />
-              Запись
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        badge="Рабочий стол"
+        title="Сегодня"
+        description={<span className="capitalize">{clock}</span>}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/patients">
+              <Button variant="ghost">
+                <UserPlus size={16} />
+                Пациент
+              </Button>
+            </Link>
+            <Link href="/queues">
+              <Button variant="ghost">Очереди дня</Button>
+            </Link>
+            <Link href="/schedule">
+              <Button>
+                <Calendar size={16} />
+                Запись
+              </Button>
+            </Link>
+          </div>
+        }
+      />
 
       {desk && (
-        <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            { label: 'Записей сегодня', value: desk.stats.todayTotal, icon: Calendar, tone: 'from-[var(--blue-soft)] to-white' },
-            { label: 'Ждут прихода', value: desk.stats.waitingArrival, icon: Clock, tone: 'from-[var(--warning-soft)] to-white' },
-            { label: 'В клинике', value: desk.stats.inClinic, icon: Users, tone: 'from-[var(--accent-soft)] to-white' },
-            { label: 'В кресле', value: desk.stats.inChair, icon: Armchair, tone: 'from-[var(--success-soft)] to-white' },
-          ].map((s) => (
-            <StatCard key={s.label} stat={s} />
-          ))}
+        <div className="ds-card mb-6 flex flex-wrap gap-x-6 gap-y-2 px-5 py-4 text-sm">
+          <DayStat label="Записей" value={desk.stats.todayTotal} />
+          <DayStat label="Ждут прихода" value={desk.stats.waitingArrival} tone="warning" />
+          <DayStat label="В клинике" value={desk.stats.inClinic} tone="accent" />
+          <DayStat label="В кресле" value={desk.stats.inChair} tone="success" />
         </div>
       )}
 
       <div className="relative mb-6">
         <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]" />
         <Input
-          className="h-14 rounded-2xl border-2 pl-12 text-base shadow-[var(--shadow-card)] focus:border-[var(--accent)]"
+          className="h-12 rounded-xl pl-12 text-sm"
           placeholder="Найти пациента по имени или телефону…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -185,21 +177,22 @@ export default function ReceptionDeskPage() {
 
       <div className="grid gap-6 xl:grid-cols-5">
         <Card className="xl:col-span-3 !p-0 overflow-hidden">
-          <div className="border-b border-[var(--border)] bg-[var(--surface-muted)]/80 px-5 py-4">
-            <h2 className="font-semibold text-[var(--text)]">Расписание на сегодня</h2>
-            <p className="text-sm text-[var(--muted)]">Нажмите «Принять», чтобы поставить в очередь</p>
+          <div className="border-b border-[var(--border)] bg-[var(--surface-muted)] px-5 py-4">
+            <h2 className="text-[15px] font-semibold tracking-tight text-[var(--text)]">Расписание на сегодня</h2>
+            <p className="mt-0.5 text-sm text-[var(--muted)]">Нажмите «Принять», чтобы поставить в очередь</p>
           </div>
-          <div className="max-h-[520px] overflow-y-auto p-3">
+          <div>
             {desk?.appointments.map((a) => (
               <AppointmentRow
                 key={a.id}
                 appointment={a}
                 inQueue={queuePatientIds.has(a.patient.id)}
+                isNext={a.id === nextId}
                 onCheckIn={() => checkIn(a.patient.id, a.id)}
               />
             ))}
             {!desk?.appointments.length && (
-              <p className="py-16 text-center text-[var(--muted)]">На сегодня записей нет</p>
+              <p className="py-16 text-center text-sm text-[var(--muted)]">На сегодня записей нет</p>
             )}
           </div>
         </Card>
@@ -211,7 +204,7 @@ export default function ReceptionDeskPage() {
           {desk && desk.waitlistCount > 0 && (
             <Link
               href="/schedule"
-              className="ds-card block p-4 text-center text-sm font-medium text-[var(--accent)] hover:bg-[var(--accent-soft)]"
+              className="ds-card-hover block p-4 text-center text-sm font-medium text-[var(--accent)]"
             >
               Лист ожидания: {desk.waitlistCount} пациент(ов) →
             </Link>
@@ -232,18 +225,13 @@ export default function ReceptionDeskPage() {
   );
 }
 
-function StatCard({ stat: s }: { stat: { label: string; value: number; icon: typeof Calendar; tone: string } }) {
-  const Icon = s.icon;
+function DayStat({ label: name, value, tone }: { label: string; value: number; tone?: 'warning' | 'accent' | 'success' }) {
+  const color = tone === 'warning' ? 'var(--warning)' : tone === 'success' ? 'var(--success)' : tone === 'accent' ? 'var(--accent)' : 'var(--text)';
   return (
-    <div className={`ds-card flex items-center gap-4 bg-gradient-to-br ${s.tone} p-5`}>
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface)] shadow-sm">
-        <Icon size={22} className="text-[var(--accent)]" />
-      </div>
-      <div>
-        <p className="text-3xl font-bold text-[var(--text)]">{s.value}</p>
-        <p className="text-sm text-[var(--muted)]">{s.label}</p>
-      </div>
-    </div>
+    <p className="text-[var(--muted)]">
+      {name}{' '}
+      <span className="ds-display text-xl" style={{ color }}>{value}</span>
+    </p>
   );
 }
 
@@ -255,12 +243,12 @@ function SearchDropdown({
   onPick: (id: string) => void;
 }) {
   return (
-    <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-lg">
+    <div className="ds-card absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden">
       {hits.map((p) => (
         <button
           key={p.id}
           type="button"
-          className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-[var(--accent-soft)]"
+          className="flex w-full items-center gap-3 border-b border-[var(--border)] px-4 py-3 text-left last:border-b-0 hover:bg-[var(--surface-muted)]"
           onClick={() => onPick(p.id)}
         >
           <PatientAvatar firstName={p.firstName} lastName={p.lastName} size="sm" />
@@ -277,52 +265,50 @@ function SearchDropdown({
 function AppointmentRow({
   appointment: a,
   inQueue,
+  isNext,
   onCheckIn,
 }: {
   appointment: DeskData['appointments'][0];
   inQueue: boolean;
+  isNext: boolean;
   onCheckIn: () => void;
 }) {
-  const isPast = new Date(a.startsAt) < new Date() && !inQueue && a.status !== 'COMPLETED';
+  const late = new Date(a.startsAt) < new Date() && !inQueue && !['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(a.status);
 
   return (
-    <div
-      className={`mb-2 flex flex-wrap items-center gap-3 rounded-2xl border p-4 transition ${
-        inQueue
-          ? 'border-[var(--accent)]/30 bg-[var(--accent-soft)]/40'
-          : isPast
-            ? 'border-[var(--warning)]/40 bg-[var(--warning-soft)]/30'
-            : 'border-[var(--border)] bg-[var(--surface)] hover:shadow-md'
-      }`}
-    >
-      <div className="flex min-w-[52px] flex-col items-center rounded-xl bg-[var(--surface-muted)] px-2 py-1.5 text-center">
-        <span className="text-lg font-bold text-[var(--text)]">
+    <div className="ds-table-row flex flex-wrap items-center gap-3 px-5 py-3 last:border-b-0">
+      <div className="w-14 shrink-0 text-center">
+        <p className="text-sm font-semibold text-[var(--text)]">
           {new Date(a.startsAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-        </span>
+        </p>
+        {isNext && <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">Далее</p>}
       </div>
+      <span className="h-10 w-1.5 shrink-0 rounded-full" style={{ background: late ? '#c47b09' : STATUS_RAIL[a.status] ?? '#8aa8ae' }} aria-hidden />
       <PatientAvatar firstName={a.patient.firstName} lastName={a.patient.lastName} size="sm" />
       <div className="min-w-0 flex-1">
-        <Link href={`/patients/${a.patient.id}`} className="font-semibold hover:text-[var(--accent)]">
-          {a.patient.lastName} {a.patient.firstName}
-        </Link>
-        <p className="text-sm text-[var(--muted)]">
+        {a.patient.id ? (
+          <Link href={`/patients/${a.patient.id}`} className="font-semibold hover:text-[var(--accent)]">
+            {a.patient.lastName} {a.patient.firstName}
+          </Link>
+        ) : (
+          <p className="font-semibold">{a.patient.lastName} {a.patient.firstName}</p>
+        )}
+        <p className="truncate text-sm text-[var(--muted)]">
           {a.service?.name ?? 'Приём'}
           {a.doctor ? ` · ${a.doctor.lastName}` : ''}
+          {a.patient.phone ? ` · ${a.patient.phone}` : ''}
         </p>
-        {a.patient.phone && (
-          <p className="mt-0.5 flex items-center gap-1 text-xs text-[var(--muted)]">
-            <Phone size={12} />
-            {a.patient.phone}
-          </p>
-        )}
       </div>
-      <Badge variant={STATUS_VARIANT[a.status] ?? 'default'}>{label(APPOINTMENT_STATUS, a.status)}</Badge>
+      <span className="text-xs font-medium" style={{ color: STATUS_RAIL[a.status] ?? 'var(--muted)' }}>
+        {late ? 'Опаздывает' : label(APPOINTMENT_STATUS, a.status)}
+      </span>
+      <Link href={`/visit/${a.id}`}>
+        <Button size="sm" variant="ghost">Приём</Button>
+      </Link>
       {!inQueue && a.status !== 'COMPLETED' && a.status !== 'CANCELLED' ? (
-        <Button size="sm" onClick={onCheckIn}>
-          Принять
-        </Button>
+        <Button size="sm" onClick={onCheckIn}>Принять</Button>
       ) : inQueue ? (
-        <span className="text-xs font-medium text-[var(--accent)]">В очереди</span>
+        <span className="text-xs font-semibold text-[var(--accent)]">В очереди</span>
       ) : null}
     </div>
   );
@@ -337,11 +323,11 @@ function QueuePanel({
 }) {
   return (
     <>
-      <div className="border-b border-[var(--border)] bg-gradient-to-r from-[var(--accent-soft)] to-[var(--surface)] px-5 py-4">
-        <h2 className="font-semibold text-[var(--text)]">Очередь сейчас</h2>
-        <p className="text-sm text-[var(--muted)]">{queue.length} в зале ожидания</p>
+      <div className="border-b border-[var(--border)] bg-[var(--surface-muted)] px-5 py-4">
+        <h2 className="text-[15px] font-semibold tracking-tight text-[var(--text)]">Очередь сейчас</h2>
+        <p className="mt-0.5 text-sm text-[var(--muted)]">{queue.length} в зале ожидания</p>
       </div>
-      <div className="space-y-2 p-3">
+      <div className="space-y-2 p-4">
         {queue.map((q) => (
           <QueueRow key={q.id} item={q} onStatus={onStatus} />
         ))}
@@ -359,30 +345,26 @@ function QueueRow({
   onStatus: (id: string, status: string) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+    <div className="ds-card p-4">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-3">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-sm font-bold text-white">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent-soft)] text-sm font-semibold text-[var(--accent-hover)]">
             {q.position}
           </span>
-          <Link href={`/patients/${q.patient.id}`} className="font-semibold hover:text-[var(--accent)]">
-            {q.patient.lastName} {q.patient.firstName}
-          </Link>
+          {q.patient.id ? (
+            <Link href={`/patients/${q.patient.id}`} className="font-semibold hover:text-[var(--accent)]">
+              {q.patient.lastName} {q.patient.firstName}
+            </Link>
+          ) : (
+            <p className="font-semibold">{q.patient.lastName} {q.patient.firstName}</p>
+          )}
         </div>
         <Badge variant={QUEUE_VARIANT[q.status] ?? 'default'}>{label(QUEUE_STATUS, q.status)}</Badge>
       </div>
       <div className="mt-3 flex flex-wrap gap-1">
-        {(['CALLED', 'IN_CHAIR', 'DONE'] as const).map((st) => (
-          <Button
-            key={st}
-            size="sm"
-            variant="ghost"
-            className="!px-2 !py-1 text-xs"
-            onClick={() => onStatus(q.id, st)}
-          >
-            {label(QUEUE_STATUS, st)}
-          </Button>
-        ))}
+        <Button size="sm" variant={q.status === 'WAITING' ? 'primary' : 'ghost'} onClick={() => onStatus(q.id, 'CALLED')}>Вызвать</Button>
+        <Button size="sm" variant={q.status === 'CALLED' ? 'primary' : 'ghost'} onClick={() => onStatus(q.id, 'IN_CHAIR')}>В кресло</Button>
+        <Button size="sm" variant={q.status === 'IN_CHAIR' ? 'primary' : 'ghost'} onClick={() => onStatus(q.id, 'DONE')}>Завершить</Button>
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import clsx from 'clsx';
 import { Calendar } from 'lucide-react';
 import { Protected } from '@/components/protected';
 import { ScheduleCalendar, type CalAppointment } from '@/components/schedule-calendar';
+import { ChairDay } from '@/components/chair-day';
 import { ScheduleKanban, type KanbanMode } from '@/components/schedule-kanban';
 import { VisitCompleteModal } from '@/components/visit-complete-modal';
 import { PatientAvatar } from '@/components/patient-avatar';
@@ -33,7 +34,7 @@ interface WaitEntry {
   service?: { name: string } | null;
 }
 
-type View = 'calendar' | 'kanban' | 'list' | 'waitlist';
+type View = 'chairs' | 'calendar' | 'kanban' | 'list' | 'waitlist';
 
 function sameDay(iso: string, day: Date) {
   const s = new Date(iso);
@@ -105,7 +106,7 @@ function applyServiceDuration(startsLocal: string, durationMin: number) {
 function SchedulePageContent() {
   const searchParams = useSearchParams();
   const { branchId, branch } = useBranch();
-  const [view, setView] = useState<View>('kanban');
+  const [view, setView] = useState<View>('chairs');
   const [kanbanMode, setKanbanMode] = useState<KanbanMode>('status');
   const [kanbanDay, setKanbanDay] = useState(() => {
     const d = new Date();
@@ -134,6 +135,8 @@ function SchedulePageContent() {
   const [waitPatientId, setWaitPatientId] = useState('');
   const [waitServiceId, setWaitServiceId] = useState('');
   const [completeApptId, setCompleteApptId] = useState<string | null>(null);
+  const [pendingToMake, setPendingToMake] = useState<string | null>(null);
+  const [boardRev, setBoardRev] = useState(0);
 
   const rangeEnd = new Date(weekStart);
   rangeEnd.setDate(rangeEnd.getDate() + 7);
@@ -232,6 +235,7 @@ function SchedulePageContent() {
     setApptModal(false);
     setEditId(null);
     setSlots([]);
+    setPendingToMake(null);
   };
 
   const submitAppt = async (e: FormEvent) => {
@@ -251,7 +255,11 @@ function SchedulePageContent() {
     } else {
       await api('/appointments', { method: 'POST', body: JSON.stringify(payload) });
     }
+    if (!editId && pendingToMake && !pendingToMake.startsWith('hygiene:')) {
+      await api(`/appointments/to-make/${pendingToMake}/schedule`, { method: 'POST' });
+    }
     closeApptModal();
+    setBoardRev((value) => value + 1);
     load();
   };
 
@@ -300,8 +308,9 @@ function SchedulePageContent() {
             <Button variant="ghost" onClick={() => shiftWeek(1)}>→</Button>
             <TabBar
               tabs={[
+                { id: 'chairs' as View, label: 'Кресла' },
                 { id: 'kanban' as View, label: 'Канбан' },
-                { id: 'calendar' as View, label: 'Сетка' },
+                { id: 'calendar' as View, label: 'Неделя' },
                 { id: 'list' as View, label: 'Список' },
                 { id: 'waitlist' as View, label: `Ожидание (${waitlist.length})` },
               ]}
@@ -326,10 +335,30 @@ function SchedulePageContent() {
               {branch?.cabinets.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </Select>
             <Button variant="ghost" onClick={() => setWaitModal(true)}>+ В ожидание</Button>
-            <Button onClick={() => openCreate()}>+ Запись</Button>
+            <Button onClick={() => { setPendingToMake(null); openCreate(); }}>+ Запись</Button>
           </div>
         }
       />
+
+      <div key={view} className="ds-route">
+      {view === 'chairs' && branchId && (
+        <ChairDay
+          branchId={branchId}
+          day={kanbanDay}
+          onDayChange={setKanbanDay}
+          patients={patients}
+          services={services}
+          revision={boardRev}
+          onBook={(prefill) => {
+            setPendingToMake(prefill.toMakeId ?? null);
+            openCreate(prefill);
+          }}
+          onEdit={(visit) => {
+            setPendingToMake(null);
+            openEdit(visit);
+          }}
+        />
+      )}
 
       {view === 'kanban' && (
         <div className="mt-4 space-y-4">
@@ -419,7 +448,7 @@ function SchedulePageContent() {
           ) : (
             <div className="space-y-3">
               {items.map((a) => (
-                <Card key={a.id} className="!p-4" padding>
+                <Card key={a.id} className="!p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <PatientAvatar firstName={a.patient.firstName} lastName={a.patient.lastName} size="sm" />
@@ -436,16 +465,16 @@ function SchedulePageContent() {
                       <Button size="sm" variant="ghost" onClick={() => openEdit(a)}>Изменить</Button>
                     </div>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1">
+                  <div className="mt-3 flex flex-wrap gap-1 rounded-xl bg-[var(--surface-muted)] p-1">
                     {STATUS_KEYS.map((st) => (
                       <button
                         key={st}
                         type="button"
                         onClick={() => setStatus(a.id, st)}
                         className={clsx(
-                          'rounded-lg px-2 py-1 text-xs font-medium transition',
+                          'rounded-lg px-2.5 py-1 text-xs font-medium transition-colors duration-150',
                           a.status === st
-                            ? 'bg-[var(--surface)] text-[var(--text)] shadow-sm'
+                            ? 'bg-[var(--surface)] text-[var(--text)]'
                             : 'text-[var(--muted)] hover:text-[var(--text-secondary)]',
                         )}
                       >
@@ -461,7 +490,7 @@ function SchedulePageContent() {
       )}
 
       {view === 'waitlist' && (
-        <Card className="mt-6 p-2">
+        <Card className="mt-6 !p-3" padding={false}>
           {!waitlist.length ? (
             <EmptyState icon={Calendar} title="Лист ожидания пуст" description="Добавьте пациента, когда нет свободных слотов" />
           ) : (
@@ -489,6 +518,7 @@ function SchedulePageContent() {
           )}
         </Card>
       )}
+      </div>
 
       <Modal
         open={apptModal}
