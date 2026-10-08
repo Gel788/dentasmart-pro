@@ -27,12 +27,21 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const GUEST: AuthState = {
+  id: 'guest',
+  email: 'test@sedrakoich.local',
+  organization: { id: 'demo', name: 'Sedrakoich dent', slug: 'demo' },
+  employee: { id: 'guest', firstName: 'Тест', lastName: 'клиники' },
+  permissions: [],
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthState | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadMe = useCallback(async () => {
     if (!getToken()) {
+      setUser(GUEST);
       setLoading(false);
       return;
     }
@@ -41,7 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(me);
     } catch {
       clearToken();
-      setUser(null);
+      setUser(GUEST);
     } finally {
       setLoading(false);
     }
@@ -64,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     clearToken();
     localStorage.removeItem('dsp_refresh');
-    setUser(null);
+    setUser(GUEST);
   };
 
   return (

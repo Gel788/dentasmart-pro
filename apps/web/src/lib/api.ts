@@ -46,9 +46,6 @@ function refreshAccess(): Promise<boolean> {
 function endSession() {
   clearToken();
   localStorage.removeItem('dsp_refresh');
-  if (!window.location.pathname.startsWith('/login')) {
-    window.location.assign('/login');
-  }
 }
 
 export async function api<T>(path: string, options: RequestInit = {}, retried = false): Promise<T> {

@@ -2,8 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { LogOut, Menu, X } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { Menu, X } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
@@ -11,10 +11,9 @@ import { Select } from '@/components/ui/input';
 import { findNavItem, isNavActive, NAV_GROUPS, NAVIGATION } from '@/config/navigation';
 
 export function Shell({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { branches, branchId, setBranchId, loading: branchLoading } = useBranch();
   const pathname = usePathname();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
   const markerRef = useRef<HTMLSpanElement>(null);
@@ -39,11 +38,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
       markerSeen.current = true;
     }
   }, [pathname]);
-
-  const handleLogout = () => {
-    logout();
-    router.push('/login');
-  };
 
   const current = findNavItem(pathname);
   const person = user?.employee
@@ -119,14 +113,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
         <div className="border-t border-white/10 px-5 py-4">
           <p className="truncate text-sm text-white">{person}</p>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="mt-2 inline-flex items-center gap-2 text-xs text-white/55 transition-colors hover:text-white"
-          >
-            <LogOut size={14} />
-            Выйти
-          </button>
         </div>
       </aside>
 
