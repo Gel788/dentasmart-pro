@@ -27,8 +27,8 @@ function Body() {
     <div className="sd-stack">
       <div className="sd-h">
         <div>
-          <h1>Возврат планов</h1>
-          <p>Предложены и не приняты больше 30 дней, либо отмечены как брошенные.</p>
+          <h1>Возврат</h1>
+          <p>{data.rows.length ? `${data.rows.length} планов ждут разговора` : 'Брошенных планов нет'}</p>
         </div>
       </div>
       <div className="sd-funnel">
@@ -41,13 +41,13 @@ function Body() {
         <table className="sd-table">
           <thead><tr><th>Пациент</th><th>План</th><th>Дней</th><th>Сумма</th><th></th></tr></thead>
           <tbody>
-            {data.rows.map((row) => (
+            {data.rows.map((row, index) => (
               <tr key={row.familyKey}>
                 <td><Link href={`/patients/${row.patientId}`}>{row.patient}</Link><div className="sd-muted">{row.phone}</div></td>
                 <td>{row.title}</td>
                 <td>{row.days}</td>
                 <td>{formatMoney(row.total)}</td>
-                <td><Link href={`/present/${row.familyKey}`}>Открыть</Link></td>
+                <td><Link className={index === 0 ? 'sd-btn' : 'sd-btn-ghost'} href={`/present/${row.familyKey}`}>Открыть</Link></td>
               </tr>
             ))}
           </tbody>

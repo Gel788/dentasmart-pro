@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
+import { downloadJson, downloadReport } from '@/lib/download';
 import { formatMoney } from '@/lib/format';
-import { readTable } from '@/lib/sheet';
 
 type Norm = { itemId: string; name?: string; quantity: number };
 type ServiceRow = {
@@ -43,6 +44,7 @@ const SECTIONS = [
   ['staff', 'Сотрудники'],
   ['roles', 'Права'],
   ['offers', 'Акции'],
+  ['exchange', 'Обмен'],
   ['history', 'История'],
 ] as const;
 
@@ -72,13 +74,13 @@ export function ClinicSettings() {
   const q = query.trim().toLowerCase();
   return (
     <div className="cfg">
-      <header className="wow-head">
+      <div className="sd-h">
         <div>
-          <p className="wow-kicker">Владелец настраивает клинику сам</p>
           <h1>Настройки</h1>
+          <p>Клиника, люди, склад и обмен.</p>
         </div>
-        <input className="sd-input" placeholder="Поиск" value={query} onChange={(event) => setQuery(event.target.value)} />
-      </header>
+        <input className="sd-input" placeholder="Поиск" value={query} onChange={(event) => setQuery(event.target.value)} style={{ maxWidth: 240 }} />
+      </div>
       {notice && <p className="wow-note">{notice}</p>}
       {error && <p className="sd-chip danger">{error}</p>}
       <div className="cfg-layout">
@@ -95,6 +97,7 @@ export function ClinicSettings() {
           {section === 'staff' && <Staff data={data} query={q} flash={flash} />}
           {section === 'roles' && <Roles data={data} flash={flash} />}
           {section === 'offers' && <Offers data={data} flash={flash} />}
+          {section === 'exchange' && <Exchange />}
           {section === 'history' && <History rows={data.history} />}
         </div>
       </div>
@@ -102,68 +105,13 @@ export function ClinicSettings() {
   );
 }
 
-function Price({ data, query, flash }: { data: Bundle; query: string; flash: (work: () => Promise<unknown>) => Promise<void> }) {
-  const [draft, setDraft] = useState({ name: '', code: '', price: 5500, durationMin: 60, parentId: '', requiresTooth: true, surfaceMode: 'SURFACES', doctorPercent: 30, itemId: '', quantity: 1 });
-  const [percent, setPercent] = useState(10);
-  const [picked, setPicked] = useState<Record<string, boolean>>({});
-  const rows = data.services.filter((row) => !query || `${row.name} ${row.code ?? ''}`.toLowerCase().includes(query));
-  const categories = data.services.filter((row) => !row.parentId);
-  const save = (row: ServiceRow, patch: Partial<ServiceRow> & { norms?: Norm[] }) => flash(() => api('/config/services', {
-    method: 'POST',
-    body: JSON.stringify({ id: row.id, name: patch.name ?? row.name, code: patch.code ?? row.code, price: patch.price ?? row.price, durationMin: patch.durationMin ?? row.durationMin, parentId: patch.parentId ?? row.parentId, requiresTooth: patch.requiresTooth ?? row.requiresTooth, surfaceMode: patch.surfaceMode ?? row.surfaceMode, doctorPercent: patch.doctorPercent ?? row.doctorPercent, norms: patch.norms ?? row.norms }),
-  }));
+function Price({ data }: { data: Bundle; query: string; flash: (work: () => Promise<unknown>) => Promise<void> }) {
+  const count = data.services.filter((row) => row.code && row.isActive).length;
   return (
-    <section className="sd-stack">
-      <div className="cfg-bar">
-        <input className="sd-input" type="number" value={percent} onChange={(event) => setPercent(Number(event.target.value))} />
-        <button className="sd-btn" type="button" onClick={() => void flash(() => api('/config/services/bulk', { method: 'POST', body: JSON.stringify({ percent, ids: Object.entries(picked).filter(([, on]) => on).map(([id]) => id) }) }))}>Изменить цены на {percent}%</button>
-        <button className="sd-btn-ghost" type="button" onClick={() => void api<{ csv: string; filename: string }>('/config/services/export').then((file) => download(file.filename, file.csv))}>Excel / CSV</button>
-        <label className="sd-btn-ghost">Импорт<input type="file" accept=".csv,.txt,.xlsx" hidden onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (!file) return;
-          void readTable(file).then((sheet) => {
-            const rows = sheet.rows.map((cells) => {
-              const map = Object.fromEntries(sheet.headers.map((header, index) => [header.toLowerCase(), cells[index] ?? '']));
-              return {
-                category: map['категория'] || map['category'],
-                code: map['код'] || map['code'],
-                name: map['название'] || map['name'],
-                price: Number(map['цена'] || map['price'] || 0),
-                durationMin: Number(map['минуты'] || map['duration'] || 30),
-                requiresTooth: (map['зуб'] || '').startsWith('д'),
-                surfaceMode: map['поверхности'] || 'NONE',
-                doctorPercent: Number(map['% врача'] || 0),
-              };
-            });
-            return flash(() => api('/config/services/import', { method: 'POST', body: JSON.stringify({ rows }) }));
-          });
-        }} /></label>
-      </div>
-      <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/services', { method: 'POST', body: JSON.stringify({ ...draft, parentId: draft.parentId || null, norms: draft.itemId ? [{ itemId: draft.itemId, quantity: draft.quantity }] : [] }) })); }}>
-        <label>Название<input className="sd-input" placeholder="Новая услуга" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} required /></label>
-        <label>Код<input className="sd-input" placeholder="Код" value={draft.code} onChange={(event) => setDraft({ ...draft, code: event.target.value })} /></label>
-        <label>Цена<input className="sd-input" type="number" value={draft.price} onChange={(event) => setDraft({ ...draft, price: Number(event.target.value) })} /></label>
-        <label>Минуты<input className="sd-input" type="number" value={draft.durationMin} onChange={(event) => setDraft({ ...draft, durationMin: Number(event.target.value) })} /></label>
-        <label>Категория<select value={draft.parentId} onChange={(event) => setDraft({ ...draft, parentId: event.target.value })}>
-          <option value="">Категория</option>
-          {categories.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
-        </select></label>
-        <label>Набор расходников<select value={draft.itemId} onChange={(event) => setDraft({ ...draft, itemId: event.target.value })}>
-          <option value="">Расходник</option>
-          {data.stock.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select></label>
-        <button className="sd-btn" type="submit">Добавить</button>
-      </form>
-      {rows.map((row) => (
-        <article key={row.id} className={`cfg-row ${row.isActive ? '' : 'off'}`}>
-          <input type="checkbox" checked={!!picked[row.id]} onChange={(event) => setPicked({ ...picked, [row.id]: event.target.checked })} />
-          <input className="sd-input" defaultValue={row.name} onBlur={(event) => { if (event.target.value !== row.name) void save(row, { name: event.target.value }); }} />
-          <input className="sd-input" defaultValue={row.code ?? ''} onBlur={(event) => void save(row, { code: event.target.value })} />
-          <input className="sd-input" type="number" defaultValue={row.price} onBlur={(event) => void save(row, { price: Number(event.target.value) })} />
-          <span className="sd-muted">{row.durationMin} мин · {row.doctorPercent}% · {row.norms.map((norm) => `${norm.name} ×${norm.quantity}`).join(', ') || 'без набора'}</span>
-          <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api(`/config/services/${row.id}/archive`, { method: 'POST', body: JSON.stringify({ active: !row.isActive }) }))}>{row.isActive ? 'В архив' : 'Вернуть'}</button>
-        </article>
-      ))}
+    <section className="sd-card sd-stack">
+      <h2>Прайс на своём экране</h2>
+      <p className="sd-muted">{count} услуг. Название, код, цена, длительность и набор расходников правятся там.</p>
+      <Link className="sd-btn" href="/price" style={{ width: 'fit-content' }}>Открыть прайс</Link>
     </section>
   );
 }
@@ -222,17 +170,32 @@ function Brand({ data, flash }: { data: Bundle; flash: (work: () => Promise<unkn
   const [chair, setChair] = useState('');
   return (
     <section className="sd-stack">
-      {(['name', 'legalName', 'phone', 'email', 'inn', 'ogrn', 'address', 'logoUrl', 'brandColor', 'workHours', 'bankName', 'bankAccount', 'bik'] as const).map((key) => (
-        <label key={key} className="sd-field">{key}
+      {([
+        ['name', 'Название'],
+        ['legalName', 'Юрлицо'],
+        ['phone', 'Телефон'],
+        ['email', 'Почта'],
+        ['inn', 'ИНН'],
+        ['ogrn', 'ОГРН'],
+        ['address', 'Адрес'],
+        ['logoUrl', 'Логотип'],
+        ['brandColor', 'Цвет'],
+        ['workHours', 'Часы'],
+        ['bankName', 'Банк'],
+        ['bankAccount', 'Счёт'],
+        ['bik', 'БИК'],
+      ] as const).map(([key, label]) => (
+        <label key={key} className="sd-field">{label}
           <input className="sd-input" value={form[key] ?? ''} onChange={(event) => setForm({ ...form, [key]: event.target.value })} />
         </label>
       ))}
       <button className="sd-btn" type="button" onClick={() => void flash(() => api('/config/brand', { method: 'POST', body: JSON.stringify(form) }))}>Сохранить реквизиты</button>
+      <TwoFactor />
       <h2>Кресла</h2>
       {data.cabinets.map((cabinet) => <article key={cabinet.id} className="cfg-row"><b>{cabinet.name}</b><span>{cabinet.isActive ? 'работает' : 'архив'}</span></article>)}
       <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/cabinets', { method: 'POST', body: JSON.stringify({ name: chair }) })); }}>
         <input className="sd-input" placeholder="Новое кресло" value={chair} onChange={(event) => setChair(event.target.value)} />
-        <button className="sd-btn" type="submit">Добавить</button>
+        <button className="sd-btn-ghost" type="submit">Добавить</button>
       </form>
     </section>
   );
@@ -297,6 +260,85 @@ function Offers({ data, flash }: { data: Bundle; flash: (work: () => Promise<unk
   );
 }
 
+const REPORTS = [
+  ['leads', 'Лиды'],
+  ['sources', 'Источники выручки'],
+  ['unfilled', 'Незаполненные карты'],
+  ['warranty', 'Гарантия'],
+  ['lab', 'Лаборатория'],
+  ['insurance', 'ДМС'],
+  ['revenue', 'Выручка'],
+] as const;
+
+function Exchange() {
+  const [type, setType] = useState<(typeof REPORTS)[number][0]>('leads');
+  const [token, setToken] = useState('');
+  const [note, setNote] = useState('');
+  const [error, setError] = useState('');
+  useEffect(() => {
+    api<{ keys: { token: string }[] }>('/market/exchange')
+      .then((data) => setToken(data.keys[0]?.token ?? ''))
+      .catch((err: Error) => setError(err.message));
+  }, []);
+
+  const run = async (work: () => Promise<unknown>, done: string) => {
+    setError('');
+    setNote('');
+    try {
+      await work();
+      setNote(done);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не вышло');
+    }
+  };
+
+  return (
+    <section className="sd-stack">
+      <form className="sd-card sd-inline" onSubmit={(event) => { event.preventDefault(); void run(() => downloadReport(type), 'Файл скачан'); }}>
+        <select className="sd-input" aria-label="Отчёт" value={type} onChange={(event) => setType(event.target.value as (typeof REPORTS)[number][0])}>
+          {REPORTS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+        </select>
+        <button className="sd-btn" type="submit">Скачать Excel</button>
+      </form>
+      {note && <p className="wow-note">{note}</p>}
+      {error && <p className="sd-chip danger">{error}</p>}
+      <details className="sd-card">
+        <summary>Ключ, агрегаторы и 1С</summary>
+        <div className="sd-stack" style={{ marginTop: 10 }}>
+          <p className="sd-muted">{token || 'Ключа ещё нет'}</p>
+          <div className="sd-inline">
+            <button className="sd-btn-ghost" type="button" onClick={() => void run(async () => {
+              const key = await api<{ token: string }>('/market/keys', { method: 'POST', body: JSON.stringify({ name: 'Обмен' }) });
+              setToken(key.token);
+            }, 'Ключ создан')}>Новый ключ</button>
+            <button className="sd-btn-ghost" type="button" onClick={() => void run(() => api('/market/aggregators/prodoctorov', { method: 'POST', body: JSON.stringify({}) }), 'Заявка ПроДокторов записана в лиды')}>ПроДокторов</button>
+            <button className="sd-btn-ghost" type="button" onClick={() => void run(() => api('/market/aggregators/sber', { method: 'POST', body: JSON.stringify({}) }), 'Заявка СберЗдоровья записана в лиды')}>СберЗдоровье</button>
+            <button className="sd-btn-ghost" type="button" onClick={() => void run(() => downloadJson('/market/export-1c', '1c.json'), 'Файл 1С скачан. Во внешнюю 1С ничего не ушло.')}>1С</button>
+          </div>
+        </div>
+      </details>
+    </section>
+  );
+}
+
+function TwoFactor() {
+  const [secret, setSecret] = useState('');
+  const [code, setCode] = useState('');
+  const [note, setNote] = useState('');
+  return (
+    <details className="sd-card">
+      <summary>Вход с кодом</summary>
+      <div className="sd-inline" style={{ marginTop: 10 }}>
+        <button className="sd-btn-ghost" type="button" onClick={() => void api<{ secret: string }>('/auth/2fa/setup', { method: 'POST' }).then((row) => setSecret(row.secret))}>Секрет</button>
+        {secret && <span className="sd-muted">{secret}</span>}
+        <input className="sd-input" placeholder="Код" value={code} onChange={(event) => setCode(event.target.value)} />
+        <button className="sd-btn-ghost" type="button" onClick={() => void api('/auth/2fa/enable', { method: 'POST', body: JSON.stringify({ code }) }).then(() => setNote('Включено')).catch((err: Error) => setNote(err.message))}>Включить</button>
+      </div>
+      {note && <p className="sd-muted">{note}</p>}
+    </details>
+  );
+}
+
 function History({ rows }: { rows: Bundle['history'] }) {
   const text = useMemo(() => rows, [rows]);
   return (
@@ -313,12 +355,3 @@ function History({ rows }: { rows: Bundle['history'] }) {
   );
 }
 
-function download(filename: string, csv: string) {
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}

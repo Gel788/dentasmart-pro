@@ -82,10 +82,12 @@ button { cursor: pointer; }
 
 .sd-app {
   display: grid;
-  grid-template-columns: var(--nav-w) minmax(0, 1fr) var(--panel-w);
+  grid-template-columns: var(--nav-w) minmax(0, 1fr) 0px;
   height: 100vh;
   overflow: hidden;
+  transition: grid-template-columns 220ms cubic-bezier(.2,.8,.2,1);
 }
+.sd-app.with-panel { grid-template-columns: var(--nav-w) minmax(0, 1fr) var(--panel-w); }
 .sd-nav, .sd-panel, .sd-main { min-height: 0; }
 .sd-nav {
   display: flex;
@@ -131,6 +133,17 @@ html.dark .sd-mark { color: #042f2e; }
   color: var(--accent-ink);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
+.sd-more {
+  height: 32px;
+  margin-top: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  padding: 0 10px;
+  border-radius: 10px;
+}
+.sd-more:hover { color: var(--text); background: color-mix(in srgb, var(--surface-solid) 70%, transparent); }
 .sd-nav-foot { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding-top: 12px; }
 .sd-user { padding: 8px 10px; color: var(--muted); }
 .sd-user b { display: block; color: var(--text); font-weight: 600; }
@@ -172,17 +185,33 @@ html.dark .sd-mark { color: #042f2e; }
   color: var(--muted);
   background: var(--surface-2);
 }
-.sd-workspace { overflow: auto; padding: 22px 24px 40px; animation: sd-rise 280ms cubic-bezier(.2,.8,.2,1); }
-@keyframes sd-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.sd-workspace { overflow: auto; padding: 22px 24px 40px; animation: sd-rise 320ms cubic-bezier(.2,.8,.2,1); }
+@keyframes sd-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.lead-line > div { flex: 1; min-width: 180px; }
+.price-line, .lead-line { transition: background 180ms ease; }
+.price-line:hover, .lead-line:hover { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  .sd-workspace, .sd-link, .sd-btn, .sd-btn-ghost, .sd-card, .price-line, .lead-line { animation: none; transition: none; }
+}
 
 .sd-panel {
-  border-left: 1px solid var(--border);
+  border-left: 1px solid transparent;
   background: var(--surface);
   backdrop-filter: blur(18px);
+  overflow: hidden;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease, padding 200ms ease;
+}
+.sd-app.with-panel .sd-panel {
+  border-left-color: var(--border);
   overflow: auto;
   padding: 16px;
+  opacity: 1;
+  pointer-events: auto;
 }
-.sd-panel-toggle { display: none; }
+.sd-panel-toggle { display: inline-flex; }
 
 .sd-h { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .sd-h h1 { margin: 0; font-size: 28px; font-weight: 640; letter-spacing: -0.045em; }
@@ -229,7 +258,9 @@ html.dark .sd-mark { color: #042f2e; }
 .sd-inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .sd-inline .sd-input { flex: 1; min-width: 140px; }
 .sd-grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
-.price-book h2 { margin: 0; font-size: 18px; }
+.price-book h2, .sd-card h2 { margin: 0; font-size: 18px; }
+details.sd-card summary { cursor: pointer; font-weight: 620; }
+details.sd-card[open] summary { margin-bottom: 8px; }
 .price-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .price-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 .price-line { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); }
@@ -277,10 +308,15 @@ html.dark .sd-mark { color: #042f2e; }
 .sd-chip.info { background: var(--accent-soft); color: var(--accent-ink); }
 
 .sd-btn, .sd-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 34px;
   padding: 0 14px;
   border-radius: 10px;
   border: 1px solid transparent;
+  text-decoration: none;
+  white-space: nowrap;
   transition: transform 140ms ease, filter 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
 .sd-btn {
@@ -490,15 +526,21 @@ html.dark .sd-appt { background: linear-gradient(180deg, rgba(15, 118, 110, 0.55
   .sd-link:hover { transform: none; }
 }
 @media (max-width: 960px) {
-  .sd-app { grid-template-columns: var(--nav-w) minmax(0, 1fr); }
+  .sd-app, .sd-app.with-panel { grid-template-columns: var(--nav-w) minmax(0, 1fr); }
   .sd-login, .sd-metrics, .sd-plans, .sd-split, .sd-skel-metrics { grid-template-columns: 1fr; }
   .sd-panel {
+    display: block;
     position: fixed; left: var(--nav-w); right: 0; bottom: 0; height: 48vh; z-index: 20;
     border-left: 0; border-top: 1px solid var(--border);
-    transform: translateY(105%); transition: transform 180ms ease; box-shadow: var(--shadow);
+    padding: 16px;
+    opacity: 1;
+    pointer-events: auto;
+    overflow: auto;
+    transform: translateY(105%);
+    transition: transform 220ms cubic-bezier(.2,.8,.2,1);
+    box-shadow: var(--shadow);
   }
   .sd-panel.open { transform: none; }
-  .sd-panel-toggle { display: inline-flex; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -632,7 +674,7 @@ html.dark .sd-appt { background: linear-gradient(180deg, rgba(15, 118, 110, 0.55
 .wow h1, .wow-setup h1 { font-family: Georgia, 'Times New Roman', serif; font-weight: 500; letter-spacing: -0.03em; margin: 0; }
 .wow-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-bottom: 18px; }
 .wow-head p { color: var(--muted); max-width: 640px; }
-.wow-kicker { margin: 0 0 6px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-size: 12px; }
+.wow-kicker { margin: 0 0 6px; letter-spacing: -0.01em; color: var(--muted); font-size: 14px; }
 .wow-demo { display: inline-flex; margin-bottom: 6px; padding: 2px 8px; border-radius: 999px; background: #ffedd5; color: #9a3412; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
 .wow-metrics, .wow-rules, .wow-sources { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .wow-rules, .wow-sources { grid-template-columns: repeat(3, minmax(0, 1fr)); }

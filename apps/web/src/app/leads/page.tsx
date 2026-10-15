@@ -15,12 +15,10 @@ type Lead = {
   calls: { missed: boolean }[];
 };
 
-const STATUS: Record<string, string> = {
-  NEW: 'Новый',
-  CALLBACK: 'Перезвонить',
-  BOOKED: 'Записан',
-  VISITED: 'Был',
-  REFUSED: 'Отказ',
+const NEXT: Record<string, { status: string; label: string }> = {
+  NEW: { status: 'CALLBACK', label: 'Перезвонить' },
+  CALLBACK: { status: 'BOOKED', label: 'Записать' },
+  BOOKED: { status: 'VISITED', label: 'Пришёл' },
 };
 
 export default function LeadsPage() {
@@ -30,15 +28,15 @@ export default function LeadsPage() {
 function Desk() {
   const [items, setItems] = useState<Lead[]>([]);
   const [conversion, setConversion] = useState(0);
-  const [bySource, setBySource] = useState<{ source: string; total: number; won: number; conversion: number }[]>([]);
   const [filter, setFilter] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
+  const [refusing, setRefusing] = useState<string | null>(null);
   const [reason, setReason] = useState('');
 
-  const load = () => api<{ items: Lead[]; conversion: number; bySource: { source: string; total: number; won: number; conversion: number }[] }>('/market/leads')
-    .then((data) => { setItems(data.items); setConversion(data.conversion); setBySource(data.bySource); })
+  const load = () => api<{ items: Lead[]; conversion: number }>('/market/leads')
+    .then((data) => { setItems(data.items); setConversion(data.conversion); })
     .catch((err: Error) => setError(err.message));
 
   useEffect(() => {
@@ -50,7 +48,9 @@ function Desk() {
     if (filter) sessionStorage.setItem('sd.leads.filter', filter);
   }, [filter]);
 
+  const waiting = items.filter((row) => row.status === 'CALLBACK' || row.status === 'NEW').length;
   const visible = !filter || filter === 'ALL' ? items : items.filter((row) => row.status === filter);
+  const primaryId = visible.find((row) => NEXT[row.status])?.id;
 
   const miss = async (event: FormEvent) => {
     event.preventDefault();
@@ -65,10 +65,12 @@ function Desk() {
     }
   };
 
-  const setStatus = async (id: string, status: string) => {
+  const setStatus = async (id: string, status: string, refusalReason?: string) => {
     setError('');
     try {
-      await api(`/market/leads/${id}`, { method: 'PATCH', body: JSON.stringify({ status, refusalReason: status === 'REFUSED' ? reason || 'Не назвал' : undefined }) });
+      await api(`/market/leads/${id}`, { method: 'PATCH', body: JSON.stringify({ status, refusalReason }) });
+      setRefusing(null);
+      setReason('');
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Статус не сменился');
@@ -79,50 +81,43 @@ function Desk() {
     <div className="sd-stack">
       <div className="sd-h">
         <div>
-          <h1>Лиды и звонки</h1>
-          <p>Заявка живёт до первого визита. Пропущенный звонок сразу становится задачей «перезвонить».</p>
+          <h1>Лиды</h1>
+          <p>{waiting ? `${waiting} ждут звонка` : 'Очередь пуста'} · конверсия {conversion}%</p>
         </div>
-        <div className="sd-kpi"><b>{conversion}%</b><span>конверсия администратора</span></div>
       </div>
       {error && <p className="sd-chip danger">{error}</p>}
-      <div className="sd-grid-4">
-        {bySource.filter((row) => row.total).map((row) => (
-          <article key={row.source} className="sd-card">
-            <span className="sd-muted">{row.source}</span>
-            <strong>{row.won} из {row.total}</strong>
-            <p>{row.conversion}% до записи</p>
-          </article>
-        ))}
-      </div>
       <form className="sd-card sd-inline" onSubmit={miss}>
         <input className="sd-input" placeholder="Имя" value={name} onChange={(event) => setName(event.target.value)} />
-        <input className="sd-input" required placeholder="Телефон пропущенного" value={phone} onChange={(event) => setPhone(event.target.value)} />
-        <button className="sd-btn" type="submit">Пропущенный → задача</button>
+        <input className="sd-input" required placeholder="Телефон пропущенного" value={phone} onChange={(event) => setPhone(event.target.value)} autoFocus />
+        <button className={primaryId ? 'sd-btn-ghost' : 'sd-btn'} type="submit">Поставить задачу</button>
       </form>
       <div className="sd-seg">
-        {['ALL', 'CALLBACK', 'NEW', 'BOOKED', 'REFUSED'].map((key) => (
-          <button key={key} type="button" className={filter === key ? 'on' : ''} onClick={() => setFilter(key)}>{key === 'ALL' ? 'Все' : STATUS[key]}</button>
+        {[['ALL', 'Все'], ['CALLBACK', 'Перезвонить'], ['BOOKED', 'Записаны']].map(([key, label]) => (
+          <button key={key} type="button" className={filter === key ? 'on' : ''} onClick={() => setFilter(key)}>{label}</button>
         ))}
       </div>
-      <label className="sd-muted">Причина отказа для кнопки «Отказ»
-        <input className="sd-input" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Дорого, страх, подумаю" />
-      </label>
       <div className="sd-stack">
-        {visible.map((row) => (
-          <article key={row.id} className="sd-card sd-stack">
-            <div>
-              <strong>{row.name}</strong>
-              <p className="sd-muted">{row.phone} · {row.source}{row.calls.some((call) => call.missed) ? ' · пропущенный' : ''}</p>
-              {row.callbackAt && row.status === 'CALLBACK' && <p>Перезвонить до {new Date(row.callbackAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</p>}
-              {row.refusalReason && <p>Отказ: {row.refusalReason}</p>}
-            </div>
-            <div className="sd-seg" style={{ flexWrap: 'wrap', height: 'auto' }}>
-              {Object.keys(STATUS).map((status) => (
-                <button key={status} type="button" className={row.status === status ? 'on' : ''} onClick={() => setStatus(row.id, status)}>{STATUS[status]}</button>
-              ))}
-            </div>
-          </article>
-        ))}
+        {visible.map((row) => {
+          const next = NEXT[row.status];
+          return (
+            <article key={row.id} className="sd-card lead-line sd-inline">
+              <div>
+                <strong>{row.name}</strong>
+                <p className="sd-muted">{row.phone} · {row.source}{row.calls.some((call) => call.missed) ? ' · пропущен' : ''}{row.refusalReason ? ` · ${row.refusalReason}` : ''}</p>
+              </div>
+              {next && <button className={row.id === primaryId ? 'sd-btn' : 'sd-btn-ghost'} type="button" onClick={() => setStatus(row.id, next.status)}>{next.label}</button>}
+              {row.status !== 'REFUSED' && row.status !== 'VISITED' && (
+                refusing === row.id
+                  ? <form className="sd-inline" onSubmit={(event) => { event.preventDefault(); void setStatus(row.id, 'REFUSED', reason || 'Не назвал'); }}>
+                    <input className="sd-input" placeholder="Почему отказались" value={reason} onChange={(event) => setReason(event.target.value)} autoFocus />
+                    <button className="sd-btn-ghost" type="submit">Сохранить отказ</button>
+                  </form>
+                  : <button className="sd-btn-ghost" type="button" onClick={() => setRefusing(row.id)}>Отказ</button>
+              )}
+            </article>
+          );
+        })}
+        {visible.length === 0 && <p className="sd-muted">В этом списке пусто.</p>}
       </div>
     </div>
   );

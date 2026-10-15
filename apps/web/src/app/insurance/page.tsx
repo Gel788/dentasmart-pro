@@ -58,31 +58,37 @@ function Desk() {
     <div className="sd-stack">
       <div className="sd-h">
         <div>
-          <h1>ДМС и страховые</h1>
-          <p>Компания, полис, гарантийное письмо и счёт, который уходит страховой.</p>
+          <h1>ДМС</h1>
+          <p>Полисы и счета страховых.</p>
         </div>
       </div>
       {error && <p className="sd-chip danger">{error}</p>}
-      <form className="sd-card sd-inline" onSubmit={addCompany}>
-        <input className="sd-input" required placeholder="Страховая компания" value={name} onChange={(event) => setName(event.target.value)} />
-        <button className="sd-btn" type="submit">Добавить</button>
-      </form>
-      <div className="sd-inline">{companies.map((row) => <span key={row.id} className="sd-chip">{row.name}</span>)}</div>
       <form className="sd-card sd-stack" onSubmit={addPolicy}>
-        <strong>Полис и гарантийное письмо</strong>
-        <div className="sd-inline">
-          <select className="sd-input" required value={patientId} onChange={(event) => setPatientId(event.target.value)}>
-            <option value="">Пациент</option>
-            {patients.map((row) => <option key={row.id} value={row.id}>{row.lastName} {row.firstName}</option>)}
-          </select>
-          <select className="sd-input" required value={insurerId} onChange={(event) => setInsurerId(event.target.value)}>
-            {companies.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
-          </select>
-          <input className="sd-input" required placeholder="Номер полиса" value={number} onChange={(event) => setNumber(event.target.value)} />
-          <input className="sd-input" placeholder="Гарантийное письмо" value={letter} onChange={(event) => setLetter(event.target.value)} />
-          <button className="sd-btn" type="submit">Сохранить</button>
+        <strong>Новый полис</strong>
+        <div className="price-fields">
+          <label>Пациент
+            <select className="sd-input" required value={patientId} onChange={(event) => setPatientId(event.target.value)}>
+              <option value="">Выберите</option>
+              {patients.map((row) => <option key={row.id} value={row.id}>{row.lastName} {row.firstName}</option>)}
+            </select>
+          </label>
+          <label>Компания
+            <select className="sd-input" required value={insurerId} onChange={(event) => setInsurerId(event.target.value)}>
+              {companies.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
+            </select>
+          </label>
+          <label>Номер полиса<input className="sd-input" required value={number} onChange={(event) => setNumber(event.target.value)} /></label>
+          <label>Гарантийное письмо<input className="sd-input" value={letter} onChange={(event) => setLetter(event.target.value)} /></label>
         </div>
+        <button className="sd-btn" type="submit" style={{ width: 'fit-content' }}>Сохранить полис</button>
       </form>
+      <details className="sd-card">
+        <summary>Новая страховая</summary>
+        <form className="sd-inline" style={{ marginTop: 10 }} onSubmit={addCompany}>
+          <input className="sd-input" required placeholder="Название компании" value={name} onChange={(event) => setName(event.target.value)} />
+          <button className="sd-btn-ghost" type="submit">Добавить</button>
+        </form>
+      </details>
       {policies.map((row) => (
         <article key={row.id} className="sd-card">
           <strong>{row.patient.lastName} {row.patient.firstName}</strong>
@@ -99,7 +105,7 @@ function Desk() {
               <p className="sd-muted">{row.insurer.name} · {row.patientName} · {formatMoney(row.amount)} · {row.status}</p>
             </div>
             {row.status !== 'SENT' && (
-              <button className="sd-btn-ghost" type="button" onClick={() => api(`/market/bills/${row.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'SENT' }) }).then(load)}>Отметить отправленным</button>
+              <button className="sd-btn-ghost" type="button" onClick={() => api(`/market/bills/${row.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'SENT' }) }).then(load)}>Отправлен</button>
             )}
           </div>
         ))}

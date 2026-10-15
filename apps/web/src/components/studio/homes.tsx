@@ -28,10 +28,9 @@ export function OwnerHome({ data }: { data: {
     <div>
       <div className="sd-h">
         <div>
-          <h1>Клиника</h1>
-          <p>Седракович Дент · {data.branches} филиала в одной базе · сегодня {data.today} записей</p>
+          <h1>Сегодня</h1>
+          <p>{data.today} записей · {data.branches} филиала</p>
         </div>
-        <Link className="sd-btn-ghost" href="/return">Воронка планов</Link>
       </div>
       <div className="sd-metrics">
         <Metric label="Выручка месяца" amount={data.revenue} money hint={`средний чек ${formatMoney(data.avgCheck)}`} />
@@ -40,26 +39,29 @@ export function OwnerHome({ data }: { data: {
         <Metric label="Конверсия планов" amount={data.conversion.rate} suffix="%" hint={`LTV ${formatMoney(data.ltv)}`} />
       </div>
       <Retention />
-      <div className="sd-split">
-        <section className="sd-card">
-          <strong>14 дней</strong>
-          <div className="sd-bars" style={{ marginTop: 12 }}>
-            {data.series.map((point, index) => (
-              <i key={point.day} title={`${point.day}: ${formatMoney(point.amount)}`} style={{ ['--h' as string]: `${Math.max(6, (point.amount / max) * 100)}%`, animationDelay: `${index * 35}ms` }} />
-            ))}
-          </div>
-        </section>
-        <section className="sd-card sd-stack">
-          <strong>Планы</strong>
-          <div className="sd-funnel">
-            <div><span className="sd-muted">Принято</span><strong>{data.conversion.accepted}</strong></div>
-            <div><span className="sd-muted">В разговоре</span><strong>{data.conversion.open}</strong></div>
-            <div><span className="sd-muted">Брошено</span><strong>{data.conversion.abandoned}</strong></div>
-          </div>
-          <strong>Откуда пациенты</strong>
-          {data.sources.map((row) => <div key={row.source} className="sd-row" style={{ gridTemplateColumns: '1fr auto' }}><span>{SOURCE[row.source] ?? row.source}</span><b>{row.count}</b></div>)}
-        </section>
-      </div>
+      <details className="sd-card">
+        <summary>Деньги и планы</summary>
+        <div className="sd-split" style={{ marginTop: 12 }}>
+          <section>
+            <strong>14 дней</strong>
+            <div className="sd-bars" style={{ marginTop: 12 }}>
+              {data.series.map((point, index) => (
+                <i key={point.day} title={`${point.day}: ${formatMoney(point.amount)}`} style={{ ['--h' as string]: `${Math.max(6, (point.amount / max) * 100)}%`, animationDelay: `${index * 35}ms` }} />
+              ))}
+            </div>
+          </section>
+          <section className="sd-stack">
+            <strong>Планы</strong>
+            <div className="sd-funnel">
+              <div><span className="sd-muted">Принято</span><strong>{data.conversion.accepted}</strong></div>
+              <div><span className="sd-muted">В разговоре</span><strong>{data.conversion.open}</strong></div>
+              <div><span className="sd-muted">Брошено</span><strong>{data.conversion.abandoned}</strong></div>
+            </div>
+            {data.sources.map((row) => <div key={row.source} className="sd-row" style={{ gridTemplateColumns: '1fr auto' }}><span>{SOURCE[row.source] ?? row.source}</span><b>{row.count}</b></div>)}
+            <Link className="sd-btn-ghost" href="/return" style={{ width: 'fit-content' }}>Брошенные планы</Link>
+          </section>
+        </div>
+      </details>
     </div>
   );
 }
@@ -120,7 +122,7 @@ export function DeskHome({ data }: { data: {
           <h1>Стойка</h1>
           <p>Сегодняшнее расписание, долги и лист ожидания</p>
         </div>
-        <Link className="sd-btn" href="/schedule">Расписание кресел</Link>
+        <Link className="sd-btn-ghost" href="/schedule">Расписание</Link>
       </div>
       <CallCard />
       <div className="sd-split">
@@ -172,9 +174,21 @@ function Retention() {
   useEffect(() => { api<NonNullable<typeof data>>('/flow/retention').then(setData).catch(() => setData(null)); }, []);
   if (!data) return null;
   return (
-    <div className="sd-split" style={{ marginBottom: 12 }}>
-      <section className="sd-card">
-        <strong>Врачи за месяц</strong>
+    <div className="sd-stack" style={{ marginBottom: 12 }}>
+      <section className="sd-card sd-stack">
+        <strong>Сделать сейчас</strong>
+        {data.followUps.map((item, index) => (
+          <div key={item.id} className="sd-row" style={{ gridTemplateColumns: '1fr auto' }}>
+            <span><Link href={`/patients/${item.patientId}`}>{item.patient}</Link><div className="sd-muted">{item.reason}</div></span>
+            <button className={index === 0 ? 'sd-btn' : 'sd-btn-ghost'} type="button" onClick={() => book(item.patientId, item.patient)}>Записать</button>
+          </div>
+        ))}
+        {data.recall.map((item) => <div key={item.patientId} className="sd-muted">Гигиена: {item.patient}{item.phone ? ` · ${item.phone}` : ''}</div>)}
+        {data.birthdays.map((item) => <div key={item.patientId} className="sd-muted">День рождения: {item.patient}</div>)}
+        {data.followUps.length === 0 && data.recall.length === 0 && data.birthdays.length === 0 && <p className="sd-muted">Открытых задач нет.</p>}
+      </section>
+      <details className="sd-card">
+        <summary>Врачи за месяц</summary>
         <table className="sd-table">
           <thead><tr><th>Врач</th><th>Визиты</th><th>Неявки</th><th>Планы</th></tr></thead>
           <tbody>
@@ -183,19 +197,7 @@ function Retention() {
             ))}
           </tbody>
         </table>
-      </section>
-      <section className="sd-card">
-        <strong>Удержание</strong>
-        {data.followUps.map((item) => (
-          <div key={item.id} className="sd-row" style={{ gridTemplateColumns: '1fr auto' }}>
-            <span><Link href={`/patients/${item.patientId}`}>{item.patient}</Link><div className="sd-muted">{item.reason}</div></span>
-            <button className="sd-btn-ghost" type="button" onClick={() => book(item.patientId, item.patient)}>Записать</button>
-          </div>
-        ))}
-        {data.recall.map((item) => <div key={item.patientId} className="sd-muted">Гигиена: {item.patient}{item.phone ? ` · ${item.phone}` : ''}</div>)}
-        {data.birthdays.map((item) => <div key={item.patientId} className="sd-muted">День рождения: {item.patient}</div>)}
-        {data.followUps.length === 0 && data.recall.length === 0 && <p className="sd-muted">Открытых задач нет.</p>}
-      </section>
+      </details>
     </div>
   );
 }
@@ -213,7 +215,7 @@ function CallCard() {
       <strong>Звонок</strong>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <input className="sd-input" style={{ maxWidth: 220 }} placeholder="Номер" value={phone} onChange={(event) => setPhone(event.target.value)} />
-        <button className="sd-btn" type="button" onClick={() => void search()}>Найти</button>
+        <button className="sd-btn-ghost" type="button" onClick={() => void search()}>Найти</button>
       </div>
       {hits.map((hit) => (
         <div key={hit.id} className="sd-row" style={{ gridTemplateColumns: '1fr auto auto' }}>

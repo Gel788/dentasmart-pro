@@ -27,6 +27,7 @@ export function MarketStrip({ patientId }: { patientId: string }) {
   const [angle, setAngle] = useState('I');
   const [notes, setNotes] = useState('');
   const [fee, setFee] = useState('12000');
+  const [open, setOpen] = useState(false);
 
   const load = () => api<Desk>(`/market/patients/${patientId}`).then((data) => {
     setDesk(data);
@@ -56,12 +57,20 @@ export function MarketStrip({ patientId }: { patientId: string }) {
     setHint(result.hint);
   };
 
+  const summary = [
+    desk.curator?.name ? `куратор ${desk.curator.name}` : 'куратор не назначен',
+    desk.calls.length ? ruCount(desk.calls.length, ['звонок', 'звонка', 'звонков']) : 'звонков нет',
+    desk.allocations.length ? 'оплата разложена по работам' : null,
+  ].filter(Boolean).join(' · ');
+
   return (
     <section className="sd-card sd-stack">
-      <div className="sd-inline">
-        <strong>Звонки, оплаты и сопровождение</strong>
-        <span className="sd-chip">{desk.source ? `Источник: ${desk.source}` : 'Источник не указан'}</span>
-      </div>
+      <button className="sd-inline" type="button" onClick={() => setOpen((value) => !value)} style={{ width: '100%', background: 'transparent', border: 0, textAlign: 'left' }}>
+        <strong>Сопровождение</strong>
+        <span className="sd-muted">{summary}</span>
+        <span className="sd-btn-ghost">{open ? 'Скрыть' : 'Открыть'}</span>
+      </button>
+      {open && <>
       <div className="sd-inline">
         <label>Куратор
           <select className="sd-input" value={curatorId} onChange={(event) => {
@@ -119,6 +128,14 @@ export function MarketStrip({ patientId }: { patientId: string }) {
       {desk.threads.map((thread) => <p key={thread.id} className="sd-muted">{thread.channel}{thread.subject ? ` · ${thread.subject}` : ''}</p>)}
       {desk.consents.filter((row) => row.status === 'SIGNED').map((row) => <p key={row.id}>Подписано: {row.documentUrl}</p>)}
       {hint && <p>{hint}</p>}
+      </>}
     </section>
   );
+}
+
+function ruCount(n: number, forms: [string, string, string]) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  const form = mod10 === 1 && mod100 !== 11 ? forms[0] : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? forms[1] : forms[2];
+  return `${n} ${form}`;
 }

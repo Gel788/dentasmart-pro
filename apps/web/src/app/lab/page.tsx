@@ -1,230 +1,183 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import clsx from 'clsx';
 import { Protected } from '@/components/protected';
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Input, Label, Select } from '@/components/ui/input';
-import { Modal } from '@/components/ui/modal';
-import { PageHeader } from '@/components/ui/page-header';
-import { EmptyState } from '@/components/ui/empty-state';
 import { api, assetUrl, uploadFile } from '@/lib/api';
-import { FlaskConical } from 'lucide-react';
 
 const LAB_STATUS = ['RECEIVED', 'IN_PROGRESS', 'READY', 'DELIVERED', 'REJECTED'] as const;
 const LAB_LABEL: Record<string, string> = {
   RECEIVED: 'Принято', IN_PROGRESS: 'В работе', READY: 'Готово', DELIVERED: 'Доставлено', REJECTED: 'Отклонено',
 };
 
-const STATUS_VARIANT: Record<string, 'default' | 'accent' | 'success' | 'warning' | 'danger'> = {
-  RECEIVED: 'default',
-  IN_PROGRESS: 'accent',
-  READY: 'success',
-  DELIVERED: 'success',
-  REJECTED: 'danger',
+type Order = {
+  id: string;
+  title: string;
+  status: string;
+  shade?: string;
+  patient?: { firstName: string; lastName: string } | null;
+  doctor?: { firstName: string; lastName: string } | null;
+  dueAt?: string | null;
+  costAmount?: string | null;
+  stlFileUrl?: string | null;
+  labName?: string | null;
+  technician?: string | null;
+  fittingAt?: string | null;
 };
 
+type Person = { id: string; firstName: string; lastName: string };
+
 export default function LabPage() {
-  const [orders, setOrders] = useState<unknown[]>([]);
-  const [modal, setModal] = useState(false);
+  return <Protected><Desk /></Protected>;
+}
+
+function Desk() {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [patients, setPatients] = useState<Person[]>([]);
+  const [doctors, setDoctors] = useState<Person[]>([]);
+  const [error, setError] = useState('');
   const [title, setTitle] = useState('');
   const [patientId, setPatientId] = useState('');
   const [doctorId, setDoctorId] = useState('');
-  const [dueAt, setDueAt] = useState('');
-  const [costAmount, setCostAmount] = useState('');
   const [labName, setLabName] = useState('');
   const [technician, setTechnician] = useState('');
   const [fittingAt, setFittingAt] = useState('');
-  const [patients, setPatients] = useState<{ id: string; firstName: string; lastName: string }[]>([]);
-  const [doctors, setDoctors] = useState<{ id: string; firstName: string; lastName: string }[]>([]);
-  const [scanError, setScanError] = useState('');
+  const [dueAt, setDueAt] = useState('');
+  const [costAmount, setCostAmount] = useState('');
+  const [creating, setCreating] = useState(false);
 
-  const load = () => api<unknown[]>('/lab/orders').then(setOrders);
+  const load = () => api<Order[]>('/lab/orders').then(setOrders).catch((err: Error) => setError(err.message));
   useEffect(() => {
-    load();
-    api<{ items: { id: string; firstName: string; lastName: string }[] }>('/patients?pageSize=200').then((r) => setPatients(r.items));
-    api<{ id: string; firstName: string; lastName: string }[]>('/employees').then(setDoctors);
+    void load();
+    api<{ items: Person[] }>('/patients?pageSize=200').then((res) => setPatients(res.items)).catch(() => undefined);
+    api<Person[]>('/employees').then(setDoctors).catch(() => undefined);
   }, []);
 
-  const setStatus = (id: string, status: string) =>
-    api(`/lab/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }).then(load);
+  const cost = orders.reduce((sum, order) => sum + Number(order.costAmount ?? 0), 0);
+  const overdue = orders.filter((order) => order.dueAt && !['DELIVERED', 'REJECTED'].includes(order.status) && new Date(order.dueAt) < new Date());
 
-  const onCreate = async (e: FormEvent) => {
-    e.preventDefault();
-    await api('/lab/orders', {
-      method: 'POST',
-      body: JSON.stringify({
-        title,
-        patientId: patientId || undefined,
-        doctorId: doctorId || undefined,
-        dueAt: dueAt || undefined,
-        costAmount: costAmount ? Number(costAmount) : undefined,
-        labName: labName || undefined,
-        technician: technician || undefined,
-        fittingAt: fittingAt || undefined,
-      }),
-    });
-    setModal(false);
-    load();
+  const create = async (event: FormEvent) => {
+    event.preventDefault();
+    setError('');
+    try {
+      await api('/lab/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          title,
+          patientId: patientId || undefined,
+          doctorId: doctorId || undefined,
+          dueAt: dueAt || undefined,
+          costAmount: costAmount ? Number(costAmount) : undefined,
+          labName: labName || undefined,
+          technician: technician || undefined,
+          fittingAt: fittingAt || undefined,
+        }),
+      });
+      setTitle('');
+      setCostAmount('');
+      setLabName('');
+      setTechnician('');
+      setCreating(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Наряд не создался');
+    }
   };
 
-  const orderList = orders as {
-    id: string;
-    title: string;
-    status: string;
-    shade?: string;
-    patient?: { firstName: string; lastName: string } | null;
-    doctor?: { firstName: string; lastName: string } | null;
-    dueAt?: string | null;
-    costAmount?: string | null;
-    stlFileUrl?: string | null;
-    labName?: string | null;
-    technician?: string | null;
-    fittingAt?: string | null;
-  }[];
-  const overdue = orderList.filter((order) => order.dueAt && !['DELIVERED', 'REJECTED'].includes(order.status) && new Date(order.dueAt) < new Date());
+  const setStatus = (id: string, status: string) =>
+    api(`/lab/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }).then(load).catch((err: Error) => setError(err.message));
 
   return (
-    <Protected>
-      <PageHeader
-        badge="Лаборатория"
-        title="Зуботехническая лаборатория"
-        description="Заказ-наряды и статусы"
-        action={<Button onClick={() => setModal(true)}>+ Заказ</Button>}
-      />
-
-      {scanError && <p className="mb-4 border-l-4 border-[var(--danger)] bg-[var(--danger-soft)] px-4 py-3 text-sm text-[var(--danger)]">{scanError}</p>}
-      <p className="mb-4 text-sm text-[var(--muted)]">
-        Себестоимость лаборатории по нарядам: {orderList.reduce((sum, order) => sum + Number(order.costAmount ?? 0), 0).toLocaleString('ru-RU')} ₽. Эта сумма входит в себестоимость услуги и не прибавляется к цене пациента.
-      </p>
-      {!!overdue.length && (
-        <div className="mb-4 border-l-4 border-[var(--danger)] bg-[var(--danger-soft)] px-4 py-3 text-sm text-[var(--danger)]">
-          Просрочено нарядов: {overdue.length}. {overdue.map((order) => order.title).join(', ')}
-        </div>
-      )}
-
-      <Card padding={false} className="overflow-hidden">
-        <div className="border-b border-[var(--border)] px-5 py-4">
-          <CardHeader title="Заказ-наряды" description="Статус работы в лаборатории" />
-        </div>
+    <div className="sd-stack">
+      <div className="sd-h">
         <div>
-          {orderList.length ? orderList.map((o) => (
-            <Card key={o.id} className="!rounded-none !border-x-0 !border-t-0 !p-4 last:!border-b-0" padding>
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="font-semibold text-[var(--text)]">{o.title}</p>
-                  {o.patient && <p className="mt-0.5 text-xs text-[var(--muted)]">{o.patient.lastName} {o.patient.firstName}</p>}
-                  {o.doctor && <p className="text-xs text-[var(--muted)]">Врач: {o.doctor.lastName}</p>}
-                  {o.dueAt && (
-                    <p className="text-xs text-[var(--muted)]">
-                      Срок: {new Date(o.dueAt).toLocaleDateString('ru-RU')}
-                      {o.costAmount ? ` · лаборатория ${Number(o.costAmount).toLocaleString('ru-RU')} ₽` : ''}
-                    </p>
-                  )}
-                  {o.shade && <p className="mt-0.5 text-xs text-[var(--muted)]">Оттенок: {o.shade}</p>}
-                  {(o.labName || o.technician) && <p className="text-xs text-[var(--muted)]">{[o.labName, o.technician].filter(Boolean).join(' · ')}</p>}
-                  {o.fittingAt && <p className="text-xs text-[var(--muted)]">Примерка: {new Date(o.fittingAt).toLocaleDateString('ru-RU')}</p>}
-                </div>
-                <Badge variant={STATUS_VARIANT[o.status] ?? 'default'}>{LAB_LABEL[o.status] ?? o.status}</Badge>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
-                {o.stlFileUrl ? (
-                  <a className="font-medium text-[var(--accent)]" href={assetUrl(o.stlFileUrl)} target="_blank" rel="noreferrer">Скан STL</a>
-                ) : (
-                  <span className="text-[var(--muted)]">Скана нет</span>
-                )}
-                <label className="cursor-pointer font-medium text-[var(--text)]">
-                  Прикрепить STL
-                  <input
-                    type="file"
-                    accept=".stl,.obj,.ply"
-                    className="sr-only"
-                    onChange={async (event) => {
-                      const file = event.target.files?.[0];
-                      event.target.value = '';
-                      if (!file) return;
-                      setScanError('');
-                      try {
-                        const fileUrl = await uploadFile(file);
-                        await api(`/lab/orders/${o.id}/scan`, { method: 'PATCH', body: JSON.stringify({ fileUrl }) });
-                        load();
-                      } catch (e) {
-                        setScanError(e instanceof Error ? e.message : 'Скан не прикрепился');
-                      }
-                    }}
-                  />
-                </label>
-              </div>
-              <div className="mt-3 inline-flex flex-wrap gap-1 border-t border-[var(--border)] pt-3">
-                {LAB_STATUS.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setStatus(o.id, s)}
-                    className={clsx(
-                      'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
-                      o.status === s
-                        ? 'bg-[var(--accent-soft)] text-[var(--accent-hover)]'
-                        : 'text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-secondary)]',
-                    )}
-                  >
-                    {LAB_LABEL[s]}
-                  </button>
-                ))}
-              </div>
-            </Card>
-          )) : (
-            <EmptyState icon={FlaskConical} title="Нет заказов" description="Создайте первый заказ-наряд" />
-          )}
+          <h1>Лаборатория</h1>
+          <p>{orders.length ? `${ruCount(orders.length, ['наряд', 'наряда', 'нарядов'])} · себестоимость ${cost.toLocaleString('ru-RU')} ₽` : 'Заказ-нарядов пока нет'}</p>
         </div>
-      </Card>
-
-      <Modal open={modal} onClose={() => setModal(false)} title="Новый заказ-наряд" description="Работа для зуботехнической лаборатории">
-        <form onSubmit={onCreate} className="space-y-3">
-          <div><Label>Название работы</Label><Input required value={title} onChange={(e) => setTitle(e.target.value)} /></div>
-          <div>
-            <Label>Пациент</Label>
-            <Select aria-label="Пациент заказа" value={patientId} onChange={(e) => setPatientId(e.target.value)}>
+        {!creating && <button className="sd-btn" type="button" onClick={() => setCreating(true)}>Новый наряд</button>}
+      </div>
+      {error && <p className="sd-chip danger">{error}</p>}
+      {!!overdue.length && <p className="sd-chip danger">Просрочено: {overdue.map((order) => order.title).join(', ')}</p>}
+      {creating && <form className="sd-card sd-stack" onSubmit={create}>
+        <strong>Новый наряд</strong>
+        <div className="price-fields">
+          <label>Работа<input className="sd-input" required value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Коронка E.max 16" /></label>
+          <label>Пациент
+            <select className="sd-input" value={patientId} onChange={(event) => setPatientId(event.target.value)}>
               <option value="">Не выбран</option>
-              {patients.map((p) => <option key={p.id} value={p.id}>{p.lastName} {p.firstName}</option>)}
-            </Select>
-          </div>
-          <div>
-            <Label>Врач</Label>
-            <Select aria-label="Врач заказа" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
+              {patients.map((row) => <option key={row.id} value={row.id}>{row.lastName} {row.firstName}</option>)}
+            </select>
+          </label>
+          <label>Врач
+            <select className="sd-input" value={doctorId} onChange={(event) => setDoctorId(event.target.value)}>
               <option value="">Не выбран</option>
-              {doctors.map((d) => <option key={d.id} value={d.id}>{d.lastName} {d.firstName}</option>)}
-            </Select>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Лаборатория</Label>
-              <Input value={labName} onChange={(e) => setLabName(e.target.value)} />
-            </div>
-            <div>
-              <Label>Техник</Label>
-              <Input value={technician} onChange={(e) => setTechnician(e.target.value)} />
-            </div>
-          </div>
+              {doctors.map((row) => <option key={row.id} value={row.id}>{row.lastName} {row.firstName}</option>)}
+            </select>
+          </label>
+          <label>Лаборатория<input className="sd-input" value={labName} onChange={(event) => setLabName(event.target.value)} /></label>
+          <label>Техник<input className="sd-input" value={technician} onChange={(event) => setTechnician(event.target.value)} /></label>
+          <label>Примерка<input className="sd-input" type="date" value={fittingAt} onChange={(event) => setFittingAt(event.target.value)} /></label>
+          <label>Срок<input className="sd-input" type="date" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></label>
+          <label>Себестоимость, ₽<input className="sd-input" type="number" min={0} value={costAmount} onChange={(event) => setCostAmount(event.target.value)} /></label>
+        </div>
+        <div className="sd-inline">
+          <button className="sd-btn" type="submit">Создать наряд</button>
+          <button className="sd-btn-ghost" type="button" onClick={() => setCreating(false)}>Отмена</button>
+        </div>
+      </form>}
+      {orders.map((order) => (
+        <article key={order.id} className="sd-card lead-line sd-inline">
           <div>
-            <Label>Примерка</Label>
-            <Input type="date" aria-label="Дата примерки" value={fittingAt} onChange={(e) => setFittingAt(e.target.value)} />
+            <strong>{order.title}</strong>
+            <p className="sd-muted">
+              {[
+                order.patient ? `${order.patient.lastName} ${order.patient.firstName}` : null,
+                order.doctor ? order.doctor.lastName : null,
+                order.labName,
+                order.technician,
+                order.shade ? `оттенок ${order.shade}` : null,
+                order.fittingAt ? `примерка ${new Date(order.fittingAt).toLocaleDateString('ru-RU')}` : null,
+                order.dueAt ? `срок ${new Date(order.dueAt).toLocaleDateString('ru-RU')}` : null,
+                order.costAmount ? `${Number(order.costAmount).toLocaleString('ru-RU')} ₽` : null,
+              ].filter(Boolean).join(' · ')}
+            </p>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Срок</Label>
-              <Input type="date" aria-label="Срок наряда" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
-            </div>
-            <div>
-              <Label>Себестоимость, ₽</Label>
-              <Input type="number" min={0} aria-label="Себестоимость лаборатории" value={costAmount} onChange={(e) => setCostAmount(e.target.value)} />
-            </div>
-          </div>
-          <Button type="submit" className="w-full">Создать</Button>
-        </form>
-      </Modal>
-    </Protected>
+          <select className="sd-input" style={{ width: 150 }} aria-label="Статус наряда" value={order.status} onChange={(event) => setStatus(order.id, event.target.value)}>
+            {LAB_STATUS.map((status) => <option key={status} value={status}>{LAB_LABEL[status]}</option>)}
+          </select>
+          {order.stlFileUrl ? (
+            <a className="sd-btn-ghost" href={assetUrl(order.stlFileUrl)} target="_blank" rel="noreferrer">Скан</a>
+          ) : (
+            <label className="sd-btn-ghost">
+              Скан
+              <input
+                type="file"
+                accept=".stl,.obj,.ply"
+                className="sr-only"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = '';
+                  if (!file) return;
+                  setError('');
+                  try {
+                    const fileUrl = await uploadFile(file);
+                    await api(`/lab/orders/${order.id}/scan`, { method: 'PATCH', body: JSON.stringify({ fileUrl }) });
+                    await load();
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Скан не прикрепился');
+                  }
+                }}
+              />
+            </label>
+          )}
+        </article>
+      ))}
+    </div>
   );
+}
+
+function ruCount(n: number, forms: [string, string, string]) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  const form = mod10 === 1 && mod100 !== 11 ? forms[0] : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? forms[1] : forms[2];
+  return `${n} ${form}`;
 }

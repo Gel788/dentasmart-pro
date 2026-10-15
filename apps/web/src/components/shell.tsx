@@ -10,26 +10,31 @@ import { useFocus } from '@/lib/focus';
 import { api } from '@/lib/api';
 import { ContextPanel } from './studio/panels';
 
-const NAV = [
+const PRIMARY = [
   { href: '/', label: 'Сегодня', icon: Calendar, perm: 'patient.read' },
-  { href: '/briefing', label: 'Утро', icon: Sunrise, perm: 'patient.read' },
-  { href: '/pulse', label: 'Пульс', icon: Activity, perm: 'patient.read' },
   { href: '/patients', label: 'Пациенты', icon: Users, perm: 'patient.read' },
   { href: '/schedule', label: 'Расписание', icon: CalendarRange, perm: 'schedule.read' },
   { href: '/price', label: 'Прайс', icon: Tags, perm: 'patient.read' },
-  { href: '/portal', label: 'Кабинет пациента', icon: Smartphone, perm: 'patient.read' },
-  { href: '/check-in', label: 'QR стойки', icon: QrCode, perm: 'schedule.read' },
-  { href: '/autopilot', label: 'Автопилот', icon: Repeat, perm: 'patient.read' },
-  { href: '/kpis', label: 'Врачи', icon: Trophy, perm: 'patient.read' },
-  { href: '/return', label: 'Возврат планов', icon: RotateCcw, perm: 'medical.read' },
-  { href: '/import', label: 'Импорт', icon: Upload, perm: 'patient.write' },
-  { href: '/onboarding', label: 'Запуск', icon: Sparkles, perm: 'patient.read' },
-  { href: '/lab', label: 'Лаборатория', icon: FlaskConical, perm: 'medical.read' },
   { href: '/leads', label: 'Лиды', icon: PhoneIncoming, perm: 'patient.read' },
-  { href: '/quality', label: 'Качество', icon: ClipboardCheck, perm: 'medical.read' },
-  { href: '/insurance', label: 'ДМС', icon: Shield, perm: 'finance.read' },
   { href: '/settings', label: 'Настройки', icon: Settings, perm: 'org.manage' },
 ];
+
+const MORE = [
+  { href: '/briefing', label: 'Утро', icon: Sunrise, perm: 'patient.read' },
+  { href: '/pulse', label: 'Пульс', icon: Activity, perm: 'patient.read' },
+  { href: '/lab', label: 'Лаборатория', icon: FlaskConical, perm: 'medical.read' },
+  { href: '/quality', label: 'Карты', icon: ClipboardCheck, perm: 'medical.read' },
+  { href: '/insurance', label: 'ДМС', icon: Shield, perm: 'finance.read' },
+  { href: '/kpis', label: 'Врачи', icon: Trophy, perm: 'patient.read' },
+  { href: '/autopilot', label: 'Автопилот', icon: Repeat, perm: 'patient.read' },
+  { href: '/return', label: 'Возврат', icon: RotateCcw, perm: 'medical.read' },
+  { href: '/portal', label: 'Кабинет пациента', icon: Smartphone, perm: 'patient.read' },
+  { href: '/check-in', label: 'QR стойки', icon: QrCode, perm: 'schedule.read' },
+  { href: '/import', label: 'Импорт', icon: Upload, perm: 'patient.write' },
+  { href: '/onboarding', label: 'Запуск', icon: Sparkles, perm: 'patient.read' },
+];
+
+const NAV = [...PRIMARY, ...MORE];
 
 type Hit = { id: string; firstName: string; lastName: string; phone: string | null };
 
@@ -44,13 +49,22 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [hits, setHits] = useState<Hit[]>([]);
   const [cursor, setCursor] = useState(0);
   const [density, setDensity] = useState<'compact' | 'comfort'>('compact');
+  const [moreOpen, setMoreOpen] = useState(false);
 
-  const links = NAV.filter((item) => user?.permissions.includes(item.perm));
+  const allowed = (item: (typeof NAV)[number]) => user?.permissions.includes(item.perm);
+  const primary = PRIMARY.filter(allowed);
+  const more = MORE.filter(allowed);
+  const links = [...primary, ...more];
 
   useEffect(() => {
     const stored = localStorage.getItem('sd_density');
     if (stored === 'comfort' || stored === 'compact') setDensity(stored);
   }, []);
+
+  useEffect(() => {
+    const here = MORE.some((item) => user?.permissions.includes(item.perm) && pathname.startsWith(item.href));
+    if (here) setMoreOpen(true);
+  }, [pathname, user]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -107,7 +121,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="sd-app">
+    <div className={`sd-app${panelOpen ? ' with-panel' : ''}`}>
       <aside className="sd-nav">
         <div className="sd-brand">
           <div className="sd-mark">С</div>
@@ -116,7 +130,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <span>Sedrakovich Dent</span>
           </div>
         </div>
-        {links.map((link) => {
+        {[primary, moreOpen ? more : []].flat().map((link) => {
           const Icon = link.icon;
           const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href);
           return (
@@ -126,6 +140,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </Link>
           );
         })}
+        {more.length > 0 && (
+          <button className="sd-more" type="button" onClick={() => setMoreOpen((open) => !open)}>
+            {moreOpen ? 'Меньше' : `Ещё ${more.length}`}
+          </button>
+        )}
         <div className="sd-nav-foot">
           <button className="sd-icon-btn" type="button" onClick={toggle} aria-label="Тема">
             {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
@@ -144,7 +163,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             Поиск пациента и команды
             <kbd>⌘K</kbd>
           </button>
-          <button className="sd-btn-ghost sd-panel-toggle" type="button" onClick={() => setPanelOpen(!panelOpen)}>Контекст</button>
+          <button className="sd-btn-ghost sd-panel-toggle" type="button" onClick={() => setPanelOpen(!panelOpen)}>{panelOpen ? 'Скрыть' : 'Контекст'}</button>
         </header>
         <div className="sd-workspace">{children}</div>
       </div>

@@ -48,7 +48,7 @@ function Briefing() {
           <h1>{hello}</h1>
           <p>Сегодня {data.patients.length} визитов, {data.risks} пометок, прогноз {formatMoney(data.forecast)}.</p>
         </div>
-        <Link className="sd-btn" href="/pulse">Пульс клиники</Link>
+        <Link className="sd-btn-ghost" href="/pulse">Пульс</Link>
       </header>
       <div className="wow-metrics">
         <article style={{ animationDelay: '40ms' }}><span>Прогноз дня</span><strong>{formatMoney(data.forecast)}</strong></article>

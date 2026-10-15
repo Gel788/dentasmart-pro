@@ -71,7 +71,7 @@ function Board() {
       <div className="sd-h">
         <div>
           <h1>Расписание</h1>
-          <p>Перетащите визит на другое время или кресло. Клик по пустому месту — запись, по визиту — приём.</p>
+          <p>Пустое окно — запись. Визит — приём.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <div className="sd-seg">

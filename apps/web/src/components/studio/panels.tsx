@@ -26,8 +26,8 @@ export function ContextPanel() {
   if (focus?.type === 'patient') return <PatientPanel id={focus.id} />;
   return (
     <div className="sd-stack">
-      <strong>Контекст</strong>
-      <p className="sd-muted">Откройте пациента или нажмите свободное окно в расписании. Алерты и запись остаются здесь, рабочая зона не перекрывается.</p>
+      <strong>Пока пусто</strong>
+      <p className="sd-muted">Откройте пациента или свободное окно в расписании.</p>
     </div>
   );
 }

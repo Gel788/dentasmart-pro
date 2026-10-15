@@ -40,7 +40,7 @@ function PulseBoard() {
     <div className="wow wow-pulse">
       <header className="wow-head">
         <div>
-          <p className="wow-kicker">Живая картина · обновление каждые 8 секунд</p>
+          <p className="wow-kicker">Обновляется само</p>
           <h1>Пульс клиники</h1>
         </div>
         <div className="wow-ticker" aria-label="Лента оплат">
@@ -99,7 +99,7 @@ function PulseBoard() {
             </div>
           ))}
           {data.calls.length === 0 && <p className="sd-muted">Непринятых планов нет.</p>}
-          <Link href="/autopilot">Очередь автопилота</Link>
+          <Link className="sd-btn-ghost" href="/autopilot" style={{ width: 'fit-content', marginTop: 8 }}>Автопилот</Link>
         </section>
       </div>
     </div>

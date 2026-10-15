@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Protected } from '@/components/protected';
 import { api } from '@/lib/api';
-import { useFocus } from '@/lib/focus';
 
 type Patient = {
   id: string;
@@ -24,7 +23,6 @@ export default function PatientsPage() {
 
 function List() {
   const router = useRouter();
-  const { setFocus } = useFocus();
   const [query, setQuery] = useState<string | null>(null);
   const [rows, setRows] = useState<Patient[]>([]);
   const [error, setError] = useState('');
@@ -53,7 +51,7 @@ function List() {
       <div className="sd-h">
         <div>
           <h1>Пациенты</h1>
-          <p>Поиск по фамилии и телефону. Карта открывается сразу.</p>
+          <p>Фамилия или телефон.</p>
         </div>
         <input className="sd-input" style={{ maxWidth: 280 }} placeholder="Смирнова или 900" value={query ?? ''} onChange={(e) => setQuery(e.target.value)} />
       </div>
@@ -70,7 +68,7 @@ function List() {
                 row.anticoagulant ? 'антикоагулянты' : '',
               ].filter(Boolean);
               return (
-                <tr key={row.id} onClick={() => { setFocus({ type: 'patient', id: row.id }); router.push(`/patients/${row.id}`); }}>
+                <tr key={row.id} onClick={() => router.push(`/patients/${row.id}`)}>
                   <td><b>{row.lastName} {row.firstName}</b>{row.tags?.length ? <div className="sd-muted">{row.tags.join(' · ')}</div> : null}</td>
                   <td>{row.phone}</td>
                   <td>{alerts.join(', ') || '—'}</td>

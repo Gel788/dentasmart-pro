@@ -10,6 +10,7 @@ import { PlanJourney } from '@/components/studio/journey';
 import { MarketStrip } from '@/components/studio/market-strip';
 import { type Family, type PlanCard } from '@/components/studio/plans';
 import { api } from '@/lib/api';
+import { formatMoney } from '@/lib/format';
 import { useFocus } from '@/lib/focus';
 
 type Alert = { tone: 'danger' | 'warning' | 'info'; text: string };
@@ -32,7 +33,7 @@ export default function PatientPage() {
 
 function CardScreen() {
   const params = useParams<{ id: string }>();
-  const { setFocus } = useFocus();
+  const { setPanelOpen } = useFocus();
   const [card, setCard] = useState<Card | null>(null);
   const [error, setError] = useState('');
   const [mode, setMode] = useState<'plan' | 'formula' | 'perio' | 'imaging'>('plan');
@@ -51,7 +52,7 @@ function CardScreen() {
   const [modeReady, setModeReady] = useState(false);
 
   useEffect(() => {
-    setFocus({ type: 'patient', id: params.id });
+    setPanelOpen(false);
     const saved = sessionStorage.getItem(`sd.card.${params.id}.mode`);
     if (saved === 'plan' || saved === 'formula' || saved === 'perio' || saved === 'imaging') setMode(saved);
     setModeReady(true);
@@ -94,7 +95,7 @@ function CardScreen() {
       <div className="sd-h">
         <div>
           <h1>{card.patient.lastName} {card.patient.firstName}</h1>
-          <p>{age != null ? `${age} лет` : 'возраст не указан'}{card.patient.phone ? ` · ${card.patient.phone}` : ''} · долг в алертах справа</p>
+          <p>{age != null ? `${age} лет` : 'возраст не указан'}{card.patient.phone ? ` · ${card.patient.phone}` : ''} · {card.debt > 0 ? `долг ${formatMoney(card.debt)}` : 'долга нет'}</p>
         </div>
       </div>
       <div className="sd-alertbar">

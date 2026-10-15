@@ -40,6 +40,8 @@ function Book() {
   const [stock, setStock] = useState<Stock[]>([]);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [categoryName, setCategoryName] = useState('');
+  const [namingCategory, setNamingCategory] = useState(false);
+  const [percent, setPercent] = useState(10);
   const [showArchive, setShowArchive] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -90,8 +92,20 @@ function Book() {
     if (!categoryName.trim()) return;
     await api('/config/services', { method: 'POST', body: JSON.stringify({ name: categoryName.trim(), price: 0, durationMin: 0 }) });
     setCategoryName('');
+    setNamingCategory(false);
     setNotice('Категория добавлена');
     await load();
+  };
+
+  const downloadPrice = async () => {
+    const file = await api<{ filename: string; csv: string }>('/config/services/export');
+    const blob = new Blob([file.csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = file.filename;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const archive = async (row: ServiceRow) => {
@@ -150,13 +164,24 @@ function Book() {
         <div className="sd-inline">
           <button className="sd-btn" type="submit">{draft.id ? 'Сохранить услугу' : 'Добавить услугу'}</button>
           {draft.id && <button className="sd-btn-ghost" type="button" onClick={() => setDraft(emptyDraft())}>Отменить правку</button>}
+          <button className="sd-btn-ghost" type="button" onClick={() => setNamingCategory((value) => !value)}>Новая категория</button>
         </div>
       </form>
+      {namingCategory && (
+        <form className="sd-card sd-inline" onSubmit={addCategory}>
+          <input className="sd-input" placeholder="Название категории" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} autoFocus />
+          <button className="sd-btn" type="submit">Добавить категорию</button>
+        </form>
+      )}
 
-      <form className="sd-inline" onSubmit={addCategory}>
-        <input className="sd-input" placeholder="Новая категория, например Терапия" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} />
-        <button className="sd-btn-ghost" type="submit">Добавить категорию</button>
-      </form>
+      <details className="sd-card">
+        <summary>Цены пакетом и Excel</summary>
+        <div className="sd-inline" style={{ marginTop: 10 }}>
+          <input className="sd-input" type="number" value={percent} onChange={(event) => setPercent(Number(event.target.value))} aria-label="Процент изменения цен" />
+          <button className="sd-btn-ghost" type="button" onClick={() => void api('/config/services/bulk', { method: 'POST', body: JSON.stringify({ percent }) }).then(() => { setNotice(`Цены сдвинуты на ${percent}%`); return load(); }).catch((err: Error) => setError(err.message))}>Применить {percent}%</button>
+          <button className="sd-btn-ghost" type="button" onClick={() => downloadPrice().catch((err: Error) => setError(err.message))}>Скачать Excel</button>
+        </div>
+      </details>
 
       {groups.named.map(({ category, items }) => (
         <section key={category.id} className="sd-card sd-stack">
