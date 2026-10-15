@@ -92,10 +92,12 @@ pnpm --filter @dentasmart/widget build
 
 ### Деплой
 
-Сайт уже подготовлен под Vercel: корень проекта в настройках — `apps/web` (см. `apps/web/vercel.json`). API — отдельный Node-сервис, его не кладут в тот же Vercel-проект: Nest слушает порт и ходит в PostgreSQL.
+Сайт собирается на **Vercel**. В настройках проекта корень — `apps/web` (команды в `apps/web/vercel.json`).
+
+API на Vercel не деплоится. Nest слушает порт и ходит в PostgreSQL, поэтому сервис описан в `render.yaml` и поднимается на **Render** (`sedrakovich-dent-api`). Проекты Vercel с API в имени (`dentasmart-pro-api` и похожие) сборку пропускают: `ignoreCommand` в корневом `vercel.json` и в `apps/api/vercel.json` завершается с кодом 0. Проверка на pull request остаётся зелёной, наружу API не выкладывается.
 
 1. PostgreSQL (Neon, Supabase или Render Postgres). Строка `DATABASE_URL`.
-2. API (Render/Fly/Railway): из корня репозитория `pnpm install`, `pnpm --filter @dentasmart/shared build`, `pnpm --filter @dentasmart/database db:generate`, `pnpm db:push`, `pnpm db:seed`, `pnpm --filter @dentasmart/api build`, старт `pnpm --filter @dentasmart/api start`. Переменные: `DATABASE_URL`, `JWT_SECRET` (длинный), `CORS_ORIGIN=https://<ваш-vercel-домен>`.
+2. API: Blueprint Render из `render.yaml`. Вручную те же шаги из корня: `pnpm install`, `pnpm --filter @dentasmart/shared build`, `pnpm --filter @dentasmart/database db:generate`, `pnpm db:push`, `pnpm db:seed`, `pnpm --filter @dentasmart/api build`, старт `pnpm --filter @dentasmart/api start`. Переменные: `DATABASE_URL`, `JWT_SECRET` (длинный), `CORS_ORIGIN=https://<ваш-vercel-домен>`.
 3. Vercel, root directory `apps/web`. На сборке задать `NEXT_PUBLIC_API_URL=https://<api>/api/v1` — это значение вшивается в клиент, после смены нужен новый деплой веба.
 4. Готовый обзор: `https://<сайт>/login?role=owner`.
 
