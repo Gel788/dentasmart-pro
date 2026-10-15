@@ -43,6 +43,7 @@ function Book() {
   const [namingCategory, setNamingCategory] = useState(false);
   const [percent, setPercent] = useState(10);
   const [showArchive, setShowArchive] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
@@ -81,6 +82,7 @@ function Book() {
       });
       setNotice(draft.id ? 'Услуга обновлена' : 'Услуга добавлена в прайс');
       setDraft(emptyDraft());
+      setAdding(false);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не сохранилось');
@@ -111,6 +113,8 @@ function Book() {
   const archive = async (row: ServiceRow) => {
     await api(`/config/services/${row.id}/archive`, { method: 'POST', body: JSON.stringify({ active: !row.isActive }) });
     setNotice(row.isActive ? 'Услуга в архиве' : 'Услуга возвращена в прайс');
+    setDraft(emptyDraft());
+    setAdding(false);
     await load();
   };
 
@@ -125,8 +129,12 @@ function Book() {
       itemId: row.norms[0]?.itemId ?? '',
       quantity: row.norms[0]?.quantity ?? 1,
     });
+    setAdding(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const composing = adding || Boolean(draft.id);
+  const listed = groups.named.filter(({ items }) => items.length > 0);
 
   return (
     <div className="sd-stack price-book">
@@ -135,11 +143,12 @@ function Book() {
           <h1>Прайс</h1>
           <p>{ruServices(services.filter((row) => row.code && row.isActive).length)} в прайсе.</p>
         </div>
+        {!composing && <button className="sd-btn" type="button" onClick={() => { setDraft(emptyDraft()); setAdding(true); }}>Добавить услугу</button>}
       </div>
       {notice && <p className="wow-note">{notice}</p>}
       {error && <p className="sd-chip danger">{error}</p>}
 
-      <form className="sd-card sd-stack" onSubmit={save}>
+      {composing && <form className="sd-card sd-stack price-composer" onSubmit={save}>
         <strong>{draft.id ? 'Изменить услугу' : 'Новая услуга'}</strong>
         <div className="price-fields">
           <label>Название<input className="sd-input" required value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
@@ -162,14 +171,15 @@ function Book() {
         </div>
         <div className="sd-inline">
           <button className="sd-btn" type="submit">{draft.id ? 'Сохранить услугу' : 'Добавить услугу'}</button>
-          {draft.id && <button className="sd-btn-ghost" type="button" onClick={() => setDraft(emptyDraft())}>Отменить правку</button>}
+          <button className="sd-btn-ghost" type="button" onClick={() => { setDraft(emptyDraft()); setAdding(false); setNamingCategory(false); }}>Закрыть</button>
+          {draft.id && <button className="sd-btn-ghost" type="button" onClick={() => { const row = services.find((item) => item.id === draft.id); if (row) void archive(row); }}>{services.find((item) => item.id === draft.id)?.isActive ? 'В архив' : 'Вернуть'}</button>}
           <button className="sd-btn-ghost" type="button" onClick={() => setNamingCategory((value) => !value)}>Новая категория</button>
         </div>
-      </form>
+      </form>}
       {namingCategory && (
-        <form className="sd-card sd-inline" onSubmit={addCategory}>
+        <form className="sd-card sd-inline price-composer" onSubmit={addCategory}>
           <input className="sd-input" placeholder="Название категории" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} autoFocus />
-          <button className="sd-btn" type="submit">Добавить категорию</button>
+          <button className="sd-btn-ghost" type="submit">Добавить категорию</button>
         </form>
       )}
 
@@ -183,26 +193,26 @@ function Book() {
         </div>
       </details>
 
-      {groups.named.map(({ category, items }) => (
+      {listed.map(({ category, items }) => (
         <section key={category.id} className="sd-card sd-stack">
           <div className="sd-inline">
             <h2>{category.name}</h2>
             <span className="sd-muted">{ruServices(items.length)}</span>
           </div>
-          {items.length === 0 && (
-            <div className="sd-empty">
-              <span className="sd-empty-mark" />
-              <b>В категории пусто</b>
-              <p className="sd-muted">Добавьте услугу и выберите эту категорию.</p>
-            </div>
-          )}
-          {items.map((row) => <ServiceLine key={row.id} row={row} onEdit={() => edit(row)} onArchive={() => archive(row)} />)}
+          {items.map((row) => <ServiceLine key={row.id} row={row} onEdit={() => edit(row)} />)}
         </section>
       ))}
+      {listed.length === 0 && groups.loose.length === 0 && (
+        <div className="sd-empty sd-card">
+          <span className="sd-empty-mark" />
+          <b>Прайс ещё пуст</b>
+          <p className="sd-muted">Добавьте первую услугу — цена и длительность появятся в записи.</p>
+        </div>
+      )}
       {groups.loose.length > 0 && (
         <section className="sd-card sd-stack">
           <h2>Без категории</h2>
-          {groups.loose.map((row) => <ServiceLine key={row.id} row={row} onEdit={() => edit(row)} onArchive={() => archive(row)} />)}
+          {groups.loose.map((row) => <ServiceLine key={row.id} row={row} onEdit={() => edit(row)} />)}
         </section>
       )}
     </div>
@@ -216,17 +226,15 @@ function ruServices(n: number) {
   return `${n} ${word}`;
 }
 
-function ServiceLine({ row, onEdit, onArchive }: { row: ServiceRow; onEdit: () => void; onArchive: () => void }) {
+function ServiceLine({ row, onEdit }: { row: ServiceRow; onEdit: () => void }) {
   const kit = row.norms.map((norm) => `${norm.name ?? 'материал'} ×${norm.quantity}`).join(', ');
   return (
-    <article className={`price-line ${row.isActive ? '' : 'off'}`}>
-      <div>
+    <button type="button" className={`price-line ${row.isActive ? '' : 'off'}`} onClick={onEdit}>
+      <span>
         <b>{row.name}</b>
         <p className="sd-muted">{row.code || 'без кода'} · {row.durationMin} мин · {kit || 'без набора расходников'}</p>
-      </div>
+      </span>
       <strong>{formatMoney(row.price)}</strong>
-      <button className="sd-btn-ghost" type="button" onClick={onEdit}>Изменить</button>
-      <button className="sd-btn-ghost" type="button" onClick={onArchive}>{row.isActive ? 'В архив' : 'Вернуть'}</button>
-    </article>
+    </button>
   );
 }

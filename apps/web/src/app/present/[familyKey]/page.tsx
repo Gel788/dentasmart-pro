@@ -215,7 +215,7 @@ function Story() {
       )}
       <div className="pv-nav">
         <button className="sd-btn-ghost" type="button" disabled={step === 0} onClick={() => setStep((value) => value - 1)}>Назад</button>
-        <button className="sd-btn" type="button" disabled={step === 5} onClick={() => setStep((value) => value + 1)}>Дальше</button>
+        {step < 5 && <button className="sd-btn" type="button" onClick={() => setStep((value) => value + 1)}>Дальше</button>}
       </div>
     </div>
   );

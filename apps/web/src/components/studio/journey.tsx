@@ -115,7 +115,6 @@ export function PlanJourney({
       </div>
       <div className="jn-stage">
         <section className="jn-chart">
-          <div className="jn-kicker">Клик по зубу оставляет его этап</div>
           <ToothChart
             surfaces={surfaces}
             items={chartItems}

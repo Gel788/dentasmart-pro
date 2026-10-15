@@ -47,6 +47,7 @@ function Cockpit() {
   const [done, setDone] = useState<Record<string, boolean>>({});
   const [note, setNote] = useState({ complaints: '', anamnesis: '', objective: '', diagnosis: '', treatment: '', recommendations: '' });
   const [kit, setKit] = useState<KitLine[]>([]);
+  const [kitOpen, setKitOpen] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [summary, setSummary] = useState(false);
   const [error, setError] = useState('');
@@ -81,14 +82,18 @@ function Cockpit() {
 
   useEffect(() => {
     if (visit?.status !== 'IN_PROGRESS') return;
+    const appointed = Date.parse(visit.startsAt);
+    const since = Date.now() - appointed;
     const key = `sd-timer-${visit.id}`;
-    const started = Number(sessionStorage.getItem(key) ?? Date.now());
+    const started = since > 0 && since < 8 * 3600 * 1000
+      ? appointed
+      : Number(sessionStorage.getItem(key) ?? Date.now());
     sessionStorage.setItem(key, String(started));
-    const tick = () => setSeconds(Math.floor((Date.now() - started) / 1000));
+    const tick = () => setSeconds(Math.max(0, Math.floor((Date.now() - started) / 1000)));
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [visit?.status, visit?.id]);
+  }, [visit?.status, visit?.id, visit?.startsAt]);
 
   const act = async (path: string, body?: unknown) => {
     setError('');
@@ -138,7 +143,7 @@ function Cockpit() {
     visit.patient.contraindications ?? '',
     visit.debt > 0 ? `Долг ${formatMoney(visit.debt)}` : '',
   ].filter(Boolean);
-  const clock = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+  const clock = formatClock(seconds);
   const materialCost = kit.reduce((sum, line) => sum + line.qty * line.cost, 0);
   const checked = items.filter((item) => done[item.id]);
 
@@ -151,7 +156,7 @@ function Cockpit() {
           <div className="sd-chips">{alerts.map((alert) => <span key={alert} className="sd-chip danger">{alert}</span>)}</div>
         </div>
         <div className="ck-clock">
-          <div className="ck-timer">{visit.status === 'IN_PROGRESS' ? clock : '—'}</div>
+          <div className={`ck-timer${visit.status === 'IN_PROGRESS' ? ' live' : ''}`}>{visit.status === 'IN_PROGRESS' ? clock : '—'}</div>
           <div>{visit.status === 'IN_PROGRESS' ? 'в кресле' : visit.status === 'COMPLETED' ? 'закрыт' : 'ожидает'}</div>
         </div>
       </header>
@@ -203,15 +208,18 @@ function Cockpit() {
             onApply={(patch) => setNote({ ...note, ...patch })}
           />
           <div className="sd-card sd-stack">
-            <strong>Расходники</strong>
-            {kit.map((line, index) => (
+            <button className="sd-strip" type="button" onClick={() => setKitOpen((value) => !value)} aria-expanded={kitOpen}>
+              <strong>Расходники</strong>
+              <span>Себестоимость {formatMoney(materialCost)}</span>
+              <em>{kitOpen ? 'Скрыть' : 'Состав'}</em>
+            </button>
+            {kitOpen && kit.map((line, index) => (
               <div key={line.name} className="sd-row" style={{ gridTemplateColumns: '1fr 70px auto' }}>
                 <span>{line.name}</span>
                 <input className="sd-input" type="number" min={0} step={0.1} value={line.qty} onChange={(event) => setKit(kit.map((item, i) => i === index ? { ...item, qty: Number(event.target.value) } : item))} />
                 <span>{formatMoney(line.qty * line.cost)}</span>
               </div>
             ))}
-            <p className="sd-muted">Себестоимость {formatMoney(materialCost)}</p>
           </div>
         </section>
       </div>
@@ -249,6 +257,15 @@ function Cockpit() {
       )}
     </div>
   );
+}
+
+function formatClock(seconds: number) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const rest = seconds % 60;
+  const mm = String(minutes).padStart(2, '0');
+  const ss = String(rest).padStart(2, '0');
+  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
 function kitFor(service: string): KitLine[] {

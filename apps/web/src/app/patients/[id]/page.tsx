@@ -105,9 +105,11 @@ function CardScreen() {
           <button type="button" className={mode === 'imaging' ? 'on' : ''} onClick={() => setMode('imaging')}>Снимки</button>
         </div>
       </div>
-      <div className="sd-alertbar">
-        {card.alerts.length ? card.alerts.map((alert) => <span key={alert.text} className={`sd-chip ${alert.tone}`}>{alert.text}</span>) : <span className="sd-chip">Критических предупреждений нет</span>}
-      </div>
+      {card.alerts.length > 0 && (
+        <div className="sd-alertbar">
+          {card.alerts.map((alert) => <span key={alert.text} className={`sd-chip ${alert.tone}`}>{alert.text}</span>)}
+        </div>
+      )}
       <MarketStrip patientId={params.id} />
       {mode === 'plan' ? (
         <PlanJourney

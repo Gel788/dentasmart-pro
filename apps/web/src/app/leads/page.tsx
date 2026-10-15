@@ -34,6 +34,7 @@ function Desk() {
   const [name, setName] = useState('');
   const [refusing, setRefusing] = useState<string | null>(null);
   const [reason, setReason] = useState('');
+  const [capturing, setCapturing] = useState(false);
 
   const load = () => api<{ items: Lead[]; conversion: number }>('/market/leads')
     .then((data) => { setItems(data.items); setConversion(data.conversion); })
@@ -59,6 +60,7 @@ function Desk() {
       await api('/market/calls/missed', { method: 'POST', body: JSON.stringify({ phone, name }) });
       setPhone('');
       setName('');
+      setCapturing(false);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Звонок не записался');
@@ -84,13 +86,21 @@ function Desk() {
           <h1>Лиды</h1>
           <p>{waiting ? `${waiting} ждут звонка` : 'Очередь пуста'} · конверсия {conversion}%</p>
         </div>
+        {!capturing && (
+          <button className={primaryId ? 'sd-btn-ghost' : 'sd-btn'} type="button" onClick={() => setCapturing(true)}>
+            {primaryId ? 'Пропущенный' : 'Поставить задачу'}
+          </button>
+        )}
       </div>
       {error && <p className="sd-chip danger">{error}</p>}
-      <form className="sd-card sd-inline" onSubmit={miss}>
-        <input className="sd-input" placeholder="Имя" value={name} onChange={(event) => setName(event.target.value)} />
-        <input className="sd-input" required placeholder="Телефон пропущенного" value={phone} onChange={(event) => setPhone(event.target.value)} autoFocus />
-        <button className={primaryId ? 'sd-btn-ghost' : 'sd-btn'} type="submit">Поставить задачу</button>
-      </form>
+      {capturing && (
+        <form className="sd-card sd-inline price-composer" onSubmit={miss}>
+          <input className="sd-input" placeholder="Имя" value={name} onChange={(event) => setName(event.target.value)} />
+          <input className="sd-input" required placeholder="Телефон пропущенного" value={phone} onChange={(event) => setPhone(event.target.value)} autoFocus />
+          <button className={primaryId ? 'sd-btn-ghost' : 'sd-btn'} type="submit">Поставить задачу</button>
+          <button className="sd-btn-ghost" type="button" onClick={() => setCapturing(false)}>Закрыть</button>
+        </form>
+      )}
       <div className="sd-seg">
         {[['ALL', 'Все'], ['CALLBACK', 'Перезвонить'], ['BOOKED', 'Записаны']].map(([key, label]) => (
           <button key={key} type="button" className={filter === key ? 'on' : ''} onClick={() => setFilter(key)}>{label}</button>
@@ -106,6 +116,7 @@ function Desk() {
                 <p className="sd-muted">{row.phone} · {row.source}{row.calls.some((call) => call.missed) ? ' · пропущен' : ''}{row.refusalReason ? ` · ${row.refusalReason}` : ''}</p>
               </div>
               {next && <button className={row.id === primaryId ? 'sd-btn' : 'sd-btn-ghost'} type="button" onClick={() => setStatus(row.id, next.status)}>{next.label}</button>}
+              {!next && <span className="lead-status">{row.status === 'VISITED' ? 'Пришёл' : 'Отказ'}</span>}
               {row.status !== 'REFUSED' && row.status !== 'VISITED' && (
                 refusing === row.id
                   ? <form className="sd-inline" onSubmit={(event) => { event.preventDefault(); void setStatus(row.id, 'REFUSED', reason || 'Не назвал'); }}>

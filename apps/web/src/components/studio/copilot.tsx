@@ -102,7 +102,7 @@ export function Copilot({
           <p>{advice.explanation}</p>
           <div className="sd-inline">
             <button className="sd-btn-ghost" type="button" onClick={() => onApply({ recommendations: advice.explanation })}>В рекомендации пациенту</button>
-            <button className="sd-btn" type="button" onClick={() => {
+            <button className="sd-btn-ghost" type="button" onClick={() => {
               api<{ title: string; total: number }>(`/market/copilot/apply`, { method: 'POST', body: JSON.stringify({ patientId }) })
                 .then((result) => setVoice(`Черновик плана и счёт: ${result.title}, ${formatMoney(result.total)}. Это демо-сборка по прайсу, не диагноз.`))
                 .catch((err: Error) => setError(err.message));

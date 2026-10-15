@@ -178,7 +178,7 @@ function Retention() {
       <section className="sd-card sd-stack">
         <strong>Сделать сейчас</strong>
         {data.followUps.map((item, index) => (
-          <div key={item.id} className="sd-row" style={{ gridTemplateColumns: '1fr auto' }}>
+          <div key={item.id} className={`sd-row${index === 0 ? ' today-now' : ''}`} style={{ gridTemplateColumns: '1fr auto' }}>
             <span><Link href={`/patients/${item.patientId}`}>{item.patient}</Link><div className="sd-muted">{item.reason}</div></span>
             <button className={index === 0 ? 'sd-btn' : 'sd-btn-ghost'} type="button" onClick={() => book(item.patientId, item.patient)}>Записать</button>
           </div>
