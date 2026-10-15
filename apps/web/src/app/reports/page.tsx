@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { PageHeader } from '@/components/ui/page-header';
 import { api } from '@/lib/api';
+import { downloadReport } from '@/lib/download';
 import { formatMoney } from '@/lib/format';
 
 const REPORTS = [
@@ -114,9 +115,12 @@ export default function ReportsPage() {
 
       <div className="ds-card flex flex-wrap gap-2 p-3">
         {REPORTS.map((r) => (
-          <Button key={r.id} variant="ghost" disabled={loading} onClick={() => run(r.id)}>
-            {r.label}
-          </Button>
+          <span key={r.id} className="inline-flex gap-1">
+            <Button variant="ghost" disabled={loading} onClick={() => run(r.id)}>
+              {r.label}
+            </Button>
+            <Button variant="ghost" onClick={() => downloadReport(r.id === 'revenue_by_method' ? 'revenue' : 'sources')}>Excel</Button>
+          </span>
         ))}
       </div>
 

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Calendar, CalendarRange, Moon, RotateCcw, Search, Sun, Tags, Users } from 'lucide-react';
+import { Activity, Calendar, CalendarRange, ClipboardCheck, FlaskConical, Moon, PhoneIncoming, QrCode, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
 import { useFocus } from '@/lib/focus';
@@ -12,10 +12,23 @@ import { ContextPanel } from './studio/panels';
 
 const NAV = [
   { href: '/', label: 'Сегодня', icon: Calendar, perm: 'patient.read' },
+  { href: '/briefing', label: 'Утро', icon: Sunrise, perm: 'patient.read' },
+  { href: '/pulse', label: 'Пульс', icon: Activity, perm: 'patient.read' },
   { href: '/patients', label: 'Пациенты', icon: Users, perm: 'patient.read' },
   { href: '/schedule', label: 'Расписание', icon: CalendarRange, perm: 'schedule.read' },
-  { href: '/return', label: 'Возврат планов', icon: RotateCcw, perm: 'medical.read' },
   { href: '/price', label: 'Прайс', icon: Tags, perm: 'patient.read' },
+  { href: '/portal', label: 'Кабинет пациента', icon: Smartphone, perm: 'patient.read' },
+  { href: '/check-in', label: 'QR стойки', icon: QrCode, perm: 'schedule.read' },
+  { href: '/autopilot', label: 'Автопилот', icon: Repeat, perm: 'patient.read' },
+  { href: '/kpis', label: 'Врачи', icon: Trophy, perm: 'patient.read' },
+  { href: '/return', label: 'Возврат планов', icon: RotateCcw, perm: 'medical.read' },
+  { href: '/import', label: 'Импорт', icon: Upload, perm: 'patient.write' },
+  { href: '/onboarding', label: 'Запуск', icon: Sparkles, perm: 'patient.read' },
+  { href: '/lab', label: 'Лаборатория', icon: FlaskConical, perm: 'medical.read' },
+  { href: '/leads', label: 'Лиды', icon: PhoneIncoming, perm: 'patient.read' },
+  { href: '/quality', label: 'Качество', icon: ClipboardCheck, perm: 'medical.read' },
+  { href: '/insurance', label: 'ДМС', icon: Shield, perm: 'finance.read' },
+  { href: '/settings', label: 'Настройки', icon: Settings, perm: 'org.manage' },
 ];
 
 type Hit = { id: string; firstName: string; lastName: string; phone: string | null };

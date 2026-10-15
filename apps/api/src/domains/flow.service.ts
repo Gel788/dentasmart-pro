@@ -1,5 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ClinicConfigService } from './clinic-config.service';
 
 export const PHOTO_SLOTS = [
   { code: 'FACE_SMILE', label: 'Лицо, улыбка' },
@@ -25,7 +26,10 @@ const NEXT: Record<string, string[]> = {
 
 @Injectable()
 export class FlowService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ClinicConfigService,
+  ) {}
 
   async visit(orgId: string, id: string) {
     const appointment = await this.prisma.appointment.findFirst({
@@ -194,13 +198,30 @@ export class FlowService {
   async saveNote(
     orgId: string,
     id: string,
-    body: { complaints?: string; anamnesis?: string; objective?: string; diagnosis?: string; treatment?: string; recommendations?: string },
+    userId: string,
+    body: { complaints?: string; anamnesis?: string; objective?: string; diagnosis?: string; treatment?: string; recommendations?: string; reason?: string },
   ) {
-    await this.must(orgId, id);
+    const appointment = await this.must(orgId, id);
+    if (appointment.status === 'COMPLETED') {
+      const policy = await this.config.policy(userId);
+      if (!policy.editClosedVisits) throw new ForbiddenException('Закрытый визит правит только роль с этим правом');
+      if (!body.reason || body.reason.trim().length < 3) throw new BadRequestException('Укажите причину правки закрытого визита');
+      await this.prisma.auditLog.create({
+        data: {
+          organizationId: orgId,
+          userId,
+          entityType: 'Appointment',
+          entityId: id,
+          action: 'UPDATE',
+          changes: { reason: body.reason.trim(), diagnosis: body.diagnosis ?? '' },
+        },
+      });
+    }
+    const { reason: _reason, ...note } = body;
     await this.prisma.visitNote.upsert({
       where: { appointmentId: id },
-      create: { appointmentId: id, ...body },
-      update: body,
+      create: { appointmentId: id, ...note },
+      update: note,
     });
     return this.visit(orgId, id);
   }

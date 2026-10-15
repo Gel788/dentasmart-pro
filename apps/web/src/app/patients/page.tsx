@@ -25,11 +25,21 @@ export default function PatientsPage() {
 function List() {
   const router = useRouter();
   const { setFocus } = useFocus();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState<string | null>(null);
   const [rows, setRows] = useState<Patient[]>([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    setQuery(sessionStorage.getItem('sd.patients.q') ?? '');
+  }, []);
+
+  useEffect(() => {
+    if (query === null) return;
+    sessionStorage.setItem('sd.patients.q', query);
+  }, [query]);
+
+  useEffect(() => {
+    if (query === null) return;
     const handle = setTimeout(() => {
       api<{ items: Patient[] }>(`/patients?search=${encodeURIComponent(query)}&pageSize=40`)
         .then((res) => setRows(res.items))
@@ -45,7 +55,7 @@ function List() {
           <h1>Пациенты</h1>
           <p>Поиск по фамилии и телефону. Карта открывается сразу.</p>
         </div>
-        <input className="sd-input" style={{ maxWidth: 280 }} placeholder="Смирнова или 900" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input className="sd-input" style={{ maxWidth: 280 }} placeholder="Смирнова или 900" value={query ?? ''} onChange={(e) => setQuery(e.target.value)} />
       </div>
       {error && <p>{error}</p>}
       <div className="sd-card">

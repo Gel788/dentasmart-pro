@@ -34,6 +34,9 @@ export default function LabPage() {
   const [doctorId, setDoctorId] = useState('');
   const [dueAt, setDueAt] = useState('');
   const [costAmount, setCostAmount] = useState('');
+  const [labName, setLabName] = useState('');
+  const [technician, setTechnician] = useState('');
+  const [fittingAt, setFittingAt] = useState('');
   const [patients, setPatients] = useState<{ id: string; firstName: string; lastName: string }[]>([]);
   const [doctors, setDoctors] = useState<{ id: string; firstName: string; lastName: string }[]>([]);
   const [scanError, setScanError] = useState('');
@@ -58,6 +61,9 @@ export default function LabPage() {
         doctorId: doctorId || undefined,
         dueAt: dueAt || undefined,
         costAmount: costAmount ? Number(costAmount) : undefined,
+        labName: labName || undefined,
+        technician: technician || undefined,
+        fittingAt: fittingAt || undefined,
       }),
     });
     setModal(false);
@@ -74,6 +80,9 @@ export default function LabPage() {
     dueAt?: string | null;
     costAmount?: string | null;
     stlFileUrl?: string | null;
+    labName?: string | null;
+    technician?: string | null;
+    fittingAt?: string | null;
   }[];
   const overdue = orderList.filter((order) => order.dueAt && !['DELIVERED', 'REJECTED'].includes(order.status) && new Date(order.dueAt) < new Date());
 
@@ -87,6 +96,9 @@ export default function LabPage() {
       />
 
       {scanError && <p className="mb-4 border-l-4 border-[var(--danger)] bg-[var(--danger-soft)] px-4 py-3 text-sm text-[var(--danger)]">{scanError}</p>}
+      <p className="mb-4 text-sm text-[var(--muted)]">
+        Себестоимость лаборатории по нарядам: {orderList.reduce((sum, order) => sum + Number(order.costAmount ?? 0), 0).toLocaleString('ru-RU')} ₽. Эта сумма входит в себестоимость услуги и не прибавляется к цене пациента.
+      </p>
       {!!overdue.length && (
         <div className="mb-4 border-l-4 border-[var(--danger)] bg-[var(--danger-soft)] px-4 py-3 text-sm text-[var(--danger)]">
           Просрочено нарядов: {overdue.length}. {overdue.map((order) => order.title).join(', ')}
@@ -112,6 +124,8 @@ export default function LabPage() {
                     </p>
                   )}
                   {o.shade && <p className="mt-0.5 text-xs text-[var(--muted)]">Оттенок: {o.shade}</p>}
+                  {(o.labName || o.technician) && <p className="text-xs text-[var(--muted)]">{[o.labName, o.technician].filter(Boolean).join(' · ')}</p>}
+                  {o.fittingAt && <p className="text-xs text-[var(--muted)]">Примерка: {new Date(o.fittingAt).toLocaleDateString('ru-RU')}</p>}
                 </div>
                 <Badge variant={STATUS_VARIANT[o.status] ?? 'default'}>{LAB_LABEL[o.status] ?? o.status}</Badge>
               </div>
@@ -183,6 +197,20 @@ export default function LabPage() {
               <option value="">Не выбран</option>
               {doctors.map((d) => <option key={d.id} value={d.id}>{d.lastName} {d.firstName}</option>)}
             </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label>Лаборатория</Label>
+              <Input value={labName} onChange={(e) => setLabName(e.target.value)} />
+            </div>
+            <div>
+              <Label>Техник</Label>
+              <Input value={technician} onChange={(e) => setTechnician(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <Label>Примерка</Label>
+            <Input type="date" aria-label="Дата примерки" value={fittingAt} onChange={(e) => setFittingAt(e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>

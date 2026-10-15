@@ -29,6 +29,12 @@ import { WorkspaceController } from './workspace.controller';
 import { WorkspaceService } from './workspace.service';
 import { FlowController } from './flow.controller';
 import { FlowService } from './flow.service';
+import { ShowcaseController } from './showcase.controller';
+import { ShowcaseService } from './showcase.service';
+import { ClinicConfigController } from './clinic-config.controller';
+import { ClinicConfigService } from './clinic-config.service';
+import { MarketController, OpenApiController } from './market.controller';
+import { MarketService } from './market.service';
 
 @Module({
   controllers: [
@@ -47,6 +53,10 @@ import { FlowService } from './flow.service';
     SterilizationController,
     WorkspaceController,
     FlowController,
+    ShowcaseController,
+    ClinicConfigController,
+    MarketController,
+    OpenApiController,
   ],
   providers: [
     ClinicalService,
@@ -64,6 +74,9 @@ import { FlowService } from './flow.service';
     SterilizationService,
     WorkspaceService,
     FlowService,
+    ShowcaseService,
+    ClinicConfigService,
+    MarketService,
   ],
 })
 export class DomainsModule {}

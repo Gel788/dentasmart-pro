@@ -67,10 +67,11 @@ export class FlowController {
   @RequirePermissions('medical.write')
   note(
     @OrgId() orgId: string,
+    @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Body() body: { complaints?: string; anamnesis?: string; objective?: string; diagnosis?: string; treatment?: string; recommendations?: string },
+    @Body() body: { complaints?: string; anamnesis?: string; objective?: string; diagnosis?: string; treatment?: string; recommendations?: string; reason?: string },
   ) {
-    return this.flow.saveNote(orgId, id, body);
+    return this.flow.saveNote(orgId, id, user.id, body);
   }
 
   @Post('visits/:id/complete')

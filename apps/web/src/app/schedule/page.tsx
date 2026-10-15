@@ -28,14 +28,28 @@ export default function SchedulePage() {
 function Board() {
   const { setFocus, revision } = useFocus();
   const router = useRouter();
-  const [mode, setMode] = useState<'chair' | 'doctor'>('chair');
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [mode, setMode] = useState<'chair' | 'doctor' | null>(null);
+  const [date, setDate] = useState<string | null>(null);
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState('');
   const [over, setOver] = useState<string | null>(null);
   const skipClick = useRef(false);
 
   useEffect(() => {
+    const savedDate = sessionStorage.getItem('sd.schedule.date');
+    const savedMode = sessionStorage.getItem('sd.schedule.mode');
+    setDate(savedDate || new Date().toISOString().slice(0, 10));
+    setMode(savedMode === 'doctor' ? 'doctor' : 'chair');
+  }, []);
+
+  useEffect(() => {
+    if (!date || !mode) return;
+    sessionStorage.setItem('sd.schedule.date', date);
+    sessionStorage.setItem('sd.schedule.mode', mode);
+  }, [date, mode]);
+
+  useEffect(() => {
+    if (!date) return;
     api<Payload>(`/workspace/schedule?date=${date}`).then(setData).catch((err: Error) => setError(err.message));
   }, [date, revision]);
 
@@ -46,6 +60,7 @@ function Board() {
   }, [data, mode]);
 
   const shift = (days: number) => {
+    if (!date) return;
     const next = new Date(date);
     next.setDate(next.getDate() + days);
     setDate(next.toISOString().slice(0, 10));
@@ -60,11 +75,11 @@ function Board() {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <div className="sd-seg">
-            <button type="button" className={mode === 'chair' ? 'on' : ''} onClick={() => setMode('chair')}>Кресла</button>
+            <button type="button" className={mode !== 'doctor' ? 'on' : ''} onClick={() => setMode('chair')}>Кресла</button>
             <button type="button" className={mode === 'doctor' ? 'on' : ''} onClick={() => setMode('doctor')}>Врачи</button>
           </div>
           <button className="sd-btn-ghost" type="button" onClick={() => shift(-1)}>←</button>
-          <input className="sd-input" style={{ width: 150 }} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <input className="sd-input" style={{ width: 150 }} type="date" value={date ?? ''} onChange={(e) => setDate(e.target.value)} />
           <button className="sd-btn-ghost" type="button" onClick={() => shift(1)}>→</button>
         </div>
       </div>

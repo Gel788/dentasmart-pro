@@ -6,6 +6,7 @@ import { Protected } from '@/components/protected';
 import { api, assetUrl } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import type { PlanCard } from '@/components/studio/plans';
+import { SmilePreview } from '@/components/studio/smile';
 
 type Payload = {
   patient: { id: string; firstName: string; lastName: string };
@@ -34,6 +35,7 @@ function Story() {
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const [done, setDone] = useState<{ appointments: { startsAt: string; title: string }[] } | null>(null);
+  const [chosen, setChosen] = useState<Record<string, boolean>>({});
   const canvas = useRef<HTMLCanvasElement>(null);
   const ink = useRef(false);
 
@@ -43,6 +45,7 @@ function Story() {
       setName(`${payload.patient.lastName} ${payload.patient.firstName}`);
       const recommended = payload.plans.find((plan) => plan.tier === 'OPTIMUM');
       if (recommended && recommended.installmentMonths >= 2) setMonths(recommended.installmentMonths);
+      if (recommended) setChosen(Object.fromEntries(recommended.phases.map((phase) => [phase.id, true])));
       api<{ compare: { before: string | null; after: string | null }; studies: { type: string; fileUrl: string }[] }>(`/flow/patients/${payload.patient.id}/imaging`)
         .then((imaging) => setPhotos({
           before: imaging.compare.before,
@@ -65,9 +68,11 @@ function Story() {
     setError('');
     try {
       const signatureSvg = canvas.current?.toDataURL('image/png') ?? '';
-      const response = await api<{ appointments: { startsAt: string; title: string }[] }>(`/workspace/plans/${recommended.id}/accept`, {
+      const phaseIds = recommended.phases.filter((phase) => chosen[phase.id] !== false).map((phase) => phase.id);
+      const partial = phaseIds.length > 0 && phaseIds.length < recommended.phases.length;
+      const response = await api<{ appointments: { startsAt: string; title: string }[] }>(`/workspace/plans/${recommended.id}/${partial ? 'accept-partial' : 'accept'}`, {
         method: 'POST',
-        body: JSON.stringify({ signedName: name, signatureSvg }),
+        body: JSON.stringify({ signedName: name, signatureSvg, phaseIds }),
       });
       setDone(response);
     } catch (err) {
@@ -125,6 +130,7 @@ function Story() {
               <img src={assetUrl(photos.after)} alt="После" />
             </div>
           ) : <p>Фотопротокола пока нет.</p>}
+          <SmilePreview sampleUrl={photos.before ? assetUrl(photos.before) : null} />
         </section>
       )}
       {step === 3 && (
@@ -161,6 +167,13 @@ function Story() {
           ) : (
             <div className="pv-sign">
               <p>Я, {name || data.patient.firstName}, выбираю вариант «{recommended.tierLabel}».</p>
+              {recommended.phases.map((phase) => (
+                <label key={phase.id} className="sd-row" style={{ gridTemplateColumns: 'auto 1fr' }}>
+                  <input type="checkbox" checked={chosen[phase.id] !== false} onChange={(event) => setChosen({ ...chosen, [phase.id]: event.target.checked })} />
+                  <span>{phase.title}</span>
+                </label>
+              ))}
+              <p className="sd-muted">Снимите галочку с этапа, если пациент согласен только на часть плана.</p>
               <canvas
                 ref={canvas}
                 className="sd-sign"

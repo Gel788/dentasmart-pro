@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ToothCondition, ToothFormulaType } from '@dentasmart/database';
 import { PrismaService } from '../prisma/prisma.service';
+import { ClinicConfigService } from './clinic-config.service';
 
 type Role = 'owner' | 'doctor' | 'reception';
 
@@ -22,7 +23,10 @@ const TIER_LABEL: Record<string, string> = {
 
 @Injectable()
 export class WorkspaceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ClinicConfigService,
+  ) {}
 
   roleOf(permissions: string[]): Role {
     if (permissions.includes('analytics.read')) return 'owner';
@@ -487,22 +491,67 @@ export class WorkspaceService {
     };
   }
 
-  async saveDraft(orgId: string, planId: string, body: { discountPercent?: number }, limit: number) {
+  async saveDraft(orgId: string, planId: string, body: { discountPercent?: number }, userId: string) {
     const plan = await this.prisma.treatmentPlan.findFirst({
       where: { id: planId, organizationId: orgId },
       include: { items: true },
     });
     if (!plan) throw new NotFoundException('План не найден');
+    const policy = await this.config.policy(userId);
+    const limit = policy.maxDiscountPercent;
     const discount = body.discountPercent ?? Number(plan.discountPercent);
     if (discount < 0 || discount > limit) throw new BadRequestException(`Для вашей роли скидка не больше ${limit}%`);
-    await this.prisma.treatmentPlan.update({
-      where: { id: plan.id },
-      data: { discountPercent: discount, presentedAt: plan.presentedAt ?? new Date() },
-    });
     const subtotal = plan.items.filter((item) => item.status !== 'REJECTED').reduce((sum, item) => sum + Number(item.price), 0);
     const total = round2(subtotal * (1 - discount / 100));
-    await this.prisma.treatmentPlan.update({ where: { id: plan.id }, data: { totalPrice: total } });
-    return { savedAt: new Date().toISOString(), discountPercent: discount, total };
+    await this.prisma.treatmentPlan.update({
+      where: { id: plan.id },
+      data: { discountPercent: discount, totalPrice: total, presentedAt: plan.presentedAt ?? new Date() },
+    });
+    const version = await this.prisma.planVersion.create({
+      data: {
+        organizationId: orgId,
+        planId: plan.id,
+        note: 'Сохранение',
+        snapshot: {
+          discountPercent: discount,
+          total,
+          items: plan.items.map((item) => ({ id: item.id, title: item.title, price: Number(item.price), status: item.status, toothNum: item.toothNum })),
+        },
+      },
+    });
+    await this.prisma.auditLog.create({
+      data: { organizationId: orgId, userId, entityType: 'TreatmentPlan', entityId: plan.id, action: 'UPDATE', changes: { discount, total, versionId: version.id } },
+    });
+    return { savedAt: version.createdAt.toISOString(), discountPercent: discount, total, versionId: version.id };
+  }
+
+  async versions(orgId: string, planId: string) {
+    const rows = await this.prisma.planVersion.findMany({
+      where: { organizationId: orgId, planId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+    return rows.map((row) => ({ id: row.id, note: row.note, createdAt: row.createdAt, snapshot: row.snapshot }));
+  }
+
+  async restoreVersion(orgId: string, planId: string, versionId: string, userId: string) {
+    const version = await this.prisma.planVersion.findFirst({ where: { id: versionId, planId, organizationId: orgId } });
+    if (!version) throw new NotFoundException('Версия не найдена');
+    const snapshot = version.snapshot as { discountPercent?: number; total?: number; items?: { id: string; price: number; status: string }[] };
+    await this.prisma.treatmentPlan.update({
+      where: { id: planId },
+      data: { discountPercent: snapshot.discountPercent ?? 0, totalPrice: snapshot.total ?? 0 },
+    });
+    for (const item of snapshot.items ?? []) {
+      await this.prisma.treatmentPlanItem.updateMany({
+        where: { id: item.id, planId },
+        data: { price: item.price, status: item.status as 'PROPOSED' },
+      });
+    }
+    await this.prisma.auditLog.create({
+      data: { organizationId: orgId, userId, entityType: 'TreatmentPlan', entityId: planId, action: 'UPDATE', changes: { restored: versionId } },
+    });
+    return { ok: true, versionId };
   }
 
   async accept(orgId: string, planId: string, body: { signedName: string; signatureSvg: string }, employeeId?: string) {
@@ -688,6 +737,156 @@ export class WorkspaceService {
           }
         : null,
     };
+  }
+
+  async acceptPartial(
+    orgId: string,
+    planId: string,
+    body: { signedName: string; signatureSvg: string; phaseIds: string[] },
+    employeeId?: string,
+  ) {
+    const phaseIds = body.phaseIds ?? [];
+    if (!phaseIds.length) throw new BadRequestException('Отметьте хотя бы один этап');
+    const name = body.signedName?.trim();
+    if (!name || name.length < 2) throw new BadRequestException('Нужна подпись пациента: имя и фамилия');
+    if (!body.signatureSvg || body.signatureSvg.length < 40) throw new BadRequestException('Поставьте подпись на планшете');
+    const plan = await this.prisma.treatmentPlan.findFirst({
+      where: { id: planId, organizationId: orgId },
+      include: { phases: { orderBy: { sortOrder: 'asc' }, include: { items: true } }, patient: true },
+    });
+    if (!plan) throw new NotFoundException('План не найден');
+    const chosen = plan.phases.filter((phase) => phaseIds.includes(phase.id));
+    if (!chosen.length) throw new BadRequestException('Таких этапов в плане нет');
+    const full = chosen.length === plan.phases.length;
+    const branch = await this.prisma.branch.findFirst({
+      where: { organizationId: orgId, isActive: true },
+      include: { cabinets: { where: { isActive: true } } },
+    });
+    if (!branch) throw new BadRequestException('Нет филиала для записи');
+    const doctorId = plan.doctorId ?? employeeId ?? null;
+    const chosenItems = chosen.flatMap((phase) => phase.items).filter((item) => item.status !== 'REJECTED' && item.status !== 'DONE');
+    const total = round2(chosenItems.reduce((sum, item) => sum + Number(item.price), 0));
+    const appointments: { id: string; startsAt: Date; title: string }[] = [];
+    await this.prisma.$transaction(async (tx) => {
+      await tx.treatmentPlan.update({
+        where: { id: plan.id },
+        data: {
+          status: full ? 'ACCEPTED' : 'IN_PROGRESS',
+          acceptedAt: new Date(),
+          signedAt: new Date(),
+          signedName: name,
+          signatureSvg: body.signatureSvg,
+          totalPrice: total,
+          abandonedAt: null,
+        },
+      });
+      await tx.treatmentPlanItem.updateMany({
+        where: { id: { in: chosenItems.map((item) => item.id) } },
+        data: { status: 'ACCEPTED' },
+      });
+      if (plan.familyKey) {
+        await tx.treatmentPlan.updateMany({
+          where: { familyKey: plan.familyKey, id: { not: plan.id }, status: { in: ['DRAFT', 'PROPOSED'] } },
+          data: { status: 'REJECTED' },
+        });
+      }
+      let cursor = nextMorning();
+      for (const phase of chosen) {
+        const open = phase.items.filter((item) => item.status !== 'REJECTED' && item.status !== 'DONE');
+        if (!open.length) continue;
+        const minutes = Math.max(30, open.reduce((sum, item) => sum + (item.durationMin || 30), 0));
+        const slot = await this.findSlot(tx, doctorId, branch.cabinets.map((cabinet) => cabinet.id), cursor, minutes);
+        const appointment = await tx.appointment.create({
+          data: {
+            organizationId: orgId,
+            branchId: branch.id,
+            cabinetId: slot.cabinetId,
+            doctorId: doctorId ?? undefined,
+            patientId: plan.patientId,
+            serviceId: open[0].serviceId,
+            startsAt: slot.startsAt,
+            endsAt: slot.endsAt,
+            status: 'SCHEDULED',
+            notes: `${plan.title} · ${phase.title}`,
+          },
+        });
+        await tx.treatmentPlanItem.updateMany({
+          where: { id: { in: open.map((item) => item.id) } },
+          data: { appointmentId: appointment.id, status: 'ACCEPTED' },
+        });
+        appointments.push({ id: appointment.id, startsAt: slot.startsAt, title: phase.title });
+        cursor = addDays(slot.endsAt, 1);
+        cursor.setHours(10, 0, 0, 0);
+      }
+      await tx.invoice.create({
+        data: {
+          organizationId: orgId,
+          patientId: plan.patientId,
+          treatmentPlanId: plan.id,
+          number: `SD-${Date.now().toString().slice(-8)}`,
+          status: 'ISSUED',
+          totalAmount: total,
+          dueDate: addDays(new Date(), 7),
+          items: {
+            create: chosenItems.map((item) => ({
+              planItemId: item.id,
+              serviceId: item.serviceId,
+              toothNum: item.toothNum,
+              title: item.toothNum ? `${item.title} · зуб ${item.toothNum}` : item.title,
+              price: item.price,
+            })),
+          },
+        },
+      });
+    });
+    return { planId: plan.id, status: full ? 'ACCEPTED' : 'IN_PROGRESS', partial: !full, appointments };
+  }
+
+  async bookPhase(orgId: string, planId: string, phaseId: string, employeeId?: string) {
+    const plan = await this.prisma.treatmentPlan.findFirst({
+      where: { id: planId, organizationId: orgId },
+      include: { phases: { include: { items: true } } },
+    });
+    if (!plan) throw new NotFoundException('План не найден');
+    if (!['ACCEPTED', 'IN_PROGRESS', 'PROPOSED', 'DRAFT'].includes(plan.status)) {
+      throw new BadRequestException('Этот план уже нельзя записать');
+    }
+    const phase = plan.phases.find((row) => row.id === phaseId);
+    if (!phase) throw new NotFoundException('Этап не найден');
+    const open = phase.items.filter((item) => item.status !== 'REJECTED' && item.status !== 'DONE');
+    if (!open.length) throw new BadRequestException('В этапе нечего записывать');
+    const existing = open.find((item) => item.appointmentId);
+    if (existing?.appointmentId) {
+      const appointment = await this.prisma.appointment.findUnique({ where: { id: existing.appointmentId } });
+      return { appointmentId: existing.appointmentId, startsAt: appointment?.startsAt, already: true };
+    }
+    const branch = await this.prisma.branch.findFirst({
+      where: { organizationId: orgId, isActive: true },
+      include: { cabinets: { where: { isActive: true } } },
+    });
+    if (!branch) throw new BadRequestException('Нет филиала');
+    const doctorId = plan.doctorId ?? employeeId ?? null;
+    const minutes = Math.max(30, open.reduce((sum, item) => sum + (item.durationMin || 30), 0));
+    const slot = await this.findSlot(this.prisma, doctorId, branch.cabinets.map((cabinet) => cabinet.id), nextMorning(), minutes);
+    const appointment = await this.prisma.appointment.create({
+      data: {
+        organizationId: orgId,
+        branchId: branch.id,
+        cabinetId: slot.cabinetId,
+        doctorId: doctorId ?? undefined,
+        patientId: plan.patientId,
+        serviceId: open[0].serviceId,
+        startsAt: slot.startsAt,
+        endsAt: slot.endsAt,
+        status: 'SCHEDULED',
+        notes: `${plan.title} · ${phase.title}`,
+      },
+    });
+    await this.prisma.treatmentPlanItem.updateMany({
+      where: { id: { in: open.map((item) => item.id) } },
+      data: { appointmentId: appointment.id },
+    });
+    return { appointmentId: appointment.id, startsAt: appointment.startsAt, title: phase.title, already: false };
   }
 
   async abandon(orgId: string, planId: string) {

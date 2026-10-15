@@ -7,6 +7,7 @@ import { ToothChart, type ChartItem, type ChartSurface } from '@/components/stud
 import { PerioChart } from '@/components/studio/perio';
 import { ImagingBoard } from '@/components/studio/imaging';
 import { PlanJourney } from '@/components/studio/journey';
+import { MarketStrip } from '@/components/studio/market-strip';
 import { type Family, type PlanCard } from '@/components/studio/plans';
 import { api } from '@/lib/api';
 import { useFocus } from '@/lib/focus';
@@ -47,11 +48,21 @@ function CardScreen() {
     setActivePlan((current) => current ?? data.families[0]?.plans.find((plan) => plan.tier === 'OPTIMUM')?.id ?? data.families[0]?.plans[0]?.id ?? null);
   }).catch((err: Error) => setError(err.message));
 
+  const [modeReady, setModeReady] = useState(false);
+
   useEffect(() => {
     setFocus({ type: 'patient', id: params.id });
+    const saved = sessionStorage.getItem(`sd.card.${params.id}.mode`);
+    if (saved === 'plan' || saved === 'formula' || saved === 'perio' || saved === 'imaging') setMode(saved);
+    setModeReady(true);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
+
+  useEffect(() => {
+    if (!modeReady) return;
+    sessionStorage.setItem(`sd.card.${params.id}.mode`, mode);
+  }, [mode, params.id, modeReady]);
 
   const plans = useMemo(() => card?.families.flatMap((family) => family.plans) ?? [], [card]);
   const picked: PlanCard | undefined = plans.find((plan) => plan.id === activePlan) ?? plans[0];
@@ -89,6 +100,7 @@ function CardScreen() {
       <div className="sd-alertbar">
         {card.alerts.length ? card.alerts.map((alert) => <span key={alert.text} className={`sd-chip ${alert.tone}`}>{alert.text}</span>) : <span className="sd-chip">Критических предупреждений нет</span>}
       </div>
+      <MarketStrip patientId={params.id} />
       <div className="sd-seg">
         <button type="button" className={mode === 'plan' ? 'on' : ''} onClick={() => setMode('plan')}>План</button>
         <button type="button" className={mode === 'formula' ? 'on' : ''} onClick={() => setMode('formula')}>Формула</button>

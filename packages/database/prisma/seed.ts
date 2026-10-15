@@ -241,6 +241,15 @@ const PERMISSIONS = [
   { code: 'analytics.read', module: 'analytics', description: 'Просмотр аналитики' },
 ];
 
+const ROLE_POLICY: Record<string, { seeCost: boolean; maxDiscountPercent: number; editClosedVisits: boolean; editPrice: boolean; seeAllFinance: boolean; canExport: boolean }> = {
+  owner: { seeCost: true, maxDiscountPercent: 40, editClosedVisits: true, editPrice: true, seeAllFinance: true, canExport: true },
+  manager: { seeCost: true, maxDiscountPercent: 20, editClosedVisits: false, editPrice: true, seeAllFinance: true, canExport: true },
+  admin: { seeCost: false, maxDiscountPercent: 10, editClosedVisits: false, editPrice: false, seeAllFinance: false, canExport: true },
+  doctor: { seeCost: false, maxDiscountPercent: 15, editClosedVisits: false, editPrice: false, seeAllFinance: false, canExport: false },
+  assistant: { seeCost: false, maxDiscountPercent: 0, editClosedVisits: false, editPrice: false, seeAllFinance: false, canExport: false },
+  accountant: { seeCost: true, maxDiscountPercent: 0, editClosedVisits: false, editPrice: false, seeAllFinance: true, canExport: true },
+};
+
 const ROLES: Record<string, string[]> = {
   owner: PERMISSIONS.map((p) => p.code),
   manager: [
@@ -326,7 +335,20 @@ async function main() {
         permissionId: permissionMap[permCode],
       })),
     });
+    const policy = ROLE_POLICY[code];
+    if (policy) await prisma.role.update({ where: { id: role.id }, data: policy });
   }
+
+  const accountantPerms = ['patient.read', 'finance.read', 'finance.write', 'analytics.read'];
+  const accountant = await prisma.role.upsert({
+    where: { organizationId_code: { organizationId: org.id, code: 'accountant' } },
+    create: { organizationId: org.id, code: 'accountant', name: 'Бухгалтер', isSystem: true, ...ROLE_POLICY.accountant },
+    update: { name: 'Бухгалтер', ...ROLE_POLICY.accountant },
+  });
+  await prisma.rolePermission.deleteMany({ where: { roleId: accountant.id } });
+  await prisma.rolePermission.createMany({
+    data: accountantPerms.map((permCode) => ({ roleId: accountant.id, permissionId: permissionMap[permCode] })),
+  });
 
   const passwordHash = await bcrypt.hash('demo12345', 10);
   const user = await prisma.user.upsert({
@@ -851,6 +873,39 @@ async function main() {
       },
     ],
   });
+
+  const abandonedAt = new Date();
+  abandonedAt.setDate(abandonedAt.getDate() - 16);
+  await seedTier({
+    id: 'seed-plan-petr-abandoned',
+    organizationId: org.id,
+    patientId: 'seed-patient-petr',
+    doctorId: doctor2.id,
+    title: 'Имплант 36 · Оптимум',
+    tier: 'OPTIMUM',
+    familyKey: 'seed-family-petr',
+    guaranteeMonths: 24,
+    durationWeeks: 16,
+    installmentMonths: 6,
+    createdAt: abandonedAt,
+    presentedAt: abandonedAt,
+    phases: [
+      {
+        title: 'Имплантация',
+        specialty: 'Хирургия',
+        healingDays: 90,
+        items: [{ title: 'Установка импланта', toothNum: 36, surfaces: [], price: 45000, listPrice: 45000, serviceId: implant?.id, durationMin: 90, sortOrder: 1 }],
+      },
+      {
+        title: 'Коронка',
+        specialty: 'Ортопедия',
+        healingDays: 0,
+        dependsOnSort: 1,
+        items: [{ title: 'Коронка на имплант', toothNum: 36, surfaces: [], price: 28000, listPrice: 28000, serviceId: crown?.id, durationMin: 60, sortOrder: 1 }],
+      },
+    ],
+  });
+  await prisma.treatmentPlan.update({ where: { id: 'seed-plan-petr-abandoned' }, data: { abandonedAt } });
 
   await prisma.treatmentPlan.create({
     data: {

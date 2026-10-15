@@ -95,6 +95,7 @@ button { cursor: pointer; }
   border-right: 1px solid var(--border);
   background: var(--nav);
   backdrop-filter: blur(18px);
+  overflow: auto;
 }
 .sd-brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px; }
 .sd-mark {
@@ -225,6 +226,22 @@ html.dark .sd-mark { color: #042f2e; }
 .sd-metric em { font-style: normal; color: var(--muted); font-size: 12px; }
 .sd-split { display: grid; grid-template-columns: 1.4fr 0.8fr; gap: 12px; }
 .sd-stack { display: flex; flex-direction: column; gap: 12px; }
+.sd-inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sd-inline .sd-input { flex: 1; min-width: 140px; }
+.sd-grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.price-book h2 { margin: 0; font-size: 18px; }
+.price-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.price-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.price-line { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); }
+.price-line.off { opacity: 0.5; }
+.price-line strong { font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) {
+  .price-fields { grid-template-columns: 1fr 1fr; }
+  .price-line { grid-template-columns: 1fr; }
+}
+.sd-kpi { text-align: right; }
+.sd-kpi b { display: block; font-size: 28px; letter-spacing: -0.04em; }
+.sd-kpi span { color: var(--muted); font-size: 12px; }
 
 .sd-row {
   display: grid;
@@ -312,7 +329,7 @@ html.dark .sd-btn { color: #042f2e; }
 .sd-bars i:hover { filter: brightness(1.08); transform: scaleY(1.04); }
 @keyframes sd-grow { from { transform: scaleY(0.08); opacity: 0.4; } to { transform: none; opacity: 1; } }
 
-.sd-seg { display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--surface-solid) 70%, transparent); box-shadow: var(--shadow-soft); }
+.sd-seg { display: inline-flex; flex-wrap: wrap; padding: 3px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--surface-solid) 70%, transparent); box-shadow: var(--shadow-soft); }
 .sd-seg button { height: 28px; padding: 0 12px; border-radius: 9px; background: transparent; color: var(--muted); transition: background 160ms ease, color 160ms ease; }
 .sd-seg button.on { background: linear-gradient(180deg, #fff, var(--accent-soft)); color: var(--accent-ink); box-shadow: 0 4px 10px rgba(15, 118, 110, 0.12); }
 html.dark .sd-seg button.on { background: var(--accent-soft); }
@@ -609,4 +626,119 @@ html.dark .sd-appt { background: linear-gradient(180deg, rgba(15, 118, 110, 0.55
 @media (max-width: 960px) {
   .jn-stage, .jn-tabs, .ck-grid, .pv-photos { grid-template-columns: 1fr; }
   .jn-chart { position: static; }
+  .wow-grid, .wow-metrics, .wow-chairs, .wow-split, .wow-rules, .wow-sources, .wow-check-grid { grid-template-columns: 1fr; }
 }
+
+.wow h1, .wow-setup h1 { font-family: Georgia, 'Times New Roman', serif; font-weight: 500; letter-spacing: -0.03em; margin: 0; }
+.wow-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-bottom: 18px; }
+.wow-head p { color: var(--muted); max-width: 640px; }
+.wow-kicker { margin: 0 0 6px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-size: 12px; }
+.wow-demo { display: inline-flex; margin-bottom: 6px; padding: 2px 8px; border-radius: 999px; background: #ffedd5; color: #9a3412; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+.wow-metrics, .wow-rules, .wow-sources { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.wow-rules, .wow-sources { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.wow-metrics article, .wow-rules article, .wow-sources button, .wow-sources label, .wow-person, .wow-chair, .wow-slots, .wow-split section, .wow-queue label, .wow-board article, .wow-map, .wow-check section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-soft);
+  padding: 14px 16px;
+}
+.wow-metrics article { animation: wow-rise 520ms ease both; }
+.wow-metrics span, .wow-kpi-num span { color: var(--muted); display: block; }
+.wow-metrics strong { display: block; margin-top: 6px; font-size: 26px; letter-spacing: -0.04em; }
+.wow-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.wow-person { display: block; text-decoration: none; color: inherit; animation: wow-rise 560ms ease both; transition: transform 160ms ease; }
+.wow-person:hover { transform: translateY(-3px); }
+.wow-person time { color: #0f766e; font-variant-numeric: tabular-nums; }
+.wow-person p, .wow-chair p, .wow-rules p { margin: 4px 0; color: var(--muted); }
+.wow-slots { margin-top: 16px; }
+.wow-slots div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.wow-slots span { padding: 6px 10px; border-radius: 999px; background: var(--accent-soft); }
+.wow-pulse { color: #ecfdf5; }
+.wow-pulse .wow-metrics article, .wow-pulse .wow-chair, .wow-pulse .wow-split section { background: rgba(10, 22, 20, 0.72); color: #ecfdf5; border-color: rgba(255,255,255,0.08); }
+.wow-pulse { background: radial-gradient(800px 300px at 10% 0%, rgba(45, 212, 191, 0.18), transparent 50%), #07110f; border-radius: 24px; padding: 18px; }
+.wow-ticker { overflow: hidden; max-width: 420px; border-radius: 999px; background: rgba(255,255,255,0.06); padding: 8px 0; }
+.wow-ticker span { display: inline-block; white-space: nowrap; padding-left: 100%; animation: wow-marquee 22s linear infinite; }
+.wow-chairs, .wow-split { display: grid; gap: 12px; margin-bottom: 12px; }
+.wow-chairs { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.wow-chair em { font-style: normal; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+.wow-chair.free em { color: #5eead4; }
+.wow-chair.busy em { color: #fbbf24; }
+.wow-chair.late em { color: #fb7185; }
+.wow-chair strong { display: block; font-size: 22px; margin-top: 6px; }
+.wow-split { grid-template-columns: 1.1fr 0.9fr; }
+.wow-bar { display: grid; grid-template-columns: 110px 1fr auto; gap: 8px; align-items: center; margin-top: 10px; }
+.wow-bar i { display: block; height: 8px; border-radius: 99px; background: linear-gradient(90deg, #5eead4, #0f766e); }
+.wow-call { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.08); }
+.wow-call a, .wow-split a { color: #99f6e4; }
+.wow-count { animation: wow-rise 700ms ease; }
+.wow-rules article b { font-family: Georgia, serif; font-size: 36px; color: #0f766e; }
+.wow-sources button, .wow-sources label { text-align: left; cursor: pointer; }
+.wow-sources .on { outline: 2px solid #0f766e; }
+.wow-queue { display: flex; flex-direction: column; gap: 8px; }
+.wow-queue label { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; }
+.wow-queue small, .wow-queue p { color: var(--muted); }
+.wow-board { display: flex; flex-direction: column; gap: 10px; }
+.wow-board article { display: grid; grid-template-columns: 36px 74px 1fr auto auto; gap: 14px; align-items: center; }
+.wow-board article.lead { background: linear-gradient(180deg, rgba(204, 251, 241, 0.7), var(--surface)); }
+.wow-rank { font-family: Georgia, serif; font-size: 28px; color: #0f766e; }
+.wow-kpi-num { text-align: right; }
+.wow-note { padding: 10px 12px; border-radius: 12px; background: var(--accent-soft); }
+.wow-map { display: flex; flex-direction: column; gap: 12px; }
+.wow-map-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+.wow-map table { width: 100%; border-collapse: collapse; }
+.wow-map td, .wow-map th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
+.wow-phone-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(600px 280px at 50% 0%, rgba(45, 212, 191, 0.25), transparent 60%), var(--bg); }
+.wow-phone { width: min(400px, 100%); height: min(820px, calc(100vh - 32px)); display: flex; flex-direction: column; background: #f7f3ee; color: #1c1917; border-radius: 32px; overflow: hidden; box-shadow: 0 30px 80px rgba(16, 33, 28, 0.28); border: 8px solid #10211c; }
+.wow-phone header, .wow-phone nav { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 12px 14px; background: white; }
+.wow-phone header strong { display: block; font-family: Georgia, serif; font-size: 22px; }
+.wow-phone header select, .wow-phone select, .wow-map select, .wow-check select { width: 100%; border-radius: 10px; border: 1px solid var(--border); padding: 8px; background: white; }
+.wow-phone-body { flex: 1; overflow: auto; padding: 14px; }
+.wow-phone article, .wow-slot { display: block; width: 100%; text-align: left; margin: 8px 0; padding: 10px 12px; border-radius: 14px; background: white; border: 0; }
+.wow-phone .wow-price { font-family: Georgia, serif; font-size: 40px; margin: 0; }
+.wow-photos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.wow-photos img { width: 100%; height: 110px; object-fit: cover; border-radius: 12px; background: #e7e5e4; }
+.wow-chat p { margin: 6px 0; padding: 8px 10px; border-radius: 12px; background: white; }
+.wow-chat p.out { background: #ccfbf1; }
+.wow-phone form { display: flex; gap: 8px; }
+.wow-phone form input { flex: 1; border-radius: 10px; border: 1px solid #e7e5e4; padding: 8px; }
+.wow-phone nav button { flex: 1; border: 0; background: transparent; color: #78716c; font-size: 11px; }
+.wow-phone nav button.on { color: #0f766e; font-weight: 700; }
+.wow-setup { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.wow-setup-card { width: min(640px, 100%); background: var(--surface); border-radius: 28px; padding: 28px; box-shadow: var(--shadow); }
+.wow-setup-card h1 { font-size: 40px; margin-bottom: 12px; }
+.wow-setup-card label { display: block; margin: 10px 0; }
+.wow-progress { height: 6px; border-radius: 99px; background: var(--surface-2); margin: 12px 0; }
+.wow-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #5eead4, #0f766e); transition: width 280ms ease; }
+.wow-steps { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; color: var(--muted); }
+.wow-steps .on { color: var(--text); font-weight: 700; }
+.wow-steps .done { color: #0f766e; }
+.wow-choice { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.wow-choice button { border-radius: 999px; border: 1px solid var(--border); background: var(--surface); padding: 8px 14px; }
+.wow-choice button.on { background: #134e4a; color: white; }
+.wow-check-grid { display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
+.wow-qr { width: 220px; margin: 12px 0; background: white; border-radius: 16px; padding: 10px; }
+.wow-qr svg { width: 100%; height: auto; }
+.wow-smile { margin-top: 18px; }
+.wow-smile canvas { width: 100%; height: auto; border-radius: 20px; background: #efeae2; }
+.wow-smile-head, .wow-smile-actions, .wow-slider { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.wow-smile-head { margin-bottom: 10px; }
+.wow-slider { margin-top: 8px; }
+.wow-slider input { flex: 1; }
+.wow-copilot .wow-suggest { display: grid; grid-template-columns: 64px 1fr; gap: 8px; text-align: left; border: 0; background: var(--surface-2); border-radius: 12px; padding: 8px; }
+.wow-suggest small { display: block; color: var(--muted); }
+.wow-variants { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.wow-variants article { padding: 8px; border-radius: 12px; background: var(--surface-2); }
+.wow-variants em { font-style: normal; color: #0f766e; font-size: 12px; }
+.cfg-layout { display: grid; grid-template-columns: 180px 1fr; gap: 16px; }
+.cfg-layout nav { display: flex; flex-direction: column; gap: 4px; }
+.cfg-layout nav button { text-align: left; border: 0; background: transparent; border-radius: 10px; padding: 8px 10px; }
+.cfg-layout nav button.on { background: var(--accent-soft); color: var(--accent-ink); }
+.cfg-bar, .cfg-new, .cfg-row, .cfg-role { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cfg-row, .cfg-role { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.cfg-row.off { opacity: 0.45; }
+.cfg-role { align-items: flex-end; }
+.cfg h2 { font-family: Georgia, serif; font-weight: 500; margin: 8px 0; }
+@media (max-width: 960px) { .cfg-layout { grid-template-columns: 1fr; } }
+@keyframes wow-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes wow-marquee { from { transform: translateX(0); } to { transform: translateX(-100%); } }

@@ -19,7 +19,17 @@ export class LabService {
 
   createOrder(
     orgId: string,
-    data: { title: string; patientId?: string; doctorId?: string; shade?: string; dueAt?: string; costAmount?: number },
+    data: {
+      title: string;
+      patientId?: string;
+      doctorId?: string;
+      shade?: string;
+      dueAt?: string;
+      costAmount?: number;
+      labName?: string;
+      technician?: string;
+      fittingAt?: string;
+    },
   ) {
     return this.prisma.labOrder.create({
       data: {
@@ -30,6 +40,9 @@ export class LabService {
         doctorId: data.doctorId || undefined,
         dueAt: data.dueAt ? new Date(data.dueAt) : undefined,
         costAmount: data.costAmount || undefined,
+        labName: data.labName || undefined,
+        technician: data.technician || undefined,
+        fittingAt: data.fittingAt ? new Date(data.fittingAt) : undefined,
       },
     });
   }

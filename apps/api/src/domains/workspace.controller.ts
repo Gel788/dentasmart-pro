@@ -80,8 +80,46 @@ export class WorkspaceController {
     @Param('planId') planId: string,
     @Body() body: { discountPercent?: number },
   ) {
-    const limit = user.permissions.includes('analytics.read') ? 40 : 15;
-    return this.workspace.saveDraft(orgId, planId, body, limit);
+    return this.workspace.saveDraft(orgId, planId, body, user.id);
+  }
+
+  @Get('plans/:planId/versions')
+  @RequirePermissions('medical.read')
+  versions(@OrgId() orgId: string, @Param('planId') planId: string) {
+    return this.workspace.versions(orgId, planId);
+  }
+
+  @Post('plans/:planId/versions/:versionId/restore')
+  @RequirePermissions('medical.write')
+  restore(
+    @OrgId() orgId: string,
+    @CurrentUser() user: AuthUser,
+    @Param('planId') planId: string,
+    @Param('versionId') versionId: string,
+  ) {
+    return this.workspace.restoreVersion(orgId, planId, versionId, user.id);
+  }
+
+  @Post('plans/:planId/accept-partial')
+  @RequirePermissions('medical.write')
+  acceptPartial(
+    @OrgId() orgId: string,
+    @CurrentUser() user: AuthUser,
+    @Param('planId') planId: string,
+    @Body() body: { signedName: string; signatureSvg: string; phaseIds: string[] },
+  ) {
+    return this.workspace.acceptPartial(orgId, planId, body, user.employee?.id);
+  }
+
+  @Post('plans/:planId/phases/:phaseId/book')
+  @RequirePermissions('schedule.write')
+  bookPhase(
+    @OrgId() orgId: string,
+    @CurrentUser() user: AuthUser,
+    @Param('planId') planId: string,
+    @Param('phaseId') phaseId: string,
+  ) {
+    return this.workspace.bookPhase(orgId, planId, phaseId, user.employee?.id);
   }
 
   @Post('plans/:planId/accept')

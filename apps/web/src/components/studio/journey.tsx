@@ -43,6 +43,7 @@ export function PlanJourney({
   const [discount, setDiscount] = useState(plan?.discountPercent ?? 0);
   const [saved, setSaved] = useState('');
   const [sent, setSent] = useState('');
+  const [versions, setVersions] = useState<{ id: string; note: string | null; createdAt: string }[] | null>(null);
 
   useEffect(() => { setDiscount(plan?.discountPercent ?? 0); }, [plan?.id, plan?.discountPercent]);
 
@@ -67,7 +68,7 @@ export function PlanJourney({
         method: 'POST',
         body: JSON.stringify({ discountPercent: discount }),
       });
-      setSaved(`Сохранено ${new Date(result.savedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`);
+      setSaved(`Сохранено ${new Date(result.savedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · версия записана`);
     } catch (err) {
       setSaved(err instanceof Error ? err.message : 'Не сохранилось');
     }
@@ -142,7 +143,12 @@ export function PlanJourney({
                       <b>{phase.title}</b>
                       <p>{phase.specialty ?? 'Этап'} · {Math.max(30, minutes)} мин{phase.healingDays ? ` · заживление ${phase.healingDays} дн.` : ''}</p>
                     </div>
-                    <div className="jn-ring" style={{ ['--p' as string]: String(progress) }}><strong>{formatMoney(price)}</strong></div>
+                    <div>
+                      {phase.id !== 'loose' && plan && (
+                        <button className="sd-btn-ghost" type="button" onClick={() => void api<{ startsAt: string }>(`/workspace/plans/${plan.id}/phases/${phase.id}/book`, { method: 'POST', body: '{}' }).then((result) => setSaved(`«${phase.title}» записан на ${new Date(result.startsAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`)).catch((err: Error) => setSaved(err.message))}>Записать этап</button>
+                      )}
+                      <div className="jn-ring" style={{ ['--p' as string]: String(progress) }}><strong>{formatMoney(price)}</strong></div>
+                    </div>
                   </header>
                   {phase.dependsOnTitle && <p className="jn-wait">После «{phase.dependsOnTitle}» пауза {phase.waitDays} дн.</p>}
                   <ul>
@@ -181,11 +187,22 @@ export function PlanJourney({
         </div>
         <div className="jn-actions">
           <button className="sd-btn-ghost" type="button" onClick={() => void save()}>Сохранить</button>
+          <button className="sd-btn-ghost" type="button" onClick={() => void api<{ id: string; note: string | null; createdAt: string }[]>(`/workspace/plans/${plan.id}/versions`).then(setVersions).catch((err: Error) => setSaved(err.message))}>Версии</button>
           <button className="sd-btn-ghost" type="button" onClick={() => window.open(`/print/plan/${plan.id}`, '_blank')}>Печать / PDF</button>
           <button className="sd-btn-ghost" type="button" onClick={() => void send()}>Пациенту</button>
           <button className="sd-btn" type="button" onClick={() => familyKey && router.push(`/present/${familyKey}`)}>Показать</button>
         </div>
         {(saved || sent) && <p className="jn-note">{saved}{saved && sent ? ' · ' : ''}{sent}</p>}
+        {versions && (
+          <div className="jn-note">
+            {versions.length === 0 && 'Версий ещё нет — нажмите «Сохранить».'}
+            {versions.map((version) => (
+              <button key={version.id} className="sd-btn-ghost" type="button" onClick={() => void api(`/workspace/plans/${plan.id}/versions/${version.id}/restore`, { method: 'POST', body: '{}' }).then(() => setSaved('Версия восстановлена')).catch((err: Error) => setSaved(err.message))}>
+                {new Date(version.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} {version.note}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

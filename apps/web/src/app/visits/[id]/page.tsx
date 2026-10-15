@@ -8,6 +8,7 @@ import { ToothChart, type ChartSurface } from '@/components/studio/chart';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { formatMoney } from '@/lib/format';
+import { Copilot } from '@/components/studio/copilot';
 
 type Visit = {
   id: string;
@@ -51,6 +52,8 @@ function Cockpit() {
   const [error, setError] = useState('');
   const [voice, setVoice] = useState('');
   const [followDate, setFollowDate] = useState('');
+  const [reason, setReason] = useState('');
+  const [library, setLibrary] = useState<{ id: string; label: string; note: typeof TEMPLATES[number]['note'] }[]>([]);
   const recorder = useRef<MediaRecorder | null>(null);
 
   const load = () => api<Visit>(`/flow/visits/${params.id}`).then((data) => {
@@ -66,6 +69,15 @@ function Cockpit() {
   });
 
   useEffect(() => { void load().catch((err: Error) => setError(err.message)); }, [params.id]);
+  useEffect(() => {
+    api<{ id: string; name: string; complaints: string; diagnosis: string; treatment: string; recommendations: string; anamnesis?: string; objective?: string }[]>('/config/visit-templates')
+      .then((rows) => setLibrary(rows.map((row) => ({
+        id: row.id,
+        label: row.name,
+        note: { complaints: row.complaints, anamnesis: row.anamnesis ?? '', objective: row.objective ?? '', diagnosis: row.diagnosis, treatment: row.treatment, recommendations: row.recommendations },
+      }))))
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (visit?.status !== 'IN_PROGRESS') return;
@@ -160,7 +172,7 @@ function Cockpit() {
           <div className="sd-card sd-stack">
             <strong>Запись</strong>
             <div className="sd-chips">
-              {TEMPLATES.map((template) => (
+              {[...library, ...TEMPLATES].map((template) => (
                 <button key={template.id} className="sd-chip" type="button" onClick={() => setNote({ ...note, ...template.note })}>{template.label}</button>
               ))}
               <button className="sd-chip" type="button" onClick={() => void record().catch(() => setVoice('Микрофон недоступен'))}>{recorder.current ? 'Стоп' : 'Голос'}</button>
@@ -172,7 +184,18 @@ function Cockpit() {
               </label>
             ))}
             {medical && visit.status === 'IN_PROGRESS' && <button className="sd-btn-ghost" type="button" onClick={() => void act('note', note).catch((err: Error) => setError(err.message))}>Сохранить запись</button>}
+            {medical && visit.status === 'COMPLETED' && (
+              <>
+                <input className="sd-input" placeholder="Причина правки закрытого визита" value={reason} onChange={(event) => setReason(event.target.value)} />
+                <button className="sd-btn-ghost" type="button" onClick={() => void act('note', { ...note, reason }).catch((err: Error) => setError(err.message))}>Исправить с причиной</button>
+              </>
+            )}
           </div>
+          <Copilot
+            patientId={visit.patient.id}
+            note={`${note.complaints} ${note.diagnosis}`}
+            onApply={(patch) => setNote({ ...note, ...patch })}
+          />
           <div className="sd-card sd-stack">
             <strong>Расходники</strong>
             {kit.map((line, index) => (

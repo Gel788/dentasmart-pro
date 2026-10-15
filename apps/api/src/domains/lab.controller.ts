@@ -23,7 +23,7 @@ export class LabController {
   @RequirePermissions('medical.write')
   create(
     @OrgId() orgId: string,
-    @Body() body: { title: string; patientId?: string; doctorId?: string; shade?: string; dueAt?: string; costAmount?: number },
+    @Body() body: { title: string; patientId?: string; doctorId?: string; shade?: string; dueAt?: string; costAmount?: number; labName?: string; technician?: string; fittingAt?: string },
   ) {
     return this.svc.createOrder(orgId, body);
   }
