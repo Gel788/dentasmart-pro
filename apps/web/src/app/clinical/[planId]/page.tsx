@@ -9,15 +9,21 @@ import type { ToothRecord } from '@/components/tooth-chart';
 import { BackLink } from '@/components/ui/back-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/input';
+import { Input, Textarea } from '@/components/ui/input';
 import { api } from '@/lib/api';
+import { useBranch } from '@/lib/branch-context';
 import { formatMoney, label, PLAN_STATUS } from '@/lib/format';
 
 export default function TreatmentPlanPage() {
   const { planId } = useParams<{ planId: string }>();
   const router = useRouter();
+  const { branchId } = useBranch();
   const [plan, setPlan] = useState<Record<string, unknown> | null>(null);
   const [diary, setDiary] = useState('');
+  const [pick, setPick] = useState<string[]>([]);
+  const [when, setWhen] = useState('');
+  const [planDiscount, setPlanDiscount] = useState('0');
+  const [notice, setNotice] = useState('');
 
   const load = useCallback(() => {
     api<Record<string, unknown>>(`/clinical/treatment-plans/${planId}`).then(setPlan);
@@ -46,6 +52,8 @@ export default function TreatmentPlanPage() {
     title: string;
     status: string;
     totalPrice: string;
+    discountPercent?: string | number;
+    acceptedAt?: string | null;
     items: PlanLine[];
     diaryEntries: { id: string; notes: string; toothNum?: number | null; createdAt: string }[];
     patient: { id: string; firstName: string; lastName: string; toothRecords?: ToothRecord[] };
@@ -97,6 +105,17 @@ export default function TreatmentPlanPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link href={`/clinical/${planId}/print`}>
+            <Button variant="ghost">Печать для пациента</Button>
+          </Link>
+          <Button
+            onClick={async () => {
+              await api(`/clinical/treatment-plans/${planId}/accept`, { method: 'POST' });
+              load();
+            }}
+          >
+            Пациент согласен
+          </Button>
           <Button
             variant="ghost"
             onClick={async () => {
@@ -156,6 +175,86 @@ export default function TreatmentPlanPage() {
           ))}
         </div>
       )}
+
+      <Card className="mb-6">
+        <CardHeader
+          title="Запись из плана"
+          description="Открытые строки становятся визитом. Слот проверяется по врачу и креслу."
+        />
+        <div className="space-y-2">
+          {p.items.filter((item) => item.status !== 'DONE' && item.status !== 'REJECTED' && !item.appointment).map((item) => (
+            <label key={item.id} className="flex items-center gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={pick.includes(item.id)}
+                onChange={() => setPick((prev) => (prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]))}
+              />
+              <span className="text-[var(--text)]">
+                Этап {item.phase ?? 1} · {item.title}
+                {item.toothNum ? ` · зуб ${item.toothNum}` : ''}
+                {item.surfaces?.length ? ` (${item.surfaces.join('')})` : ''}
+              </span>
+              <span className="ml-auto tabular-nums text-[var(--muted)]">{formatMoney(item.price)}</span>
+            </label>
+          ))}
+          {!p.items.some((item) => item.status !== 'DONE' && item.status !== 'REJECTED' && !item.appointment) && (
+            <p className="text-sm text-[var(--muted)]">Все открытые строки уже стоят в расписании или закрыты.</p>
+          )}
+        </div>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <div>
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--muted)]">Начало визита</p>
+            <Input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+          </div>
+          <div>
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--muted)]">Скидка плана, %</p>
+            <Input value={planDiscount} onChange={(e) => setPlanDiscount(e.target.value)} />
+          </div>
+          <Button
+            variant="ghost"
+            onClick={async () => {
+              await api(`/clinical/treatment-plans/${planId}/discount`, {
+                method: 'PATCH',
+                body: JSON.stringify({ discountPercent: Number(planDiscount) || 0 }),
+              });
+              load();
+            }}
+          >
+            Применить скидку
+          </Button>
+          <Button
+            disabled={!pick.length || !when || !branchId}
+            onClick={async () => {
+              setNotice('');
+              try {
+                const result = await api<{ appointmentId: string }>(`/clinical/treatment-plans/${planId}/schedule`, {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    itemIds: pick,
+                    branchId,
+                    startsAt: new Date(when).toISOString(),
+                  }),
+                });
+                setPick([]);
+                setNotice('Визит создан — он уже в расписании филиала');
+                load();
+                void result;
+              } catch (err) {
+                setNotice(err instanceof Error ? err.message : 'Не удалось записать');
+              }
+            }}
+          >
+            Записать выбранное
+          </Button>
+        </div>
+        {p.acceptedAt && (
+          <p className="mt-3 text-xs text-[var(--muted)]">Согласован {new Date(p.acceptedAt).toLocaleString('ru-RU')}</p>
+        )}
+        {Number(p.discountPercent) > 0 && (
+          <p className="mt-1 text-xs text-[var(--muted)]">Скидка на план {Number(p.discountPercent)}% уже в сумме.</p>
+        )}
+        {notice && <p className="mt-3 text-sm text-[var(--text-secondary)]">{notice}</p>}
+      </Card>
 
       <PlanBoard
         planId={planId}

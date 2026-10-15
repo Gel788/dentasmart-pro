@@ -24,6 +24,8 @@ export interface ToothRecord {
   formula: string;
   condition: string;
   diagnosis?: string | null;
+  layer?: string | null;
+  surfaces?: string[];
 }
 
 export function ToothChart({

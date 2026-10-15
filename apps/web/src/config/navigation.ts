@@ -28,30 +28,31 @@ export interface NavItem {
   icon: LucideIcon;
   group: string;
   description: string;
+  permission?: string;
 }
 
 export const NAVIGATION: NavItem[] = [
-  { href: '/reception', label: 'Ресепшн', icon: Sparkles, group: 'Главное', description: 'Рабочий стол на сегодня' },
-  { href: '/visit', label: 'Приём', icon: Armchair, group: 'Главное', description: 'Кресло: зубы, план и счёт' },
-  { href: '/queues', label: 'Очереди', icon: ListChecks, group: 'Главное', description: 'Неявки, планы, долги, кресла' },
-  { href: '/dashboard', label: 'Дашборд', icon: LayoutDashboard, group: 'Главное', description: 'KPI и воронка' },
-  { href: '/patients', label: 'Пациенты', icon: Users, group: 'Главное', description: 'Карты пациентов' },
-  { href: '/schedule', label: 'Расписание', icon: Calendar, group: 'Главное', description: 'Запись и статусы' },
-  { href: '/clinical', label: 'Клиника', icon: Stethoscope, group: 'Медицина', description: 'Планы и зубы' },
-  { href: '/services', label: 'Услуги', icon: ClipboardList, group: 'Медицина', description: 'Прайс-лист' },
-  { href: '/lab', label: 'Зуботехника', icon: FlaskConical, group: 'Медицина', description: 'Заказ-наряды' },
-  { href: '/sterilization', label: 'Стерилизация', icon: ShieldCheck, group: 'Медицина', description: 'Журнал циклов' },
-  { href: '/finance', label: 'Финансы', icon: Wallet, group: 'Бизнес', description: 'Счета и оплаты' },
-  { href: '/warehouse', label: 'Склад', icon: Package, group: 'Бизнес', description: 'Остатки' },
-  { href: '/marketing', label: 'Маркетинг', icon: Megaphone, group: 'Рост', description: 'Кампании' },
-  { href: '/communications', label: 'Коммуникации', icon: MessageSquare, group: 'Рост', description: 'Журнал обращений' },
-  { href: '/analytics', label: 'Аналитика', icon: BarChart3, group: 'Рост', description: 'KPI' },
-  { href: '/reports', label: 'Отчёты', icon: ClipboardList, group: 'Рост', description: 'Отчёты' },
-  { href: '/employees', label: 'Сотрудники', icon: UserCog, group: 'Админ', description: 'Кадры и зарплата' },
-  { href: '/branches', label: 'Филиалы', icon: Building2, group: 'Админ', description: 'Структура' },
-  { href: '/integrations', label: 'Интеграции', icon: Plug, group: 'Админ', description: 'Касса, ЕГИСЗ, телефония' },
-  { href: '/settings', label: 'Настройки', icon: Settings, group: 'Админ', description: 'Организация и доступ' },
-  { href: '/widget', label: 'Виджет записи', icon: Globe, group: 'Админ', description: 'Онлайн-запись' },
+  { href: '/reception', label: 'Ресепшн', icon: Sparkles, group: 'Главное', description: 'Рабочий стол на сегодня', permission: 'schedule.read' },
+  { href: '/visit', label: 'Приём', icon: Armchair, group: 'Главное', description: 'Кресло: зубы, план и счёт', permission: 'medical.read' },
+  { href: '/queues', label: 'Очереди', icon: ListChecks, group: 'Главное', description: 'Неявки, планы, долги, кресла', permission: 'schedule.read' },
+  { href: '/dashboard', label: 'Дашборд', icon: LayoutDashboard, group: 'Главное', description: 'KPI и воронка', permission: 'analytics.read' },
+  { href: '/patients', label: 'Пациенты', icon: Users, group: 'Главное', description: 'Карты пациентов', permission: 'patient.read' },
+  { href: '/schedule', label: 'Расписание', icon: Calendar, group: 'Главное', description: 'Запись и статусы', permission: 'schedule.read' },
+  { href: '/clinical', label: 'Клиника', icon: Stethoscope, group: 'Медицина', description: 'Планы и зубы', permission: 'medical.read' },
+  { href: '/services', label: 'Услуги', icon: ClipboardList, group: 'Медицина', description: 'Прайс-лист', permission: 'medical.read' },
+  { href: '/lab', label: 'Зуботехника', icon: FlaskConical, group: 'Медицина', description: 'Заказ-наряды', permission: 'medical.read' },
+  { href: '/sterilization', label: 'Стерилизация', icon: ShieldCheck, group: 'Медицина', description: 'Журнал циклов', permission: 'medical.read' },
+  { href: '/finance', label: 'Финансы', icon: Wallet, group: 'Бизнес', description: 'Счета и оплаты', permission: 'finance.read' },
+  { href: '/warehouse', label: 'Склад', icon: Package, group: 'Бизнес', description: 'Остатки', permission: 'warehouse.read' },
+  { href: '/marketing', label: 'Маркетинг', icon: Megaphone, group: 'Рост', description: 'Кампании', permission: 'marketing.read' },
+  { href: '/communications', label: 'Коммуникации', icon: MessageSquare, group: 'Рост', description: 'Журнал обращений', permission: 'communications.read' },
+  { href: '/analytics', label: 'Аналитика', icon: BarChart3, group: 'Рост', description: 'KPI', permission: 'analytics.read' },
+  { href: '/reports', label: 'Отчёты', icon: ClipboardList, group: 'Рост', description: 'Отчёты', permission: 'analytics.read' },
+  { href: '/employees', label: 'Сотрудники', icon: UserCog, group: 'Админ', description: 'Кадры и зарплата', permission: 'employee.read' },
+  { href: '/branches', label: 'Филиалы', icon: Building2, group: 'Админ', description: 'Структура', permission: 'branch.read' },
+  { href: '/integrations', label: 'Интеграции', icon: Plug, group: 'Админ', description: 'Касса, ЕГИСЗ, телефония', permission: 'org.manage' },
+  { href: '/settings', label: 'Настройки', icon: Settings, group: 'Админ', description: 'Организация и доступ', permission: 'org.manage' },
+  { href: '/widget', label: 'Виджет записи', icon: Globe, group: 'Админ', description: 'Онлайн-запись', permission: 'org.manage' },
 ];
 
 export const NAV_GROUPS = [...new Set(NAVIGATION.map((item) => item.group))];

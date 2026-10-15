@@ -2,6 +2,7 @@
   "name": "@dentasmart/web",
   "version": "0.1.0",
   "private": true,
+  "description": "Интерфейс «Седракович Дент»",
   "scripts": {
     "dev": "next dev --port 3000 --turbo",
     "build": "next build",

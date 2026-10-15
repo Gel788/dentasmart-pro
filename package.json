@@ -1,8 +1,8 @@
 {
-  "name": "dentasmart-pro",
+  "name": "sedrakovich-dent",
   "version": "0.1.0",
   "private": true,
-  "description": "Sedrakoich dent — CRM для стоматологических клиник",
+  "description": "Седракович Дент — CRM для стоматологических клиник",
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",

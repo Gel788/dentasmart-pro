@@ -29,7 +29,7 @@
 
     render(config, services) {
       var color = (config.config && config.config.primaryColor) || '#0f9d8a';
-      var name = (config.organization && config.organization.name) || 'Запись онлайн';
+      var name = (config.organization && config.organization.name) || 'Седракович Дент';
       var list = services.map(function (s) {
         return '<option value="' + s.id + '">' + s.name + '</option>';
       }).join('');

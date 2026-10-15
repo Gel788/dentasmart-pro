@@ -51,4 +51,30 @@ export class CreatePatientDto {
   @IsOptional()
   @IsString()
   source?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  allergies?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  chronicConditions?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  medications?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  contraindications?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  anamnesis?: string;
 }

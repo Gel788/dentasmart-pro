@@ -6,6 +6,6 @@ import { ApiTags } from '@nestjs/swagger';
 export class HealthController {
   @Get()
   check() {
-    return { status: 'ok', service: 'dentasmart-api', version: '0.1.0' };
+    return { status: 'ok', service: 'sedrakovich-dent', version: '0.1.0' };
   }
 }

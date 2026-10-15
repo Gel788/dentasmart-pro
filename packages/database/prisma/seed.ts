@@ -33,7 +33,10 @@ const ROLES: Record<string, string[]> = {
     'patient.read', 'patient.write', 'schedule.read', 'schedule.write',
     'finance.read', 'medical.read',
   ],
-  admin: ['patient.read', 'patient.write', 'schedule.read', 'schedule.write'],
+  admin: [
+    'patient.read', 'patient.write', 'schedule.read', 'schedule.write',
+    'finance.read', 'finance.write', 'medical.read',
+  ],
   doctor: ['patient.read', 'patient.write', 'schedule.read', 'schedule.write', 'medical.read', 'medical.write'],
   assistant: ['patient.read', 'schedule.read', 'medical.read'],
 };
@@ -50,12 +53,16 @@ async function main() {
   const org = await prisma.organization.upsert({
     where: { slug: 'demo-clinic' },
     create: {
-      name: 'Sedrakoich dent Demo Clinic',
+      name: 'Седракович Дент',
       slug: 'demo-clinic',
-      phone: '+7 (495) 000-00-00',
-      email: 'demo@dentasmart.local',
+      phone: '+7 (495) 120-45-45',
+      email: 'hello@sedrakovich.demo',
     },
-    update: {},
+    update: {
+      name: 'Седракович Дент',
+      phone: '+7 (495) 120-45-45',
+      email: 'hello@sedrakovich.demo',
+    },
   });
 
   const branch = await prisma.branch.upsert({
@@ -190,6 +197,34 @@ async function main() {
     update: {},
   });
 
+  const adminRole = await prisma.role.findFirstOrThrow({ where: { organizationId: org.id, code: 'admin' } });
+  const adminUser = await prisma.user.upsert({
+    where: { organizationId_email: { organizationId: org.id, email: 'admin@demo.local' } },
+    create: { organizationId: org.id, email: 'admin@demo.local', passwordHash },
+    update: { passwordHash },
+  });
+  await prisma.userRole.upsert({
+    where: { userId_roleId: { userId: adminUser.id, roleId: adminRole.id } },
+    create: { userId: adminUser.id, roleId: adminRole.id },
+    update: {},
+  });
+  const receptionist = await prisma.employee.upsert({
+    where: { userId: adminUser.id },
+    create: {
+      userId: adminUser.id,
+      firstName: 'Марина',
+      lastName: 'Соколова',
+      specialization: 'Администратор ресепшн',
+      status: 'ACTIVE',
+    },
+    update: { firstName: 'Марина', lastName: 'Соколова' },
+  });
+  await prisma.employeeBranch.upsert({
+    where: { employeeId_branchId: { employeeId: receptionist.id, branchId: branch.id } },
+    create: { employeeId: receptionist.id, branchId: branch.id, isPrimary: true },
+    update: {},
+  });
+
   await prisma.cabinet.upsert({
     where: { id: 'seed-cabinet-2' },
     create: {
@@ -202,20 +237,46 @@ async function main() {
     update: {},
   });
 
-  await prisma.service.createMany({
-    data: [
-      { organizationId: org.id, name: 'Консультация', durationMin: 30, basePrice: 1500, code: 'CONSULT' },
-      { organizationId: org.id, name: 'Профессиональная гигиена', durationMin: 60, basePrice: 5500, code: 'HYGIENE' },
-      { organizationId: org.id, name: 'Лечение кариеса', durationMin: 60, basePrice: 4500, code: 'CARIES' },
-    ],
-    skipDuplicates: true,
+  const CATALOG = [
+    { code: 'CONSULT', name: 'Консультация стоматолога', durationMin: 30, basePrice: 1500, sortOrder: 10 },
+    { code: 'HYGIENE', name: 'Профессиональная гигиена', durationMin: 60, basePrice: 6500, sortOrder: 20 },
+    { code: 'CARIES', name: 'Лечение кариеса', durationMin: 60, basePrice: 5500, sortOrder: 30 },
+    { code: 'ENDO', name: 'Лечение каналов', durationMin: 90, basePrice: 12000, sortOrder: 40 },
+    { code: 'CROWN', name: 'Коронка керамическая', durationMin: 60, basePrice: 28000, sortOrder: 50 },
+    { code: 'IMPLANT', name: 'Установка импланта', durationMin: 90, basePrice: 45000, sortOrder: 60 },
+    { code: 'EXTRACT', name: 'Удаление зуба', durationMin: 40, basePrice: 4500, sortOrder: 70 },
+    { code: 'WHITENING', name: 'Отбеливание', durationMin: 60, basePrice: 18000, sortOrder: 80 },
+    { code: 'CHILD', name: 'Детский осмотр', durationMin: 30, basePrice: 2000, sortOrder: 90 },
+  ];
+  for (const service of CATALOG) {
+    const existing = await prisma.service.findFirst({ where: { organizationId: org.id, code: service.code } });
+    if (existing) {
+      await prisma.service.update({ where: { id: existing.id }, data: service });
+    } else {
+      await prisma.service.create({ data: { organizationId: org.id, ...service } });
+    }
+  }
+  const priceList = await prisma.priceList.upsert({
+    where: { organizationId_code: { organizationId: org.id, code: 'BASE' } },
+    create: { organizationId: org.id, name: 'Прайс клиники 2026', code: 'BASE', isDefault: true, isActive: true },
+    update: { name: 'Прайс клиники 2026', isDefault: true, isActive: true },
   });
 
-  const services = await prisma.service.findMany({ where: { organizationId: org.id } });
+  const services = await prisma.service.findMany({ where: { organizationId: org.id, NOT: { code: { startsWith: 'GROUP' } } } });
+  for (const service of services) {
+    if (!service.code || service.code.startsWith('GROUP')) continue;
+    await prisma.priceListItem.upsert({
+      where: { priceListId_serviceId: { priceListId: priceList.id, serviceId: service.id } },
+      create: { priceListId: priceList.id, serviceId: service.id, price: service.basePrice },
+      update: { price: service.basePrice },
+    });
+  }
   const svc = (code: string) => services.find((s) => s.code === code) ?? services[0];
   const consult = svc('CONSULT');
   const hygiene = svc('HYGIENE');
   const caries = svc('CARIES');
+  const crown = svc('CROWN');
+  const implant = svc('IMPLANT');
 
   const todayAt = (hour: number, minute = 0) => {
     const d = new Date();
@@ -235,10 +296,15 @@ async function main() {
     birthDate?: Date;
     notes?: string;
     source?: string;
+    allergies?: string[];
+    chronicConditions?: string;
+    medications?: string;
+    contraindications?: string;
+    anamnesis?: string;
   };
 
   const DEMO_PATIENTS: DemoPatient[] = [
-    { id: 'seed-patient-anna', firstName: 'Анна', lastName: 'Смирнова', phone: '+7 (900) 123-45-67', email: 'anna@example.com', tags: ['loyal', 'vip'], gender: 'FEMALE', birthDate: new Date('1988-03-12'), notes: 'VIP: депозит, план, частичная оплата' },
+    { id: 'seed-patient-anna', firstName: 'Анна', lastName: 'Смирнова', phone: '+7 (900) 123-45-67', email: 'anna@example.com', tags: ['VIP', 'постоянный'], gender: 'FEMALE', birthDate: new Date('1988-03-12'), notes: 'VIP: депозит и согласованный план на 16 зуб', allergies: ['Лидокаин', 'Латекс'], chronicConditions: 'Гипертоническая болезнь, давление контролируется', medications: 'Эналаприл 5 мг утром', contraindications: 'Адреналин в анестезии — только после согласования с кардиологом', anamnesis: 'Пломбы в боковом отделе. Хочет закрыть 16 коронкой после лечения кариеса.' },
     { id: 'seed-patient-petr', firstName: 'Пётр', lastName: 'Волков', phone: '+7 (900) 111-11-11', tags: ['new'], gender: 'MALE', birthDate: new Date('1995-07-20'), notes: 'Сегодня 09:00 — ждёт приёма' },
     { id: 'seed-patient-maria', firstName: 'Мария', lastName: 'Орлова', phone: '+7 (900) 222-22-22', gender: 'FEMALE', notes: 'Сегодня 09:30 — подтверждена' },
     { id: 'seed-patient-oleg', firstName: 'Олег', lastName: 'Новиков', phone: '+7 (900) 333-33-33', gender: 'MALE', notes: 'Сегодня 10:00' },
@@ -282,6 +348,11 @@ async function main() {
         birthDate: p.birthDate,
         notes: p.notes,
         source,
+        allergies: p.allergies ?? [],
+        chronicConditions: p.chronicConditions,
+        medications: p.medications,
+        contraindications: p.contraindications,
+        anamnesis: p.anamnesis,
       },
       update: {
         firstName: p.firstName,
@@ -293,6 +364,11 @@ async function main() {
         birthDate: p.birthDate,
         notes: p.notes,
         source,
+        allergies: p.allergies ?? [],
+        chronicConditions: p.chronicConditions,
+        medications: p.medications,
+        contraindications: p.contraindications,
+        anamnesis: p.anamnesis,
       },
     });
   }
@@ -340,6 +416,27 @@ async function main() {
         endsAt: apptEnd(startsAt, duration),
         status: a.status,
         notes: a.notes,
+      },
+    });
+  }
+
+  for (const offset of [-3, -2, 2, 3]) {
+    const day = new Date();
+    day.setDate(day.getDate() + offset);
+    day.setHours(offset < 0 ? 15 : 16, 0, 0, 0);
+    const patientId = offset < 0 ? 'seed-patient-vera' : 'seed-patient-lidia';
+    await prisma.appointment.create({
+      data: {
+        organizationId: org.id,
+        branchId: branch.id,
+        cabinetId: offset % 2 === 0 ? 'seed-cabinet-2' : 'seed-cabinet-1',
+        doctorId: offset % 2 === 0 ? doctor2.id : employee.id,
+        patientId,
+        serviceId: offset < 0 ? hygiene?.id : consult?.id,
+        startsAt: day,
+        endsAt: apptEnd(day, offset < 0 ? 60 : 30),
+        status: offset < 0 ? 'COMPLETED' : 'CONFIRMED',
+        notes: 'seed:week',
       },
     });
   }
@@ -427,6 +524,10 @@ async function main() {
     },
   });
 
+  await prisma.treatmentPlan.updateMany({
+    where: { patientId: { in: patientIds } },
+    data: { parentPlanId: null },
+  });
   await prisma.treatmentPlan.deleteMany({ where: { patientId: { in: patientIds } } });
 
   const plan = await prisma.treatmentPlan.create({
@@ -435,13 +536,35 @@ async function main() {
       organizationId: org.id,
       patientId: patient.id,
       doctorId: employee.id,
-      title: 'Комплексная реставрация',
+      title: 'Комплексная реставрация 16',
+      status: 'ACCEPTED',
+      discountPercent: 0,
+      acceptedAt: new Date(),
+      presentedAt: new Date(),
+      totalPrice: 30700,
+        items: {
+        create: [
+          { title: 'Лечение кариеса', toothNum: 16, surfaces: ['O', 'D'], phase: 1, price: 5500, listPrice: 5500, discountPercent: 0, sortOrder: 1, serviceId: caries?.id, durationMin: 60, status: 'ACCEPTED' },
+          { title: 'Коронка керамическая', toothNum: 16, surfaces: [], phase: 2, price: 25200, listPrice: 28000, discountPercent: 10, sortOrder: 2, serviceId: crown?.id, durationMin: 60, status: 'ACCEPTED' },
+        ],
+      },
+    },
+  });
+
+  await prisma.treatmentPlan.create({
+    data: {
+      id: 'seed-plan-anna-alt',
+      organizationId: org.id,
+      patientId: patient.id,
+      doctorId: employee.id,
+      title: 'Щадящий вариант: только пломба',
       status: 'PROPOSED',
-      totalPrice: 45000,
+      isAlternative: true,
+      parentPlanId: plan.id,
+      totalPrice: 5500,
       items: {
         create: [
-          { title: 'Лечение 16', toothNum: 16, price: 4500, sortOrder: 1, serviceId: caries?.id },
-          { title: 'Коронка 16', toothNum: 16, price: 25000, sortOrder: 2 },
+          { title: 'Лечение кариеса', toothNum: 16, surfaces: ['O'], phase: 1, price: 5500, listPrice: 5500, sortOrder: 1, serviceId: caries?.id, durationMin: 60, status: 'PROPOSED' },
         ],
       },
     },
@@ -458,10 +581,10 @@ async function main() {
       totalPrice: 185000,
       items: {
         create: [
-          { title: 'Имплант 36', toothNum: 36, price: 65000, sortOrder: 1, isCompleted: true },
-          { title: 'Формирователь десны', toothNum: 36, price: 12000, sortOrder: 2, isCompleted: true },
-          { title: 'Коронка на имплант', toothNum: 36, price: 48000, sortOrder: 3 },
-          { title: 'КТ контроль', price: 3500, sortOrder: 4 },
+          { title: 'Установка импланта', toothNum: 36, phase: 1, price: 45000, listPrice: 45000, sortOrder: 1, isCompleted: true, status: 'DONE', serviceId: implant?.id, durationMin: 90, completedAt: new Date() },
+          { title: 'Формирователь десны', toothNum: 36, phase: 1, price: 12000, listPrice: 12000, sortOrder: 2, isCompleted: true, status: 'DONE', completedAt: new Date() },
+          { title: 'Коронка на имплант', toothNum: 36, phase: 2, price: 28000, listPrice: 28000, sortOrder: 3, status: 'ACCEPTED', serviceId: crown?.id, durationMin: 60 },
+          { title: 'КТ контроль', phase: 2, price: 3500, listPrice: 3500, sortOrder: 4, status: 'PROPOSED', durationMin: 20 },
         ],
       },
       diaryEntries: {
@@ -491,13 +614,31 @@ async function main() {
   });
 
   await prisma.toothRecord.deleteMany({ where: { patientId: { in: patientIds } } });
+  await prisma.toothSurface.deleteMany({ where: { patientId: { in: patientIds } } });
+  await prisma.toothEvent.deleteMany({ where: { patientId: { in: patientIds } } });
   await prisma.toothRecord.createMany({
     data: [
-      { patientId: patient.id, toothNum: 16, condition: 'CARIES', diagnosis: 'K02.1' },
-      { patientId: patient.id, toothNum: 26, condition: 'HEALTHY' },
-      { patientId: 'seed-patient-kate', toothNum: 36, condition: 'IMPLANT', diagnosis: 'Имплант установлен' },
-      { patientId: 'seed-patient-vera', toothNum: 11, condition: 'CARIES', diagnosis: 'K02.0' },
-      { patientId: 'seed-patient-vera', toothNum: 21, condition: 'HEALTHY' },
+      { patientId: patient.id, toothNum: 16, condition: 'CARIES', layer: 'PATHOLOGY', surfaces: ['O', 'D'], diagnosis: 'K02.1' },
+      { patientId: patient.id, toothNum: 26, condition: 'FILLED', layer: 'EXISTING', surfaces: ['O'], diagnosis: 'Пломба 2022' },
+      { patientId: 'seed-patient-kate', toothNum: 36, condition: 'IMPLANT', layer: 'EXISTING', diagnosis: 'Имплант установлен' },
+      { patientId: 'seed-patient-vera', toothNum: 11, condition: 'CARIES', layer: 'PATHOLOGY', surfaces: ['M'], diagnosis: 'K02.0' },
+      { patientId: 'seed-patient-vera', toothNum: 21, condition: 'HEALTHY', layer: 'EXISTING' },
+    ],
+  });
+  await prisma.toothSurface.createMany({
+    data: [
+      { patientId: patient.id, toothNum: 16, surface: 'O', condition: 'CARIES', layer: 'PATHOLOGY', diagnosis: 'K02.1' },
+      { patientId: patient.id, toothNum: 16, surface: 'D', condition: 'CARIES', layer: 'PATHOLOGY', diagnosis: 'K02.1' },
+      { patientId: patient.id, toothNum: 26, surface: 'O', condition: 'FILLED', layer: 'EXISTING' },
+      { patientId: 'seed-patient-kate', toothNum: 36, surface: 'TOOTH', condition: 'IMPLANT', layer: 'EXISTING' },
+      { patientId: 'seed-patient-vera', toothNum: 11, surface: 'M', condition: 'CARIES', layer: 'PATHOLOGY', diagnosis: 'K02.0' },
+    ],
+  });
+  await prisma.toothEvent.createMany({
+    data: [
+      { patientId: patient.id, toothNum: 16, surfaces: ['O', 'D'], condition: 'CARIES', layer: 'PATHOLOGY', note: 'K02.1, средний кариес', source: 'EXAM' },
+      { patientId: patient.id, toothNum: 26, surfaces: ['O'], condition: 'FILLED', layer: 'EXISTING', note: 'Пломба стоит с 2022', source: 'EXAM' },
+      { patientId: 'seed-patient-kate', toothNum: 36, surfaces: [], condition: 'IMPLANT', layer: 'EXISTING', note: 'Выполнено: установка импланта', source: 'PLAN_DONE' },
     ],
   });
 
@@ -559,11 +700,22 @@ async function main() {
     },
   });
 
+  const daysAgo = (days: number, hour = 12) => {
+    const date = new Date();
+    date.setDate(date.getDate() - days);
+    date.setHours(hour, 15, 0, 0);
+    return date;
+  };
   await prisma.payment.createMany({
     data: [
-      { organizationId: org.id, patientId: patient.id, amount: 5000, method: 'CARD' },
-      { organizationId: org.id, patientId: 'seed-patient-alex', amount: 5500, method: 'CASH' },
-      { organizationId: org.id, patientId: 'seed-patient-natalia', amount: 8000, method: 'CARD' },
+      { organizationId: org.id, patientId: patient.id, amount: 5000, method: 'CARD', paidAt: daysAgo(0, 11) },
+      { organizationId: org.id, patientId: 'seed-patient-alex', amount: 5500, method: 'CASH', paidAt: daysAgo(1) },
+      { organizationId: org.id, patientId: 'seed-patient-natalia', amount: 8000, method: 'CARD', paidAt: daysAgo(2) },
+      { organizationId: org.id, patientId: 'seed-patient-roman', amount: 1500, method: 'CARD', paidAt: daysAgo(0, 13) },
+      { organizationId: org.id, patientId: 'seed-patient-kate', amount: 45000, method: 'CARD', paidAt: daysAgo(6) },
+      { organizationId: org.id, patientId: 'seed-patient-vera', amount: 6500, method: 'CARD', paidAt: daysAgo(4) },
+      { organizationId: org.id, patientId: patient.id, amount: 12000, method: 'CARD', paidAt: daysAgo(9) },
+      { organizationId: org.id, patientId: 'seed-patient-oleg', amount: 28000, method: 'CARD', paidAt: daysAgo(11) },
     ],
   });
 
@@ -675,7 +827,7 @@ async function main() {
       patientId: 'seed-patient-petr',
       appointmentId: petrAppt!.id,
       channel: 'SMS',
-      message: 'Напоминание: не забудьте про визит в Sedrakoich dent Demo Clinic',
+      message: 'Напоминание: не забудьте про визит в «Седракович Дент»',
       scheduledAt: new Date(),
       status: 'PENDING',
     },
@@ -687,13 +839,13 @@ async function main() {
       id: 'seed-segment-vip',
       organizationId: org.id,
       name: 'VIP по тегу',
-      rulesJson: { tag: 'vip' },
+      rulesJson: { tag: 'VIP' },
       isDynamic: true,
     },
     update: {},
   });
   await prisma.patientSegmentMember.deleteMany({ where: { segmentId: segment.id } });
-  for (const p of DEMO_PATIENTS.filter((x) => x.tags?.includes('vip'))) {
+  for (const p of DEMO_PATIENTS.filter((x) => x.tags?.includes('VIP'))) {
     await prisma.patientSegmentMember.upsert({
       where: { segmentId_patientId: { segmentId: segment.id, patientId: p.id } },
       create: { segmentId: segment.id, patientId: p.id },
@@ -777,7 +929,7 @@ async function main() {
       organizationId: org.id,
       name: 'Напоминание о визите',
       channel: 'SMS',
-      body: 'Ждём вас завтра в {{time}} — Sedrakoich dent',
+      body: 'Ждём вас завтра в {{time}} — Седракович Дент',
     },
   });
 
@@ -807,10 +959,10 @@ async function main() {
     },
   });
 
-  console.log(`✅ Seed OK: ${DEMO_PATIENTS.length} демо-пациентов, записи на сегодня, очередь, долги, планы`);
+  console.log(`✅ Seed OK: ${DEMO_PATIENTS.length} демо-пациентов, «Седракович Дент»`);
   console.log('   owner@demo.local / demo12345');
   console.log('   doctor@demo.local / demo12345');
-  console.log('   Ресепшн: /reception · Пациенты: /patients');
+  console.log('   admin@demo.local / demo12345');
 }
 
 main()

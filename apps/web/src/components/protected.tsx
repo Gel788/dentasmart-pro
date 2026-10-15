@@ -10,7 +10,7 @@ export function Protected({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) router.replace('/reception');
+    if (!loading && !user) router.replace('/login');
   }, [user, loading, router]);
 
   if (loading || !user) {
@@ -18,7 +18,7 @@ export function Protected({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen items-center justify-center bg-[var(--bg)]">
         <div className="text-center">
           <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--accent)]" />
-          <p className="mt-4 text-sm text-[var(--muted)]">Загрузка Sedrakoich dent…</p>
+          <p className="mt-4 text-sm text-[var(--muted)]">Загрузка Седракович Дент…</p>
         </div>
       </div>
     );

@@ -1,7 +1,7 @@
 {
-  "name": "Sedrakoich dent",
-  "short_name": "Sedrakoich dent",
-  "description": "CRM для стоматологических клиник",
+  "name": "Седракович Дент",
+  "short_name": "Седракович",
+  "description": "Седракович Дент — CRM для стоматологических клиник",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#f0f4f8",

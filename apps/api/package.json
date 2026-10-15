@@ -2,11 +2,12 @@
   "name": "@dentasmart/api",
   "version": "0.1.0",
   "private": true,
+  "description": "API «Седракович Дент»",
   "scripts": {
     "predev": "pnpm --filter @dentasmart/shared build",
     "dev": "nest start --watch",
     "build": "nest build",
-    "start": "node dist/apps/api/src/main.js",
+    "start": "node dist/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix"
   },
   "dependencies": {

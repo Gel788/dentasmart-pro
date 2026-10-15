@@ -92,6 +92,8 @@ export class PatientsService {
         invoices: { orderBy: { createdAt: 'desc' }, take: 10 },
         imagingStudies: { orderBy: { takenAt: 'desc' }, take: 20 },
         consents: { orderBy: { id: 'desc' } },
+        toothSurfaces: { orderBy: [{ toothNum: 'asc' }, { surface: 'asc' }] },
+        toothEvents: { orderBy: { createdAt: 'desc' }, take: 60 },
         deposit: true,
         familyMembers: { include: { familyGroup: true } },
         installmentPlans: { include: { schedule: true }, orderBy: { createdAt: 'desc' }, take: 5 },
@@ -113,9 +115,13 @@ export class PatientsService {
         )
         .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0] ?? null;
 
-    const activePlan = patient.treatmentPlans.find((p) =>
-      ['ACCEPTED', 'IN_PROGRESS', 'PROPOSED'].includes(p.status),
-    );
+    const rank = (status: string, alternative: boolean) => {
+      const base = { IN_PROGRESS: 0, ACCEPTED: 1, PROPOSED: 2, DRAFT: 3 }[status] ?? 9;
+      return base + (alternative ? 20 : 0);
+    };
+    const activePlan = [...patient.treatmentPlans]
+      .filter((plan) => ['ACCEPTED', 'IN_PROGRESS', 'PROPOSED', 'DRAFT'].includes(plan.status))
+      .sort((a, b) => rank(a.status, a.isAlternative) - rank(b.status, b.isAlternative))[0];
 
     return {
       ...patient,

@@ -15,7 +15,9 @@ import {
 import { Protected } from '@/components/protected';
 import { PatientProfileHero } from '@/components/patient-profile-hero';
 import { PatientForm } from '@/components/patient-form';
-import { ToothChart, type ToothRecord } from '@/components/tooth-chart';
+import type { ToothRecord } from '@/components/tooth-chart';
+import { ToothInspector } from '@/components/tooth-inspector';
+import { ClinicalAlert, MedicalHistory } from '@/components/medical-history';
 import { PlanBoard } from '@/components/plan-board';
 import { PerioChart } from '@/components/perio-chart';
 import { OmsPanel } from '@/components/oms-panel';
@@ -43,7 +45,6 @@ import {
   INSTALLMENT_STATUS,
   label,
   PLAN_STATUS,
-  TOOTH_CONDITIONS,
 } from '@/lib/format';
 import { patientFormToPayload, patientToForm } from '@/lib/patient';
 
@@ -59,8 +60,16 @@ type PatientFull = {
   gender?: string | null;
   tags?: string[];
   notes?: string | null;
+  source?: string | null;
   birthDate?: string | null;
+  allergies?: string[];
+  chronicConditions?: string | null;
+  medications?: string | null;
+  contraindications?: string | null;
+  anamnesis?: string | null;
   toothRecords: ToothRecord[];
+  toothSurfaces?: { toothNum: number; surface: string; condition: string; layer: string; diagnosis?: string | null }[];
+  toothEvents?: { id: string; toothNum: number; surfaces: string[]; condition: string; layer: string; note?: string | null; source: string; createdAt: string }[];
   treatmentPlans: {
     id: string;
     title: string;
@@ -72,6 +81,8 @@ type PatientFull = {
       price: string;
       listPrice?: string | null;
       toothNum?: number | null;
+      surfaces?: string[];
+      phase?: number;
       isCompleted: boolean;
       status?: string;
       service?: { id: string; name: string; basePrice: string } | null;
@@ -143,9 +154,6 @@ export default function PatientCardPage() {
   const [planEditing, setPlanEditing] = useState(true);
   const [patient, setPatient] = useState<PatientFull | null>(null);
   const [editOpen, setEditOpen] = useState(false);
-  const [selectedTooth, setSelectedTooth] = useState<number | undefined>();
-  const [toothCondition, setToothCondition] = useState('CARIES');
-  const [toothDiagnosis, setToothDiagnosis] = useState('');
   const [imgTitle, setImgTitle] = useState('');
   const [uploading, setUploading] = useState(false);
   const [viewImg, setViewImg] = useState<{ fileUrl: string; type: string; title?: string } | null>(null);
@@ -169,20 +177,6 @@ export default function PatientCardPage() {
   useEffect(() => {
     load();
   }, [load]);
-
-  const saveTooth = async () => {
-    if (!selectedTooth) return;
-    await api(`/clinical/patients/${id}/teeth`, {
-      method: 'POST',
-      body: JSON.stringify({
-        toothNum: selectedTooth,
-        formula: 'ADULT',
-        condition: toothCondition,
-        diagnosis: toothDiagnosis,
-      }),
-    });
-    load();
-  };
 
   const uploadImaging = async (file: File) => {
     setUploading(true);
@@ -249,6 +243,8 @@ export default function PatientCardPage() {
         Все пациенты
       </Link>
 
+      <ClinicalAlert patient={patient} />
+
       <PatientProfileHero
         patient={patient}
         stats={{
@@ -266,6 +262,7 @@ export default function PatientCardPage() {
 
       {tab === 'overview' && (
         <div className="mt-6 space-y-6">
+          <MedicalHistory patient={patient} onSaved={load} />
           <PlanSwitcher
             plans={patient.treatmentPlans ?? []}
             activeId={planId ?? patient.summary?.activePlanId ?? patient.treatmentPlans?.[0]?.id}
@@ -440,38 +437,14 @@ export default function PatientCardPage() {
       )}
 
       {tab === 'teeth' && (
-        <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <SectionCard title="Зубная формула" description="Нажмите на зуб">
-            <ToothChart records={patient.toothRecords ?? []} selected={selectedTooth} onSelect={setSelectedTooth} />
-          </SectionCard>
-          {selectedTooth ? (
-            <SectionCard title={`Зуб №${selectedTooth}`}>
-              <div className="space-y-4">
-                <div>
-                  <Label>Состояние</Label>
-                  <Select value={toothCondition} onChange={(e) => setToothCondition(e.target.value)}>
-                    {Object.entries(TOOTH_CONDITIONS).map(([k, v]) => (
-                      <option key={k} value={k}>
-                        {v}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div>
-                  <Label>Диагноз</Label>
-                  <Input value={toothDiagnosis} onChange={(e) => setToothDiagnosis(e.target.value)} />
-                </div>
-                <Button onClick={saveTooth} className="w-full">
-                  Сохранить
-                </Button>
-              </div>
-            </SectionCard>
-          ) : (
-            <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] text-sm text-[var(--muted)]">
-              Выберите зуб на схеме
-            </div>
-          )}
-        </div>
+        <ToothInspector
+          patientId={id}
+          records={patient.toothRecords ?? []}
+          surfaces={patient.toothSurfaces ?? []}
+          events={patient.toothEvents ?? []}
+          plans={patient.treatmentPlans ?? []}
+          onChanged={load}
+        />
       )}
 
       {tab === 'perio' && (

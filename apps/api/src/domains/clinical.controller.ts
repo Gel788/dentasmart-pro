@@ -55,15 +55,37 @@ export class ClinicalController {
     return this.svc.getToothChart(patientId);
   }
 
+  @Get('patients/:patientId/chart')
+  @RequirePermissions('medical.read')
+  chart(@Param('patientId') patientId: string) {
+    return this.svc.chartBundle(patientId);
+  }
+
   @Post('patients/:patientId/teeth')
   @RequirePermissions('medical.write')
-  upsertTooth(@Param('patientId') patientId: string, @Body() body: { toothNum: number; formula: 'ADULT' | 'CHILD'; condition: string; diagnosis?: string }) {
+  upsertTooth(
+    @Param('patientId') patientId: string,
+    @Body() body: { toothNum: number; formula: 'ADULT' | 'CHILD'; condition: string; diagnosis?: string; surfaces?: string[]; layer?: string },
+  ) {
     return this.svc.upsertTooth(patientId, body);
   }
 
   @Post('treatment-plans/:planId/items')
   @RequirePermissions('medical.write')
-  addItem(@Param('planId') planId: string, @Body() body: { title: string; toothNum?: number; price?: number; serviceId?: string }) {
+  addItem(
+    @Param('planId') planId: string,
+    @Body()
+    body: {
+      title: string;
+      toothNum?: number;
+      price?: number;
+      serviceId?: string;
+      surfaces?: string[];
+      phase?: number;
+      discountPercent?: number;
+      durationMin?: number;
+    },
+  ) {
     return this.svc.addPlanItem(planId, body);
   }
 
@@ -101,11 +123,52 @@ export class ClinicalController {
   @RequirePermissions('medical.write')
   toggleItem(
     @Param('itemId') itemId: string,
-    @Body() body: { isCompleted?: boolean; status?: string; price?: number; serviceId?: string },
+    @Body()
+    body: {
+      isCompleted?: boolean;
+      status?: string;
+      price?: number;
+      serviceId?: string;
+      discountPercent?: number;
+      phase?: number;
+      surfaces?: string[];
+      toothNum?: number | null;
+    },
   ) {
-    if (body.price != null || body.serviceId) return this.svc.updatePlanItem(itemId, body);
+    if (
+      body.price != null ||
+      body.serviceId ||
+      body.discountPercent != null ||
+      body.phase != null ||
+      body.surfaces ||
+      body.toothNum !== undefined
+    ) {
+      return this.svc.updatePlanItem(itemId, body);
+    }
     if (body.status) return this.svc.setItemStatus(itemId, body.status);
     return this.svc.togglePlanItem(itemId, !!body.isCompleted);
+  }
+
+  @Post('treatment-plans/:planId/accept')
+  @RequirePermissions('medical.write')
+  accept(@Param('planId') planId: string) {
+    return this.svc.acceptPlan(planId);
+  }
+
+  @Patch('treatment-plans/:planId/discount')
+  @RequirePermissions('medical.write')
+  discount(@Param('planId') planId: string, @Body() body: { discountPercent: number }) {
+    return this.svc.setPlanDiscount(planId, body.discountPercent);
+  }
+
+  @Post('treatment-plans/:planId/schedule')
+  @RequirePermissions('schedule.write')
+  schedule(
+    @OrgId() orgId: string,
+    @Param('planId') planId: string,
+    @Body() body: { itemIds: string[]; branchId: string; startsAt: string; doctorId?: string; cabinetId?: string },
+  ) {
+    return this.svc.schedulePlanItems(orgId, planId, body);
   }
 
   @Post('treatment-plans/:planId/recalculate')

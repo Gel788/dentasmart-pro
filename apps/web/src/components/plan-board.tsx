@@ -15,11 +15,15 @@ export type PlanLine = {
   price: string;
   listPrice?: string | null;
   toothNum?: number | null;
+  surfaces?: string[];
+  phase?: number;
+  discountPercent?: string | number | null;
   isCompleted: boolean;
   status?: string;
   durationMin?: number;
   service?: { id: string; name: string; basePrice: string } | null;
   invoiceItem?: { id: string } | null;
+  appointment?: { id: string; startsAt: string; status: string } | null;
 };
 
 type CatalogService = { id: string; name: string; price: number; code?: string | null };
@@ -69,6 +73,9 @@ export function PlanBoard({
   const [services, setServices] = useState<CatalogService[]>([]);
   const [serviceId, setServiceId] = useState('');
   const [draftPrice, setDraftPrice] = useState('');
+  const [draftPhase, setDraftPhase] = useState('1');
+  const [draftDiscount, setDraftDiscount] = useState('0');
+  const [draftSurfaces, setDraftSurfaces] = useState<string[]>([]);
   const [prices, setPrices] = useState<Record<string, string>>({});
   const [condition, setCondition] = useState('HEALTHY');
   const [diagnosis, setDiagnosis] = useState('');
@@ -198,10 +205,14 @@ export function PlanBoard({
           price,
           toothNum: tooth,
           serviceId: picked.id,
+          phase: Number(draftPhase) || 1,
+          discountPercent: Number(draftDiscount) || 0,
+          surfaces: draftSurfaces,
         }),
       });
       setServiceId('');
       setDraftPrice('');
+      setDraftDiscount('0');
     }
   };
 
@@ -241,10 +252,14 @@ export function PlanBoard({
           price,
           toothNum: tooth,
           serviceId: picked.id,
+          phase: Number(draftPhase) || 1,
+          discountPercent: Number(draftDiscount) || 0,
+          surfaces: draftSurfaces,
         }),
       });
       setServiceId('');
       setDraftPrice('');
+      setDraftDiscount('0');
     });
   };
 
@@ -375,6 +390,10 @@ export function PlanBoard({
                           : fromList != null
                             ? `Прайс ${formatMoney(fromList)}${custom ? ' · своя цена' : ''}`
                             : 'Цена вручную'}
+                        {` · этап ${item.phase ?? 1}`}
+                        {item.surfaces?.length ? ` · ${item.surfaces.join('')}` : ''}
+                        {Number(item.discountPercent) > 0 ? ` · скидка ${Number(item.discountPercent)}%` : ''}
+                        {item.appointment ? ' · в расписании' : ''}
                       </p>
                     </td>
                     <td className="px-3 py-3 align-middle font-semibold tabular-nums text-[var(--text)]">{item.toothNum ?? '—'}</td>
@@ -416,7 +435,23 @@ export function PlanBoard({
             <p className="ds-kicker mb-3">
               {tooth ? `Добавить услугу на зуб ${tooth}` : 'Добавить услугу без зуба'}
             </p>
-            <div className="grid gap-3 sm:grid-cols-[1fr_140px_auto] sm:items-end">
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {['M', 'D', 'O', 'B', 'L'].map((code) => {
+                const on = draftSurfaces.includes(code);
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => setDraftSurfaces((prev) => (prev.includes(code) ? prev.filter((item) => item !== code) : [...prev, code]))}
+                    className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${on ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-hover)]' : 'border-[var(--border)] text-[var(--muted)]'}`}
+                  >
+                    {code}
+                  </button>
+                );
+              })}
+              <span className="self-center text-xs text-[var(--muted)]">Поверхности строки</span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-[1fr_110px_90px_90px_auto] sm:items-end">
               <div>
                 <Label>Услуга</Label>
                 <Select
@@ -438,7 +473,7 @@ export function PlanBoard({
                 </Select>
               </div>
               <div>
-                <Label>Цена в плане</Label>
+                <Label>Цена</Label>
                 <Input
                   type="number"
                   min={0}
@@ -446,6 +481,14 @@ export function PlanBoard({
                   value={draftPrice}
                   onChange={(e) => setDraftPrice(e.target.value)}
                 />
+              </div>
+              <div>
+                <Label>Скидка %</Label>
+                <Input type="number" min={0} max={100} value={draftDiscount} onChange={(e) => setDraftDiscount(e.target.value)} />
+              </div>
+              <div>
+                <Label>Этап</Label>
+                <Input type="number" min={1} value={draftPhase} onChange={(e) => setDraftPhase(e.target.value)} />
               </div>
               <Button disabled={!serviceId || busy === 'add'} onClick={addService}>
                 Добавить

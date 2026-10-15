@@ -1,4 +1,4 @@
-# Sedrakoich dent
+# Седракович Дент
 
 CRM для стоматологических клиник. Веб-приложение (SPA/PWA) с мультифилиальностью, RBAC и модульной архитектурой.
 
@@ -77,6 +77,29 @@ pnpm dev
 pnpm --filter @dentasmart/widget build
 # dist/dentasmart-widget.js → встрой на сайт
 ```
+
+## Публичное демо
+
+Вход в один клик на `/login` (или сразу `/login?role=owner`, `doctor`, `admin`).
+
+| Роль | Email | Куда попадает |
+|------|--------|----------------|
+| Владелец | `owner@demo.local` | Дашборд, финансы, персонал |
+| Врач | `doctor@demo.local` | Карта пациента и план лечения |
+| Ресепшн | `admin@demo.local` | Расписание, запись, касса |
+
+Пароль у всех: `demo12345`.
+
+### Деплой
+
+Сайт уже подготовлен под Vercel: корень проекта в настройках — `apps/web` (см. `apps/web/vercel.json`). API — отдельный Node-сервис, его не кладут в тот же Vercel-проект: Nest слушает порт и ходит в PostgreSQL.
+
+1. PostgreSQL (Neon, Supabase или Render Postgres). Строка `DATABASE_URL`.
+2. API (Render/Fly/Railway): из корня репозитория `pnpm install`, `pnpm --filter @dentasmart/shared build`, `pnpm --filter @dentasmart/database db:generate`, `pnpm db:push`, `pnpm db:seed`, `pnpm --filter @dentasmart/api build`, старт `pnpm --filter @dentasmart/api start`. Переменные: `DATABASE_URL`, `JWT_SECRET` (длинный), `CORS_ORIGIN=https://<ваш-vercel-домен>`.
+3. Vercel, root directory `apps/web`. На сборке задать `NEXT_PUBLIC_API_URL=https://<api>/api/v1` — это значение вшивается в клиент, после смены нужен новый деплой веба.
+4. Готовый обзор: `https://<сайт>/login?role=owner`.
+
+Локально по-прежнему `docker compose up -d`, `pnpm db:push`, `pnpm db:seed`, `pnpm dev`.
 
 ## Стек
 

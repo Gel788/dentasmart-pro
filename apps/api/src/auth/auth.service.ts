@@ -158,7 +158,7 @@ export class AuthService {
       where: { id: userId },
       data: { totpSecret: secret, totpEnabled: false },
     });
-    return { secret, uri: `otpauth://totp/Sedrakoich%20dent?secret=${secret}&issuer=Sedrakoich%20dent` };
+    return { secret, uri: `otpauth://totp/Sedrakovich%20Dent?secret=${secret}&issuer=Sedrakovich%20Dent` };
   }
 
   async enable2fa(userId: string, code: string) {

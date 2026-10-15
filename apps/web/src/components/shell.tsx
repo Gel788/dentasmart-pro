@@ -3,15 +3,17 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X } from 'lucide-react';
+import { LogOut, Menu, Moon, Sun, X } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
+import { useTheme } from '@/lib/theme-context';
 import { Select } from '@/components/ui/input';
 import { findNavItem, isNavActive, NAV_GROUPS, NAVIGATION } from '@/config/navigation';
 
 export function Shell({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const { theme, toggle } = useTheme();
   const { branches, branchId, setBranchId, loading: branchLoading } = useBranch();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -39,6 +41,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
     }
   }, [pathname]);
 
+  const permissions = user?.permissions ?? [];
+  const navigation = NAVIGATION.filter((item) => !item.permission || permissions.includes(item.permission));
+  const groups = NAV_GROUPS.filter((group) => navigation.some((item) => item.group === group));
   const current = findNavItem(pathname);
   const person = user?.employee
     ? `${user.employee.firstName} ${user.employee.lastName}`
@@ -64,10 +69,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center justify-between px-5 pb-3 pt-6">
           <Link href="/reception" className="flex min-w-0 items-center gap-3">
             <span className="ds-display flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent)] text-sm text-white">
-              D
+              С
             </span>
             <span className="min-w-0">
-              <span className="ds-display block truncate text-[15px] tracking-tight text-white">Sedrakoich dent</span>
+              <span className="ds-display block truncate text-[15px] tracking-tight text-white">Седракович Дент</span>
               <span className="block truncate text-[11px] text-white/45">{user?.organization.name}</span>
             </span>
           </Link>
@@ -83,10 +88,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
         <nav ref={navRef} className="relative mt-4 flex-1 overflow-y-auto px-3 pb-4" aria-label="Разделы">
           <span ref={markerRef} className="ds-nav-marker" aria-hidden />
-          {NAV_GROUPS.map((group) => (
+          {groups.map((group) => (
             <div key={group} className="mb-4">
               <p className="mb-1 px-3 pt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/35">{group}</p>
-              {NAVIGATION.filter((item) => item.group === group).map((item) => {
+              {navigation.filter((item) => item.group === group).map((item) => {
                 const Icon = item.icon;
                 const active = isNavActive(pathname, item.href);
                 return (
@@ -113,36 +118,48 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
         <div className="border-t border-white/10 px-5 py-4">
           <p className="truncate text-sm text-white">{person}</p>
+          <p className="truncate text-[11px] text-white/45">{user?.email}</p>
+          <button type="button" onClick={logout} className="mt-3 inline-flex items-center gap-2 text-xs text-white/70 hover:text-white">
+            <LogOut size={14} />
+            Выйти
+          </button>
         </div>
       </aside>
 
       <div className="flex min-h-screen min-w-0 flex-col lg:pl-[272px]">
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 bg-[var(--sidebar)] px-3 py-2.5 text-white sm:px-6">
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface)]/90 px-3 py-2.5 backdrop-blur sm:px-6">
           <div className="flex min-w-0 items-center gap-2.5">
             <button
               type="button"
-              className="rounded-lg p-2 text-white hover:bg-white/10 lg:hidden"
+              className="rounded-lg p-2 text-[var(--text)] hover:bg-[var(--surface-muted)] lg:hidden"
               aria-label="Открыть меню"
               onClick={() => setOpen(true)}
             >
               <Menu size={18} />
             </button>
-            <Link href="/reception" className="ds-display shrink-0 text-[15px] text-white">
-              Sedrakoich dent
-            </Link>
-            <span className="hidden h-4 w-px bg-white/20 sm:block" aria-hidden />
-            <p className="hidden truncate text-sm text-white/70 sm:block">{current?.label ?? 'Клиника'}</p>
+            <p className="truncate text-sm font-medium text-[var(--text)]">{current?.label ?? 'Клиника'}</p>
+            {current?.description && (
+              <p className="hidden truncate text-sm text-[var(--muted)] md:block">{current.description}</p>
+            )}
           </div>
           <div className="flex min-w-0 items-center gap-3">
-            <p className="hidden whitespace-nowrap text-xs text-white/55 xl:block">
+            <p className="hidden whitespace-nowrap text-xs text-[var(--muted)] xl:block">
               {new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' }).format(new Date())}
             </p>
+            <button
+              type="button"
+              onClick={toggle}
+              className="rounded-lg border border-[var(--border)] p-2 text-[var(--text-secondary)] hover:bg-[var(--surface-muted)]"
+              aria-label={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+            >
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
             {branches.length > 0 && (
               <Select
                 value={branchId}
                 onChange={(e) => setBranchId(e.target.value)}
                 disabled={branchLoading}
-                className="max-w-[9.5rem] border-white/20 bg-white text-sm text-[var(--text)] sm:max-w-[220px]"
+                className="max-w-[9.5rem] text-sm sm:max-w-[220px]"
                 aria-label="Филиал"
               >
                 {branches.map((b) => (

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import { AuthProvider } from '@/lib/auth-context';
 import { BranchProvider } from '@/lib/branch-context';
+import { ThemeProvider } from '@/lib/theme-context';
 import { PwaRegister } from '@/components/pwa-register';
 import './globals.css';
 
@@ -20,10 +21,10 @@ const fontDisplay = localFont({
 });
 
 export const metadata: Metadata = {
-  title: 'Sedrakoich dent',
-  description: 'CRM для стоматологических клиник',
+  title: 'Седракович Дент',
+  description: 'Седракович Дент — CRM для стоматологических клиник',
   manifest: '/manifest.json',
-  appleWebApp: { capable: true, title: 'Sedrakoich dent' },
+  appleWebApp: { capable: true, title: 'Седракович Дент' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -31,15 +32,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ru" className={`${fontSans.variable} ${fontDisplay.variable}`}>
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#0c3d45" />
+        <meta name="theme-color" content="#141c22" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem('dsp_theme');if(t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}`,
+          }}
+        />
       </head>
       <body className={fontSans.className}>
-        <AuthProvider>
-          <BranchProvider>
-            <PwaRegister />
-            {children}
-          </BranchProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <BranchProvider>
+              <PwaRegister />
+              {children}
+            </BranchProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

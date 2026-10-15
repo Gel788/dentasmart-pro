@@ -51,7 +51,7 @@
           button { width: 100%; padding: 10px; background: ${color}; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
         </style>
         <div class="card">
-          <h3>${config.organization?.name ?? 'Запись онлайн'}</h3>
+          <h3>${config.organization?.name ?? 'Седракович Дент'}</h3>
           <label>Услуга</label>
           <select id="svc">${list}</select>
           <label>Имя</label>

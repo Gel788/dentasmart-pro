@@ -36,8 +36,8 @@ async function bootstrap() {
   );
 
   const config = new DocumentBuilder()
-    .setTitle('Sedrakoich dent API')
-    .setDescription('REST API для CRM стоматологической клиники')
+    .setTitle('Седракович Дент API')
+    .setDescription('REST API CRM «Седракович Дент»')
     .setVersion('0.1')
     .addBearerAuth()
     .build();

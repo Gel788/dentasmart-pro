@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Users, Wallet, CreditCard, CheckCircle2, TrendingUp, Lightbulb } from 'lucide-react';
+import { Users, CreditCard, TrendingUp, Lightbulb, CalendarX, Armchair } from 'lucide-react';
+import { APPOINTMENT_STATUS, label } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Protected } from '@/components/protected';
 import { PageHeader } from '@/components/ui/page-header';
@@ -16,6 +17,21 @@ interface DashboardData {
   patientsTotal: number;
   appointmentsThisMonth: number;
   revenueThisMonth: number;
+  noShowThisMonth?: number;
+  noShowRate?: number;
+  loadPercent?: number;
+  todayCount?: number;
+  revenueSeries?: { date: string; amount: number }[];
+  doctors?: { name: string; count: number }[];
+  today?: {
+    id: string;
+    startsAt: string;
+    status: string;
+    patient: { id: string; firstName: string; lastName: string };
+    doctor?: { firstName: string; lastName: string } | null;
+    service?: { name: string } | null;
+    cabinet?: { name: string } | null;
+  }[];
   funnel: { leads: number; scheduled: number; completed: number };
   aiInsights: { type: string; payload: Record<string, unknown>; confidence?: number }[];
 }
@@ -64,7 +80,11 @@ export default function DashboardPage() {
       <PageHeader
         badge="Обзор клиники"
         title={`Здравствуйте, ${user?.employee?.firstName ?? 'коллега'}`}
-        description="Ключевые показатели и рекомендации на сегодня"
+        description={
+          finance
+            ? `Дебиторка ${formatMoney(finance.receivable)} · открытых счетов ${finance.openInvoices}`
+            : 'Выручка, визиты, неявки и загрузка кресел'
+        }
       />
 
       <Link
@@ -80,11 +100,56 @@ export default function DashboardPage() {
       </Link>
 
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Пациенты" value={data?.patientsTotal ?? '—'} icon={Users} tone="teal" />
-        <StatCard label="Дебиторка" value={finance ? formatMoney(finance.receivable) : '—'} icon={Wallet} tone="amber" />
-        <StatCard label="Выручка сегодня" value={finance ? formatMoney(finance.revenueToday) : '—'} icon={CreditCard} tone="teal" />
-        <StatCard label="Завершено приёмов" value={data?.funnel.completed ?? '—'} icon={CheckCircle2} tone="amber" />
+        <StatCard label="Выручка месяца" value={data ? formatMoney(data.revenueThisMonth) : '—'} hint={finance ? `сегодня ${formatMoney(finance.revenueToday)}` : undefined} icon={CreditCard} tone="teal" />
+        <StatCard label="Визиты месяца" value={data?.appointmentsThisMonth ?? '—'} hint={data ? `завершено ${data.funnel.completed}` : undefined} icon={Users} tone="blue" />
+        <StatCard label="Неявки" value={data?.noShowThisMonth ?? '—'} hint={data?.noShowRate != null ? `${data.noShowRate}% от визитов` : undefined} icon={CalendarX} tone="amber" />
+        <StatCard label="Загрузка кресел сегодня" value={data?.loadPercent != null ? `${data.loadPercent}%` : '—'} hint={data?.todayCount != null ? `${data.todayCount} записей` : undefined} icon={Armchair} tone="teal" />
       </div>
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
+        <Card>
+          <CardHeader title="Выручка за 14 дней" description="Оплаты, которые уже прошли по кассе" />
+          <RevenueBars series={data?.revenueSeries ?? []} />
+        </Card>
+        <Card>
+          <CardHeader title="Нагрузка врачей" description="Визиты этого месяца, без отмен" />
+          <div className="space-y-3">
+            {(data?.doctors ?? []).map((doctor) => (
+              <div key={doctor.name}>
+                <div className="mb-1 flex justify-between text-sm">
+                  <span>{doctor.name}</span>
+                  <span className="tabular-nums text-[var(--muted)]">{doctor.count}</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+                  <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.min(100, (doctor.count / Math.max(data?.doctors?.[0]?.count ?? 1, 1)) * 100)}%` }} />
+                </div>
+              </div>
+            ))}
+            {!data?.doctors?.length && <p className="text-sm text-[var(--muted)]">Пока нет визитов за месяц.</p>}
+          </div>
+        </Card>
+      </div>
+
+      {!!data?.today?.length && (
+        <Card className="mt-6">
+          <CardHeader title="Сегодня в расписании" description="Живая лента филиала" action={<Link href="/schedule" className="text-sm font-medium text-[var(--accent)]">Всё расписание</Link>} />
+          <div className="divide-y divide-[var(--border)]">
+            {data.today.slice(0, 8).map((visit) => (
+              <div key={visit.id} className="flex flex-wrap items-center gap-3 py-3 text-sm">
+                <span className="w-14 tabular-nums font-semibold text-[var(--text)]">
+                  {new Date(visit.startsAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <Link href={`/patients/${visit.patient.id}`} className="font-medium hover:text-[var(--accent)]">
+                  {visit.patient.lastName} {visit.patient.firstName}
+                </Link>
+                <span className="text-[var(--muted)]">{visit.service?.name ?? 'Приём'}</span>
+                <span className="text-[var(--muted)]">{visit.doctor ? `${visit.doctor.lastName}` : ''}</span>
+                <span className="ml-auto text-xs text-[var(--text-secondary)]">{label(APPOINTMENT_STATUS, visit.status)}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         {funnel && (
@@ -170,5 +235,24 @@ export default function DashboardPage() {
         </Card>
       )}
     </Protected>
+  );
+}
+
+function RevenueBars({ series }: { series: { date: string; amount: number }[] }) {
+  const max = Math.max(...series.map((point) => point.amount), 1);
+  if (!series.length) return <p className="text-sm text-[var(--muted)]">Оплат за две недели ещё нет.</p>;
+  return (
+    <div className="flex h-36 items-end gap-1.5">
+      {series.map((point) => (
+        <div key={point.date} className="flex h-full flex-1 flex-col justify-end">
+          <div
+            className="rounded-t-md bg-[var(--accent)]"
+            style={{ height: `${Math.max(4, (point.amount / max) * 100)}%` }}
+            title={`${point.date}: ${formatMoney(point.amount)}`}
+          />
+          <span className="mt-1 text-center text-[10px] text-[var(--muted)]">{point.date.slice(8)}</span>
+        </div>
+      ))}
+    </div>
   );
 }

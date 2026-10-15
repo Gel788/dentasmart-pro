@@ -1,4 +1,4 @@
-const CACHE = 'dentasmart-v2';
+const CACHE = 'sedrakovich-dent-v3';
 const SHELL = ['/', '/dashboard', '/patients', '/schedule', '/manifest.json'];
 
 self.addEventListener('install', (e) => {

@@ -67,7 +67,10 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
     const renewed = await refreshAccess();
     if (renewed) return api<T>(path, options, true);
     endSession();
-    return new Promise(() => {});
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login';
+    }
+    throw new Error('Сессия истекла');
   }
 
   if (!res.ok) {

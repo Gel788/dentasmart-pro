@@ -1,0 +1,19 @@
+# API для публичного демо. Веб остаётся на Vercel (корень apps/web).
+services:
+  - type: web
+    name: sedrakovich-dent-api
+    runtime: node
+    plan: free
+    buildCommand: corepack enable && corepack prepare pnpm@9.15.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @dentasmart/shared build && pnpm --filter @dentasmart/database db:generate && pnpm --filter @dentasmart/api build
+    startCommand: pnpm --filter @dentasmart/api start
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        sync: false
+      - key: API_PORT
+        value: "10000"
