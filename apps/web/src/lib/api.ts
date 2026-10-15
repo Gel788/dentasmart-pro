@@ -1,4 +1,6 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
+import { isDemo } from './demo/mode';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 const API_ORIGIN = API_URL.replace(/\/api\/v1\/?$/, '');
 
 export function getToken(): string | null {
@@ -15,7 +17,11 @@ export function clearToken() {
 }
 
 export function assetUrl(path: string) {
-  if (path.startsWith('http')) return path;
+  if (!path || path.startsWith('http') || path.startsWith('data:')) return path;
+  if (isDemo()) {
+    if (path.startsWith('/uploads/imaging/')) return `/demo/${path.slice('/uploads/imaging/'.length)}`;
+    return path;
+  }
   return `${API_ORIGIN}${path}`;
 }
 
@@ -49,6 +55,14 @@ function endSession() {
 }
 
 export async function api<T>(path: string, options: RequestInit = {}, retried = false): Promise<T> {
+  if (isDemo()) {
+    const { demoRequest } = await import('./demo/handle');
+    const token = getToken();
+    const headers = new Headers(options.headers);
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return demoRequest<T>(path, { ...options, headers });
+  }
+
   const token = getToken();
   const headers: HeadersInit = { ...(options.headers ?? {}) };
 
@@ -83,6 +97,10 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
 }
 
 export async function uploadFile(file: File): Promise<string> {
+  if (isDemo()) {
+    const { demoFileUrl } = await import('./demo/handle');
+    return demoFileUrl(file);
+  }
   const fd = new FormData();
   fd.append('file', file);
   const token = getToken();

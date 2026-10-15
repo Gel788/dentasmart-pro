@@ -1,0 +1,23 @@
+solid tooth
+facet normal 0 0 0
+  outer loop
+    vertex 0 0 0
+    vertex 20 0 0
+    vertex 10 24 6
+  endloop
+endfacet
+facet normal 0 0 0
+  outer loop
+    vertex 20 0 0
+    vertex 16 0 16
+    vertex 10 24 6
+  endloop
+endfacet
+facet normal 0 0 0
+  outer loop
+    vertex 16 0 16
+    vertex 0 0 0
+    vertex 10 24 6
+  endloop
+endfacet
+endsolid tooth

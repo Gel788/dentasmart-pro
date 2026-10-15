@@ -92,16 +92,19 @@ pnpm --filter @dentasmart/widget build
 
 ### Деплой
 
-Сайт собирается на **Vercel**. В настройках проекта корень — `apps/web` (команды в `apps/web/vercel.json`).
+Сайт на **Vercel** по умолчанию — публичное демо без сервера. Пациенты, расписание, планы, прайс, склад, лиды, лаборатория и финансы лежат в браузере, правки сохраняются в `localStorage`. Вход: `/login` и ссылки `/login?role=owner`, `doctor`, `admin`. Пароль `demo12345`.
+
+Корень проекта на Vercel — `apps/web` (команды в `apps/web/vercel.json`). Сборка включает демо, пока не задан `NEXT_PUBLIC_DEMO=0` вместе с `NEXT_PUBLIC_API_URL`.
 
 API на Vercel не деплоится. Nest слушает порт и ходит в PostgreSQL, поэтому сервис описан в `render.yaml` и поднимается на **Render** (`sedrakovich-dent-api`). Проекты Vercel с API в имени (`dentasmart-pro-api` и похожие) сборку пропускают: `ignoreCommand` в корневом `vercel.json` и в `apps/api/vercel.json` завершается с кодом 0. Проверка на pull request остаётся зелёной, наружу API не выкладывается.
 
+Живой API подключается так:
+
 1. PostgreSQL (Neon, Supabase или Render Postgres). Строка `DATABASE_URL`.
 2. API: Blueprint Render из `render.yaml`. Вручную те же шаги из корня: `pnpm install`, `pnpm --filter @dentasmart/shared build`, `pnpm --filter @dentasmart/database db:generate`, `pnpm db:push`, `pnpm db:seed`, `pnpm --filter @dentasmart/api build`, старт `pnpm --filter @dentasmart/api start`. Переменные: `DATABASE_URL`, `JWT_SECRET` (длинный), `CORS_ORIGIN=https://<ваш-vercel-домен>`.
-3. Vercel, root directory `apps/web`. На сборке задать `NEXT_PUBLIC_API_URL=https://<api>/api/v1` — это значение вшивается в клиент, после смены нужен новый деплой веба.
-4. Готовый обзор: `https://<сайт>/login?role=owner`.
+3. Vercel, root directory `apps/web`. На сборке задать `NEXT_PUBLIC_DEMO=0` и `NEXT_PUBLIC_API_URL=https://<api>/api/v1`.
 
-Локально по-прежнему `docker compose up -d`, `pnpm db:push`, `pnpm db:seed`, `pnpm dev`.
+Локально без `NEXT_PUBLIC_API_URL` интерфейс тоже открывается как демо. Чтобы ходить в Nest: `NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1 pnpm dev` после `docker compose up -d`, `pnpm db:push`, `pnpm db:seed`.
 
 ## Стек
 
