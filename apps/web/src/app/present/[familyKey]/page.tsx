@@ -87,25 +87,27 @@ function Story() {
       <header className="pv-top">
         <div className="pv-brand">Седракович Дент</div>
         <div className="pv-steps">
-          {[0, 1, 2, 3, 4, 5].map((index) => <button key={index} className={index === step ? 'on' : ''} type="button" onClick={() => setStep(index)}>{index + 1}</button>)}
+          {['Сейчас', 'План', 'Улыбка', 'Пути', 'Месяц', 'Подпись'].map((label, index) => (
+            <button key={label} className={index === step ? 'on' : ''} type="button" onClick={() => setStep(index)}>{label}</button>
+          ))}
         </div>
       </header>
       {step === 0 && (
-        <section className="pv-hero">
-          <p className="sd-muted" style={{ letterSpacing: '0.08em', textTransform: 'uppercase' }}>Как есть сейчас</p>
+        <section className="pv-hero" key="now">
+          <p className="pv-kicker">Как есть сейчас</p>
           <h1>{data.patient.firstName}, давайте спокойно посмотрим.</h1>
-          <p className="lead">Ниже — то, что видно на снимке и на фото. Красные пометки — то, что нельзя откладывать. Дальше будет план простыми словами, без прайса для врача.</p>
+          <p className="lead">Снимок и фото. Красное — то, что нельзя откладывать.</p>
           <div className="sd-chips" style={{ marginTop: 12 }}>
             {data.alerts.filter((alert) => alert.tone === 'danger').map((alert) => <span key={alert.text} className="sd-chip danger">{alert.text}</span>)}
           </div>
           <div className="pv-photos">
-            {photos.xray ? <img src={assetUrl(photos.xray)} alt="Снимок" /> : <div className="pv-shot" />}
-            {photos.before ? <img src={assetUrl(photos.before)} alt="До" /> : <div className="pv-shot" />}
+            {photos.xray ? <img src={assetUrl(photos.xray)} alt="Снимок" /> : <div className="pv-shot"><span>Снимок</span></div>}
+            {photos.before ? <img src={assetUrl(photos.before)} alt="До" /> : <div className="pv-shot"><span>Фото</span></div>}
           </div>
         </section>
       )}
       {step === 1 && (
-        <section className="pv-chapter">
+        <section className="pv-chapter" key="plan">
           <h2>Что предлагаем</h2>
           <p className="lead">Рекомендуем вариант «{recommended.tierLabel}». Этапы идут по очереди: следующий начинается, когда предыдущий зажил.</p>
           {recommended.phases.map((phase, index) => (
@@ -121,20 +123,25 @@ function Story() {
         </section>
       )}
       {step === 2 && (
-        <section className="pv-chapter">
+        <section className="pv-chapter" key="smile">
           <h2>Как изменится улыбка</h2>
-          <p className="lead">Слева — сейчас. Справа — после ортопедии. Это ориентир, не обещание голливудской улыбки за один визит.</p>
+          <p className="lead">Слева сейчас, справа после. Это ориентир.</p>
           {photos.before && photos.after ? (
             <div className="pv-photos">
               <img src={assetUrl(photos.before)} alt="До" />
               <img src={assetUrl(photos.after)} alt="После" />
             </div>
-          ) : <p>Фотопротокола пока нет.</p>}
+          ) : (
+            <div className="pv-photos">
+              <div className="pv-shot"><span>Сейчас</span></div>
+              <div className="pv-shot"><span>После</span></div>
+            </div>
+          )}
           <SmilePreview sampleUrl={photos.before ? assetUrl(photos.before) : null} />
         </section>
       )}
       {step === 3 && (
-        <section className="pv-chapter">
+        <section className="pv-chapter" key="paths">
           <h2>Три пути</h2>
           <table className="pv-table">
             <thead><tr><th></th>{data.plans.map((plan) => <th key={plan.id}>{plan.tier === 'OPTIMUM' && <span className="pv-ribbon">рекомендуем</span>} {plan.tierLabel}</th>)}</tr></thead>
@@ -148,15 +155,15 @@ function Story() {
         </section>
       )}
       {step === 4 && (
-        <section className="pv-chapter">
+        <section className="pv-chapter" key="month">
           <h2>Сколько в месяц</h2>
           <p className="pv-price">{formatMoney(perMonth)}</p>
           <p>при {months === 1 ? 'оплате сразу' : `рассрочке на ${months} мес.`} · всего {formatMoney(total)}</p>
-          <input type="range" min={1} max={12} value={months} onChange={(event) => setMonths(Number(event.target.value))} style={{ width: '100%', marginTop: 16 }} />
+          <input className="pv-range" type="range" min={1} max={12} value={months} onChange={(event) => setMonths(Number(event.target.value))} aria-label="Срок рассрочки" />
         </section>
       )}
       {step === 5 && (
-        <section className="pv-chapter">
+        <section className="pv-chapter" key="sign">
           <h2>{done ? 'Договорились' : 'Подпись'}</h2>
           {done ? (
             <>

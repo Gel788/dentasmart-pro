@@ -150,16 +150,22 @@ function Cockpit() {
           <h1>{visit.patient.lastName} {visit.patient.firstName}</h1>
           <div className="sd-chips">{alerts.map((alert) => <span key={alert} className="sd-chip danger">{alert}</span>)}</div>
         </div>
-        <div>
-          <div className="ck-timer">{clock}</div>
-          <div style={{ opacity: 0.75 }}>{visit.status === 'IN_PROGRESS' ? 'в кресле' : 'таймер со старта'}</div>
+        <div className="ck-clock">
+          <div className="ck-timer">{visit.status === 'IN_PROGRESS' ? clock : '—'}</div>
+          <div>{visit.status === 'IN_PROGRESS' ? 'в кресле' : visit.status === 'COMPLETED' ? 'закрыт' : 'ожидает'}</div>
         </div>
       </header>
       {error && <p className="sd-chip danger">{error}</p>}
       <div className="ck-grid">
         <section className="sd-card sd-stack">
           <strong>Что делаем сегодня</strong>
-          {items.length === 0 && <p className="sd-muted">В плане пока нет позиций. Формула всё равно перед глазами.</p>}
+          {items.length === 0 && (
+            <div className="sd-empty">
+              <span className="sd-empty-mark" />
+              <b>План ещё пуст</b>
+              <p className="sd-muted">Формула остаётся перед глазами. Позиции появятся из плана пациента.</p>
+            </div>
+          )}
           {items.slice(0, 6).map((item) => (
             <label key={item.id} className={`ck-item ${done[item.id] ? 'on' : ''}`}>
               <input type="checkbox" checked={!!done[item.id]} onChange={(event) => setDone({ ...done, [item.id]: event.target.checked })} />
@@ -205,7 +211,7 @@ function Cockpit() {
                 <span>{formatMoney(line.qty * line.cost)}</span>
               </div>
             ))}
-            <p className="sd-muted">Себестоимость {formatMoney(materialCost)}. Списание пройдёт вместе с закрытием визита, если у услуги есть набор на складе.</p>
+            <p className="sd-muted">Себестоимость {formatMoney(materialCost)}</p>
           </div>
         </section>
       </div>

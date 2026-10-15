@@ -75,12 +75,12 @@ export function Copilot({
         </div>
         <div className="wow-smile-actions">
           <button className="sd-btn-ghost" type="button" onClick={dictate}>{listening ? 'Слушаю…' : 'Диктовка'}</button>
-          <button className="sd-btn" type="button" onClick={ask}>Предложить</button>
+          <button className="sd-btn-ghost" type="button" onClick={ask}>Предложить</button>
         </div>
       </div>
       {voice && <p className="sd-muted">{voice}</p>}
       {error && <p className="sd-chip danger">{error}</p>}
-      {!advice && <p className="sd-muted">По формуле и тексту записи соберёт диагнозы, три варианта плана с расходниками и фразу для пациента.</p>}
+      {!advice && <p className="sd-muted">Диагноз, три варианта и фраза для пациента.</p>}
       {advice && (
         <>
           <p className="sd-muted">{advice.label}</p>

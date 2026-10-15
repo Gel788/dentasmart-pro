@@ -36,7 +36,10 @@ export function PlanJourney({
   building: boolean;
 }) {
   const router = useRouter();
-  const plans = families.flatMap((family) => family.plans);
+  const family = families.find((item) => item.key === familyKey)
+    ?? families.find((item) => item.plans.some((plan) => plan.id === activeId))
+    ?? [...families].sort((a, b) => b.plans.length - a.plans.length)[0];
+  const plans = family?.plans ?? [];
   const plan = plans.find((item) => item.id === activeId) ?? plans[0];
   const economy = plans.find((item) => item.tier === 'ECONOM');
   const [tooth, setTooth] = useState<number | null>(null);
@@ -112,7 +115,7 @@ export function PlanJourney({
       </div>
       <div className="jn-stage">
         <section className="jn-chart">
-          <div className="jn-kicker">Формула · клик по зубу фильтрует этап</div>
+          <div className="jn-kicker">Клик по зубу оставляет его этап</div>
           <ToothChart
             surfaces={surfaces}
             items={chartItems}
@@ -129,6 +132,7 @@ export function PlanJourney({
         </section>
         <section className="jn-road">
           {phases.map((phase, index) => {
+            const current = phases.findIndex((item) => item.items.some((line) => line.status !== 'DONE' && line.status !== 'ACCEPTED'));
             const done = phase.items.filter((item) => item.status === 'DONE' || item.status === 'ACCEPTED').length;
             const progress = phase.items.length ? Math.round((done / phase.items.length) * 100) : 0;
             const minutes = phase.items.reduce((sum, item) => sum + 40, 0);
@@ -144,8 +148,8 @@ export function PlanJourney({
                       <p>{phase.specialty ?? 'Этап'} · {Math.max(30, minutes)} мин{phase.healingDays ? ` · заживление ${phase.healingDays} дн.` : ''}</p>
                     </div>
                     <div>
-                      {phase.id !== 'loose' && plan && (
-                        <button className="sd-btn-ghost" type="button" onClick={() => void api<{ startsAt: string }>(`/workspace/plans/${plan.id}/phases/${phase.id}/book`, { method: 'POST', body: '{}' }).then((result) => setSaved(`«${phase.title}» записан на ${new Date(result.startsAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`)).catch((err: Error) => setSaved(err.message))}>Записать этап</button>
+                      {index === current && phase.id !== 'loose' && plan && (
+                        <button className="sd-btn-ghost" type="button" onClick={() => void api<{ startsAt: string }>(`/workspace/plans/${plan.id}/phases/${phase.id}/book`, { method: 'POST', body: '{}' }).then((result) => setSaved(`«${phase.title}» записан на ${new Date(result.startsAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`)).catch((err: Error) => setSaved(err.message))}>Записать</button>
                       )}
                       <div className="jn-ring" style={{ ['--p' as string]: String(progress) }}><strong>{formatMoney(price)}</strong></div>
                     </div>
@@ -186,10 +190,13 @@ export function PlanJourney({
           <strong>{formatMoney(perMonth)}{months > 1 ? '/мес' : ''}</strong>
         </div>
         <div className="jn-actions">
+          <details className="jn-more">
+            <summary>Ещё</summary>
+            <button className="sd-btn-ghost" type="button" onClick={() => void api<{ id: string; note: string | null; createdAt: string }[]>(`/workspace/plans/${plan.id}/versions`).then(setVersions).catch((err: Error) => setSaved(err.message))}>Версии</button>
+            <button className="sd-btn-ghost" type="button" onClick={() => window.open(`/print/plan/${plan.id}`, '_blank')}>Печать</button>
+            <button className="sd-btn-ghost" type="button" onClick={() => void send()}>Ссылка</button>
+          </details>
           <button className="sd-btn-ghost" type="button" onClick={() => void save()}>Сохранить</button>
-          <button className="sd-btn-ghost" type="button" onClick={() => void api<{ id: string; note: string | null; createdAt: string }[]>(`/workspace/plans/${plan.id}/versions`).then(setVersions).catch((err: Error) => setSaved(err.message))}>Версии</button>
-          <button className="sd-btn-ghost" type="button" onClick={() => window.open(`/print/plan/${plan.id}`, '_blank')}>Печать / PDF</button>
-          <button className="sd-btn-ghost" type="button" onClick={() => void send()}>Пациенту</button>
           <button className="sd-btn" type="button" onClick={() => familyKey && router.push(`/present/${familyKey}`)}>Показать</button>
         </div>
         {(saved || sent) && <p className="jn-note">{saved}{saved && sent ? ' · ' : ''}{sent}</p>}

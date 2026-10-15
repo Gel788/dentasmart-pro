@@ -35,7 +35,7 @@ export function OwnerHome({ data }: { data: {
       <div className="sd-metrics">
         <Metric label="Выручка месяца" amount={data.revenue} money hint={`средний чек ${formatMoney(data.avgCheck)}`} />
         <Metric label="Визиты" amount={data.visits} hint={`неявки ${data.noShows} · ${data.noShowRate}%`} />
-        <Metric label="Загрузка кресел" amount={data.loadPercent} suffix="%" hint="сегодня, от 10 часов" />
+        <Metric label="Загрузка кресел" amount={data.loadPercent} suffix="%" hint="сегодня, от 10 часов" ring />
         <Metric label="Конверсия планов" amount={data.conversion.rate} suffix="%" hint={`LTV ${formatMoney(data.ltv)}`} />
       </div>
       <Retention />
@@ -185,7 +185,13 @@ function Retention() {
         ))}
         {data.recall.map((item) => <div key={item.patientId} className="sd-muted">Гигиена: {item.patient}{item.phone ? ` · ${item.phone}` : ''}</div>)}
         {data.birthdays.map((item) => <div key={item.patientId} className="sd-muted">День рождения: {item.patient}</div>)}
-        {data.followUps.length === 0 && data.recall.length === 0 && data.birthdays.length === 0 && <p className="sd-muted">Открытых задач нет.</p>}
+        {data.followUps.length === 0 && data.recall.length === 0 && data.birthdays.length === 0 && (
+          <div className="sd-empty">
+            <span className="sd-empty-mark" />
+            <b>Сейчас тихо</b>
+            <p className="sd-muted">Нет звонков, гигиены и дней рождения на сегодня.</p>
+          </div>
+        )}
       </section>
       <details className="sd-card">
         <summary>Врачи за месяц</summary>
@@ -244,13 +250,13 @@ function book(id: string, name: string) {
   window.location.href = '/schedule';
 }
 
-function Metric({ label, amount, suffix = '', money, hint }: { label: string; amount: number; suffix?: string; money?: boolean; hint: string }) {
+function Metric({ label, amount, suffix = '', money, hint, ring }: { label: string; amount: number; suffix?: string; money?: boolean; hint: string; ring?: boolean }) {
   const value = useCount(amount);
   const shown = money ? formatMoney(Math.round(value)) : `${Math.round(value)}${suffix}`;
   return (
-    <div className="sd-metric">
+    <div className={`sd-metric${ring ? ' sd-metric-ring' : ''}`}>
       <span>{label}</span>
-      <strong>{shown}</strong>
+      {ring ? <div className="sd-ring" style={{ ['--p' as string]: String(Math.round(value)) }}><strong>{shown}</strong></div> : <strong>{shown}</strong>}
       <em>{hint}</em>
     </div>
   );

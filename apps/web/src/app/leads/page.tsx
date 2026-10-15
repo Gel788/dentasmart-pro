@@ -117,7 +117,13 @@ function Desk() {
             </article>
           );
         })}
-        {visible.length === 0 && <p className="sd-muted">В этом списке пусто.</p>}
+        {visible.length === 0 && (
+          <div className="sd-empty sd-card">
+            <span className="sd-empty-mark" />
+            <b>В этом списке пусто</b>
+            <p className="sd-muted">Пропущенный номер появится здесь как задача.</p>
+          </div>
+        )}
       </div>
     </div>
   );

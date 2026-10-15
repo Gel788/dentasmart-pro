@@ -133,9 +133,8 @@ function Book() {
       <div className="sd-h">
         <div>
           <h1>Прайс</h1>
-          <p>Категории и услуги. Цена, код, длительность и набор расходников меняются здесь, без настроек.</p>
+          <p>{ruServices(services.filter((row) => row.code && row.isActive).length)} в прайсе.</p>
         </div>
-        <button className="sd-btn-ghost" type="button" onClick={() => setShowArchive((value) => !value)}>{showArchive ? 'Скрыть архив' : 'Показать архив'}</button>
       </div>
       {notice && <p className="wow-note">{notice}</p>}
       {error && <p className="sd-chip danger">{error}</p>}
@@ -180,6 +179,7 @@ function Book() {
           <input className="sd-input" type="number" value={percent} onChange={(event) => setPercent(Number(event.target.value))} aria-label="Процент изменения цен" />
           <button className="sd-btn-ghost" type="button" onClick={() => void api('/config/services/bulk', { method: 'POST', body: JSON.stringify({ percent }) }).then(() => { setNotice(`Цены сдвинуты на ${percent}%`); return load(); }).catch((err: Error) => setError(err.message))}>Применить {percent}%</button>
           <button className="sd-btn-ghost" type="button" onClick={() => downloadPrice().catch((err: Error) => setError(err.message))}>Скачать Excel</button>
+          <button className="sd-btn-ghost" type="button" onClick={() => setShowArchive((value) => !value)}>{showArchive ? 'Скрыть архив' : 'Показать архив'}</button>
         </div>
       </details>
 
@@ -187,9 +187,15 @@ function Book() {
         <section key={category.id} className="sd-card sd-stack">
           <div className="sd-inline">
             <h2>{category.name}</h2>
-            <span className="sd-muted">{items.length} услуг</span>
+            <span className="sd-muted">{ruServices(items.length)}</span>
           </div>
-          {items.length === 0 && <p className="sd-muted">В категории пока нет услуг.</p>}
+          {items.length === 0 && (
+            <div className="sd-empty">
+              <span className="sd-empty-mark" />
+              <b>В категории пусто</b>
+              <p className="sd-muted">Добавьте услугу и выберите эту категорию.</p>
+            </div>
+          )}
           {items.map((row) => <ServiceLine key={row.id} row={row} onEdit={() => edit(row)} onArchive={() => archive(row)} />)}
         </section>
       ))}
@@ -201,6 +207,13 @@ function Book() {
       )}
     </div>
   );
+}
+
+function ruServices(n: number) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  const word = mod10 === 1 && mod100 !== 11 ? 'услуга' : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? 'услуги' : 'услуг';
+  return `${n} ${word}`;
 }
 
 function ServiceLine({ row, onEdit, onArchive }: { row: ServiceRow; onEdit: () => void; onArchive: () => void }) {
