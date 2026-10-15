@@ -70,8 +70,7 @@ export function Copilot({
     <section className="sd-card sd-stack wow-copilot">
       <div className="wow-smile-head">
         <div>
-          <span className="wow-demo">Демо-модель</span>
-          <strong>Подсказка по приёму</strong>
+          <strong>Подсказка</strong>
         </div>
         <div className="wow-smile-actions">
           <button className="sd-btn-ghost" type="button" onClick={dictate}>{listening ? 'Слушаю…' : 'Диктовка'}</button>

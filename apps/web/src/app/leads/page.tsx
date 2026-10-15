@@ -100,7 +100,7 @@ function Desk() {
         {visible.map((row) => {
           const next = NEXT[row.status];
           return (
-            <article key={row.id} className="sd-card lead-line sd-inline">
+            <article key={row.id} className={`sd-card lead-line sd-inline is-${row.status.toLowerCase()}`}>
               <div>
                 <strong>{row.name}</strong>
                 <p className="sd-muted">{row.phone} · {row.source}{row.calls.some((call) => call.missed) ? ' · пропущен' : ''}{row.refusalReason ? ` · ${row.refusalReason}` : ''}</p>

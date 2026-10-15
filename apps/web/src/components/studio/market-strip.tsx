@@ -64,11 +64,11 @@ export function MarketStrip({ patientId }: { patientId: string }) {
   ].filter(Boolean).join(' · ');
 
   return (
-    <section className="sd-card sd-stack">
-      <button className="sd-inline" type="button" onClick={() => setOpen((value) => !value)} style={{ width: '100%', background: 'transparent', border: 0, textAlign: 'left' }}>
+    <section className={open ? 'sd-card sd-stack' : ''}>
+      <button className="sd-strip" type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
         <strong>Сопровождение</strong>
-        <span className="sd-muted">{summary}</span>
-        <span className="sd-btn-ghost">{open ? 'Скрыть' : 'Открыть'}</span>
+        <span>{summary}</span>
+        <em>{open ? 'Скрыть' : 'Открыть'}</em>
       </button>
       {open && <>
       <div className="sd-inline">

@@ -151,7 +151,10 @@ export function PlanJourney({
                       {index === current && phase.id !== 'loose' && plan && (
                         <button className="sd-btn-ghost" type="button" onClick={() => void api<{ startsAt: string }>(`/workspace/plans/${plan.id}/phases/${phase.id}/book`, { method: 'POST', body: '{}' }).then((result) => setSaved(`«${phase.title}» записан на ${new Date(result.startsAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`)).catch((err: Error) => setSaved(err.message))}>Записать</button>
                       )}
-                      <div className="jn-ring" style={{ ['--p' as string]: String(progress) }}><strong>{formatMoney(price)}</strong></div>
+                      <div className="jn-price">
+                        <div className="jn-ring" style={{ ['--p' as string]: String(progress) }} aria-hidden><strong>{progress}</strong></div>
+                        <b>{formatMoney(price)}</b>
+                      </div>
                     </div>
                   </header>
                   {phase.dependsOnTitle && <p className="jn-wait">После «{phase.dependsOnTitle}» пауза {phase.waitDays} дн.</p>}

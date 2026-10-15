@@ -98,17 +98,17 @@ function CardScreen() {
           <h1>{card.patient.lastName} {card.patient.firstName}</h1>
           <p>{age != null ? `${age} лет` : 'возраст не указан'}{card.patient.phone ? ` · ${card.patient.phone}` : ''} · {card.debt > 0 ? `долг ${formatMoney(card.debt)}` : 'долга нет'}</p>
         </div>
+        <div className="sd-seg">
+          <button type="button" className={mode === 'plan' ? 'on' : ''} onClick={() => setMode('plan')}>План</button>
+          <button type="button" className={mode === 'formula' ? 'on' : ''} onClick={() => setMode('formula')}>Формула</button>
+          <button type="button" className={mode === 'perio' ? 'on' : ''} onClick={() => setMode('perio')}>Пародонт</button>
+          <button type="button" className={mode === 'imaging' ? 'on' : ''} onClick={() => setMode('imaging')}>Снимки</button>
+        </div>
       </div>
       <div className="sd-alertbar">
         {card.alerts.length ? card.alerts.map((alert) => <span key={alert.text} className={`sd-chip ${alert.tone}`}>{alert.text}</span>) : <span className="sd-chip">Критических предупреждений нет</span>}
       </div>
       <MarketStrip patientId={params.id} />
-      <div className="sd-seg">
-        <button type="button" className={mode === 'plan' ? 'on' : ''} onClick={() => setMode('plan')}>План</button>
-        <button type="button" className={mode === 'formula' ? 'on' : ''} onClick={() => setMode('formula')}>Формула</button>
-        <button type="button" className={mode === 'perio' ? 'on' : ''} onClick={() => setMode('perio')}>Пародонт</button>
-        <button type="button" className={mode === 'imaging' ? 'on' : ''} onClick={() => setMode('imaging')}>Снимки</button>
-      </div>
       {mode === 'plan' ? (
         <PlanJourney
           patientId={params.id}
@@ -129,28 +129,20 @@ function CardScreen() {
       ) : null}
       {mode !== 'plan' && <div className="sd-split">
         <section className="sd-card sd-stack">
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-            <div className="sd-seg">
-              <button type="button" onClick={() => setMode('plan')}>План</button>
-              <button type="button" className={mode === 'formula' ? 'on' : ''} onClick={() => setMode('formula')}>Формула</button>
-              <button type="button" className={mode === 'perio' ? 'on' : ''} onClick={() => setMode('perio')}>Пародонт</button>
-              <button type="button" className={mode === 'imaging' ? 'on' : ''} onClick={() => setMode('imaging')}>Снимки</button>
+          {mode === 'formula' && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+              <div className="sd-seg">
+                <button type="button" className={view === 'before' ? 'on' : ''} onClick={() => setView('before')}>Было</button>
+                <button type="button" className={view === 'plan' ? 'on' : ''} onClick={() => setView('plan')}>План</button>
+                <button type="button" className={view === 'after' ? 'on' : ''} onClick={() => setView('after')}>Стало</button>
+              </div>
+              <div className="sd-seg">
+                <button type="button" className={formula === 'ADULT' ? 'on' : ''} onClick={() => setFormula('ADULT')}>Взрослая</button>
+                <button type="button" className={formula === 'CHILD' ? 'on' : ''} onClick={() => setFormula('CHILD')}>Молочная</button>
+                <button type="button" className={formula === 'MIXED' ? 'on' : ''} onClick={() => setFormula('MIXED')}>Смешанная</button>
+              </div>
             </div>
-            {mode === 'formula' && (
-              <>
-                <div className="sd-seg">
-                  <button type="button" className={view === 'before' ? 'on' : ''} onClick={() => setView('before')}>Было</button>
-                  <button type="button" className={view === 'plan' ? 'on' : ''} onClick={() => setView('plan')}>План</button>
-                  <button type="button" className={view === 'after' ? 'on' : ''} onClick={() => setView('after')}>Стало</button>
-                </div>
-                <div className="sd-seg">
-                  <button type="button" className={formula === 'ADULT' ? 'on' : ''} onClick={() => setFormula('ADULT')}>Взрослая</button>
-                  <button type="button" className={formula === 'CHILD' ? 'on' : ''} onClick={() => setFormula('CHILD')}>Молочная</button>
-                  <button type="button" className={formula === 'MIXED' ? 'on' : ''} onClick={() => setFormula('MIXED')}>Смешанная</button>
-                </div>
-              </>
-            )}
-          </div>
+          )}
           {mode === 'imaging' ? (
             <ImagingBoard patientId={params.id} tooth={tooth} />
           ) : mode === 'formula' ? (
