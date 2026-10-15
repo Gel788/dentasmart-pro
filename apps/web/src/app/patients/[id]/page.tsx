@@ -1,684 +1,199 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
-import {
-  ArrowLeft,
-  Calendar,
-  FileImage,
-  Receipt,
-  Stethoscope,
-  Wallet,
-  Users,
-} from 'lucide-react';
 import { Protected } from '@/components/protected';
-import { PatientProfileHero } from '@/components/patient-profile-hero';
-import { PatientForm } from '@/components/patient-form';
-import type { ToothRecord } from '@/components/tooth-chart';
-import { ToothInspector } from '@/components/tooth-inspector';
-import { ClinicalAlert, MedicalHistory } from '@/components/medical-history';
-import { PlanBoard } from '@/components/plan-board';
-import { PerioChart } from '@/components/perio-chart';
-import { OmsPanel } from '@/components/oms-panel';
-import { Button } from '@/components/ui/button';
-import { Input, Label, Select } from '@/components/ui/input';
-import { Modal } from '@/components/ui/modal';
-import { TabBar } from '@/components/ui/tab-bar';
-import { Badge } from '@/components/ui/badge';
-import { DicomViewer } from '@/components/dicom-viewer';
-import {
-  SectionCard,
-  TimelineItem,
-  InvoiceCard,
-  PlanCard,
-  EmptyBlock,
-} from '@/components/patient-detail-sections';
-import { api, uploadFile } from '@/lib/api';
-import {
-  APPOINTMENT_STATUS,
-  CONSENT_STATUS,
-  CONSENT_TYPE,
-  formatDate,
-  formatMoney,
-  INVOICE_STATUS,
-  INSTALLMENT_STATUS,
-  label,
-  PLAN_STATUS,
-} from '@/lib/format';
-import { patientFormToPayload, patientToForm } from '@/lib/patient';
+import { ToothChart, type ChartItem, type ChartSurface } from '@/components/studio/chart';
+import { PerioChart } from '@/components/studio/perio';
+import { ImagingBoard } from '@/components/studio/imaging';
+import { PlanJourney } from '@/components/studio/journey';
+import { type Family, type PlanCard } from '@/components/studio/plans';
+import { api } from '@/lib/api';
+import { useFocus } from '@/lib/focus';
 
-type Tab = 'overview' | 'teeth' | 'perio' | 'plans' | 'finance' | 'oms' | 'documents';
-
-type PatientFull = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  middleName?: string | null;
-  phone?: string | null;
-  email?: string | null;
-  gender?: string | null;
-  tags?: string[];
-  notes?: string | null;
-  source?: string | null;
-  birthDate?: string | null;
-  allergies?: string[];
-  chronicConditions?: string | null;
-  medications?: string | null;
-  contraindications?: string | null;
-  anamnesis?: string | null;
-  toothRecords: ToothRecord[];
-  toothSurfaces?: { toothNum: number; surface: string; condition: string; layer: string; diagnosis?: string | null }[];
-  toothEvents?: { id: string; toothNum: number; surfaces: string[]; condition: string; layer: string; note?: string | null; source: string; createdAt: string }[];
-  treatmentPlans: {
-    id: string;
-    title: string;
-    status: string;
-    totalPrice: string;
-    items: {
-      id: string;
-      title: string;
-      price: string;
-      listPrice?: string | null;
-      toothNum?: number | null;
-      surfaces?: string[];
-      phase?: number;
-      isCompleted: boolean;
-      status?: string;
-      service?: { id: string; name: string; basePrice: string } | null;
-      invoiceItem?: { id: string } | null;
-    }[];
-  }[];
-  appointments: {
-    id: string;
-    startsAt: string;
-    status: string;
-    service?: { name: string };
-    doctor?: { firstName: string; lastName: string };
-    branch?: { name: string };
-  }[];
-  invoices: { id: string; number: string; totalAmount: string; paidAmount: string; status: string }[];
-  imagingStudies: { id: string; title?: string; type: string; fileUrl: string }[];
-  consents?: { id: string; type: string; status: string; signedAt?: string | null }[];
-  deposit?: { balance: string } | null;
-  familyMembers?: { familyGroup: { name: string } }[];
-  installmentPlans?: {
-    id: string;
-    totalAmount: string;
-    status: string;
-    schedule: { id: string; amount: string; status: string }[];
-  }[];
-  summary?: {
-    balanceDue: number;
-    depositBalance: number;
-    nextAppointment?: { id: string; startsAt: string; service?: { name: string } } | null;
-    activePlanId?: string | null;
-    activePlanTitle?: string | null;
+type Alert = { tone: 'danger' | 'warning' | 'info'; text: string };
+type Card = {
+  patient: {
+    id: string; firstName: string; lastName: string; birthDate: string | null; phone: string | null;
+    allergies: string[]; chronicConditions: string | null; medications: string | null; anamnesis: string | null;
   };
+  debt: number;
+  alerts: Alert[];
+  timeline: { id: string; at: string; kind: string; title: string; detail: string }[];
+  chart: { surfaces: ChartSurface[]; events: { id: string; toothNum: number; note: string | null; condition: string; at: string }[] };
+  perio: { notes: string | null; teeth: { toothNum: number; mobility: number; furcation: number; missing: boolean; sites: { position: number; pocket: number; recession: number; bleeding: boolean }[] }[] } | null;
+  families: Family[];
 };
 
-const INVOICE_VARIANT: Record<string, 'default' | 'accent' | 'success' | 'warning' | 'danger'> = {
-  DRAFT: 'default',
-  ISSUED: 'warning',
-  PAID: 'success',
-  CANCELLED: 'danger',
-};
-
-const PLAN_VARIANT: Record<string, 'default' | 'accent' | 'success' | 'warning'> = {
-  DRAFT: 'default',
-  PROPOSED: 'default',
-  ACCEPTED: 'accent',
-  IN_PROGRESS: 'accent',
-  COMPLETED: 'success',
-  CANCELLED: 'warning',
-};
-
-function PatientSkeleton() {
-  return (
-    <div className="animate-pulse space-y-8">
-      <div className="h-4 w-32 rounded bg-[var(--surface-muted)]" />
-      <div className="h-56 rounded-2xl bg-[var(--surface-muted)]" />
-      <div className="h-11 w-full max-w-xl rounded-xl bg-[var(--surface-muted)]" />
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="h-80 rounded-2xl bg-[var(--surface-muted)] lg:col-span-2" />
-        <div className="h-80 rounded-2xl bg-[var(--surface-muted)]" />
-      </div>
-    </div>
-  );
+export default function PatientPage() {
+  return <Protected><CardScreen /></Protected>;
 }
 
-export default function PatientCardPage() {
-  const { id } = useParams<{ id: string }>();
-  const [tab, setTab] = useState<Tab>('overview');
-  const [planId, setPlanId] = useState<string | null>(null);
-  const [planEditing, setPlanEditing] = useState(true);
-  const [patient, setPatient] = useState<PatientFull | null>(null);
-  const [editOpen, setEditOpen] = useState(false);
-  const [imgTitle, setImgTitle] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [viewImg, setViewImg] = useState<{ fileUrl: string; type: string; title?: string } | null>(null);
-  const [depositAmount, setDepositAmount] = useState('');
-  const [consentType, setConsentType] = useState('MEDICAL_TREATMENT');
-  const [missing, setMissing] = useState(false);
+function CardScreen() {
+  const params = useParams<{ id: string }>();
+  const { setFocus } = useFocus();
+  const [card, setCard] = useState<Card | null>(null);
+  const [error, setError] = useState('');
+  const [mode, setMode] = useState<'plan' | 'formula' | 'perio' | 'imaging'>('plan');
+  const [view, setView] = useState<'before' | 'plan' | 'after'>('before');
+  const [formula, setFormula] = useState<'ADULT' | 'CHILD' | 'MIXED'>('ADULT');
+  const [tool, setTool] = useState('CARIES');
+  const [tooth, setTooth] = useState<number | null>(16);
+  const [activePlan, setActivePlan] = useState<string | null>(null);
+  const [building, setBuilding] = useState(false);
 
-  const load = useCallback(() => {
-    if (!id || id === 'undefined') {
-      setMissing(true);
-      return;
-    }
-    api<PatientFull>(`/patients/${id}/full`)
-      .then((data) => {
-        setPatient(data);
-        setMissing(false);
-      })
-      .catch(() => setMissing(true));
-  }, [id]);
+  const load = () => api<Card>(`/workspace/patients/${params.id}/card`).then((data) => {
+    setCard(data);
+    setActivePlan((current) => current ?? data.families[0]?.plans.find((plan) => plan.tier === 'OPTIMUM')?.id ?? data.families[0]?.plans[0]?.id ?? null);
+  }).catch((err: Error) => setError(err.message));
 
   useEffect(() => {
-    load();
-  }, [load]);
+    setFocus({ type: 'patient', id: params.id });
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.id]);
 
-  const uploadImaging = async (file: File) => {
-    setUploading(true);
-    try {
-      const url = await uploadFile(file);
-      await api(`/clinical/patients/${id}/imaging`, {
-        method: 'POST',
-        body: JSON.stringify({ type: 'PHOTO', fileUrl: url, title: imgTitle || file.name }),
-      });
-      setImgTitle('');
-      load();
-    } finally {
-      setUploading(false);
-    }
+  const plans = useMemo(() => card?.families.flatMap((family) => family.plans) ?? [], [card]);
+  const picked: PlanCard | undefined = plans.find((plan) => plan.id === activePlan) ?? plans[0];
+  const items: ChartItem[] = picked
+    ? [...picked.phases.flatMap((phase) => phase.items), ...picked.looseItems]
+    : [];
+
+  const paint = async (toothNum: number, surface: string) => {
+    await api(`/workspace/patients/${params.id}/chart`, {
+      method: 'POST',
+      body: JSON.stringify({ toothNum, surface, condition: surface === 'TOOTH' && tool === 'CARIES' ? 'CARIES' : tool, diagnosis: 'Осмотр' }),
+    });
+    await load();
   };
 
-  const onUpdatePatient = async (payload: ReturnType<typeof patientFormToPayload>) => {
-    await api(`/patients/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-    setEditOpen(false);
-    load();
-  };
-
-  const tabs = [
-    { id: 'overview' as Tab, label: 'Обзор' },
-    { id: 'teeth' as Tab, label: 'Зубы' },
-    { id: 'perio' as Tab, label: 'Пародонт' },
-    { id: 'plans' as Tab, label: 'Планы' },
-    { id: 'finance' as Tab, label: 'Финансы' },
-    { id: 'oms' as Tab, label: 'ОМС' },
-    { id: 'documents' as Tab, label: 'Документы' },
-  ];
-
-  if (missing) {
-    return (
-      <Protected>
-        <div className="mx-auto max-w-md py-20 text-center">
-          <p className="text-lg font-semibold text-[var(--text)]">Пациент не найден</p>
-          <p className="mt-2 text-sm text-[var(--muted)]">Карточка недоступна или ссылка устарела.</p>
-          <Link href="/patients" className="mt-6 inline-block">
-            <Button>К списку пациентов</Button>
-          </Link>
-        </div>
-      </Protected>
-    );
-  }
-
-  if (!patient) {
-    return (
-      <Protected>
-        <PatientSkeleton />
-      </Protected>
-    );
-  }
-
-  const openInvoices = patient.invoices?.filter((i) => i.status !== 'PAID' && i.status !== 'CANCELLED').length ?? 0;
+  if (error) return <p>{error}</p>;
+  if (!card) return (
+    <div className="sd-skel-page">
+      <div className="sd-skel" style={{ width: 240, height: 32 }} />
+      <div className="sd-skel" style={{ height: 36 }} />
+      <div className="sd-skel" style={{ height: 220 }} />
+    </div>
+  );
+  const age = card.patient.birthDate ? years(card.patient.birthDate) : null;
+  const history = card.chart.events.filter((event) => event.toothNum === tooth).slice(0, 5);
 
   return (
-    <Protected>
-      <Link
-        href="/patients"
-        className="mb-6 inline-flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-[var(--muted)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--accent)]"
-      >
-        <ArrowLeft size={16} />
-        Все пациенты
-      </Link>
-
-      <ClinicalAlert patient={patient} />
-
-      <PatientProfileHero
-        patient={patient}
-        stats={{
-          visits: patient.appointments?.length ?? 0,
-          plans: patient.treatmentPlans?.length ?? 0,
-          openInvoices,
-        }}
-        summary={patient.summary}
-        onEdit={() => setEditOpen(true)}
-      />
-
-      <div className="mt-8 overflow-x-auto">
-        <TabBar tabs={tabs} value={tab} onChange={setTab} />
+    <div className="sd-stack">
+      <div className="sd-h">
+        <div>
+          <h1>{card.patient.lastName} {card.patient.firstName}</h1>
+          <p>{age != null ? `${age} лет` : 'возраст не указан'}{card.patient.phone ? ` · ${card.patient.phone}` : ''} · долг в алертах справа</p>
+        </div>
       </div>
-
-      {tab === 'overview' && (
-        <div className="mt-6 space-y-6">
-          <MedicalHistory patient={patient} onSaved={load} />
-          <PlanSwitcher
-            plans={patient.treatmentPlans ?? []}
-            activeId={planId ?? patient.summary?.activePlanId ?? patient.treatmentPlans?.[0]?.id}
-            onPick={setPlanId}
-          />
-          {(() => {
-            const activeId = planId ?? patient.summary?.activePlanId ?? patient.treatmentPlans?.[0]?.id;
-            const active = patient.treatmentPlans?.find((plan) => plan.id === activeId);
-            return active ? (
-              planEditing ? (
-                <PlanBoard
-                  planId={active.id}
-                  patientId={patient.id}
-                  items={active.items ?? []}
-                  teeth={patient.toothRecords ?? []}
-                  onChanged={load}
-                  onClose={() => setPlanEditing(false)}
-                />
-              ) : (
-                <div className="ds-card flex flex-wrap items-center justify-between gap-4 p-5">
-                  <div>
-                    <p className="ds-kicker">Активный план</p>
-                    <p className="mt-1 text-sm font-semibold text-[var(--text)]">{active.title}</p>
-                    <p className="mt-1 text-sm text-[var(--muted)]">
-                      {formatMoney(active.totalPrice)} · {active.items?.length ?? 0} строк · {label(PLAN_STATUS, active.status)}
-                    </p>
-                  </div>
-                  <Button onClick={() => setPlanEditing(true)}>Изменить</Button>
+      <div className="sd-alertbar">
+        {card.alerts.length ? card.alerts.map((alert) => <span key={alert.text} className={`sd-chip ${alert.tone}`}>{alert.text}</span>) : <span className="sd-chip">Критических предупреждений нет</span>}
+      </div>
+      <div className="sd-seg">
+        <button type="button" className={mode === 'plan' ? 'on' : ''} onClick={() => setMode('plan')}>План</button>
+        <button type="button" className={mode === 'formula' ? 'on' : ''} onClick={() => setMode('formula')}>Формула</button>
+        <button type="button" className={mode === 'perio' ? 'on' : ''} onClick={() => setMode('perio')}>Пародонт</button>
+        <button type="button" className={mode === 'imaging' ? 'on' : ''} onClick={() => setMode('imaging')}>Снимки</button>
+      </div>
+      {mode === 'plan' ? (
+        <PlanJourney
+          patientId={params.id}
+          patientName={`${card.patient.lastName} ${card.patient.firstName}`}
+          familyKey={card.families[0]?.key ?? null}
+          surfaces={card.chart.surfaces}
+          families={card.families}
+          activeId={picked?.id ?? null}
+          onPick={setActivePlan}
+          building={building}
+          onBuild={async () => {
+            setBuilding(true);
+            try { await api('/workspace/plans/from-chart', { method: 'POST', body: JSON.stringify({ patientId: params.id }) }); await load(); }
+            catch (err) { setError(err instanceof Error ? err.message : 'Не собрали план'); }
+            finally { setBuilding(false); }
+          }}
+        />
+      ) : null}
+      {mode !== 'plan' && <div className="sd-split">
+        <section className="sd-card sd-stack">
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <div className="sd-seg">
+              <button type="button" onClick={() => setMode('plan')}>План</button>
+              <button type="button" className={mode === 'formula' ? 'on' : ''} onClick={() => setMode('formula')}>Формула</button>
+              <button type="button" className={mode === 'perio' ? 'on' : ''} onClick={() => setMode('perio')}>Пародонт</button>
+              <button type="button" className={mode === 'imaging' ? 'on' : ''} onClick={() => setMode('imaging')}>Снимки</button>
+            </div>
+            {mode === 'formula' && (
+              <>
+                <div className="sd-seg">
+                  <button type="button" className={view === 'before' ? 'on' : ''} onClick={() => setView('before')}>Было</button>
+                  <button type="button" className={view === 'plan' ? 'on' : ''} onClick={() => setView('plan')}>План</button>
+                  <button type="button" className={view === 'after' ? 'on' : ''} onClick={() => setView('after')}>Стало</button>
                 </div>
-              )
-            ) : (
-              <EmptyBlock
-                icon={Stethoscope}
-                title="Плана лечения ещё нет"
-                action={
-                  <Link href="/clinical">
-                    <Button size="sm">Создать план</Button>
-                  </Link>
-                }
-              />
-            );
-          })()}
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="space-y-6 lg:col-span-2">
-            <SectionCard
-              title="История визитов"
-              description="Хронология приёмов"
-              action={
-                <Link href={`/schedule?patientId=${id}`}>
-                  <Button variant="ghost" size="sm">
-                    <Calendar size={14} />
-                    Записать
-                  </Button>
-                </Link>
-              }
-            >
-              {patient.appointments?.length ? (
-                <div className="pl-1">
-                  {patient.appointments.map((a) => (
-                    <TimelineItem
-                      key={a.id}
-                      href={`/visit/${a.id}`}
-                      time={formatDate(a.startsAt)}
-                      title={a.service?.name ?? 'Приём'}
-                      subtitle={[a.doctor ? `Врач: ${a.doctor.lastName} ${a.doctor.firstName}` : '', a.branch?.name].filter(Boolean).join(' · ') || undefined}
-                      badge={
-                        <Badge variant={a.status === 'COMPLETED' ? 'success' : a.status === 'CANCELLED' ? 'danger' : 'accent'}>
-                          {label(APPOINTMENT_STATUS, a.status)}
-                        </Badge>
-                      }
-                    />
-                  ))}
+                <div className="sd-seg">
+                  <button type="button" className={formula === 'ADULT' ? 'on' : ''} onClick={() => setFormula('ADULT')}>Взрослая</button>
+                  <button type="button" className={formula === 'CHILD' ? 'on' : ''} onClick={() => setFormula('CHILD')}>Молочная</button>
+                  <button type="button" className={formula === 'MIXED' ? 'on' : ''} onClick={() => setFormula('MIXED')}>Смешанная</button>
                 </div>
-              ) : (
-                <EmptyBlock
-                  icon={Calendar}
-                  title="Визитов пока нет"
-                  action={
-                    <Link href={`/schedule?patientId=${id}`}>
-                      <Button size="sm">Создать запись</Button>
-                    </Link>
-                  }
-                />
-              )}
-            </SectionCard>
-
-          </div>
-
-          <div className="space-y-6">
-            <SectionCard title="Финансы" description="Баланс и счета">
-              <div className="space-y-3">
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-                  <p className="ds-kicker">Долг</p>
-                  <p className={`mt-1 ds-display text-2xl tabular-nums ${(patient.summary?.balanceDue ?? 0) > 0 ? 'text-[var(--danger)]' : 'text-[var(--success)]'}`}>
-                    {formatMoney(patient.summary?.balanceDue ?? 0)}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--accent-soft)] p-4">
-                  <p className="ds-kicker">Депозит</p>
-                  <p className="mt-1 ds-display text-2xl tabular-nums text-[var(--accent)]">
-                    {formatMoney(patient.deposit?.balance ?? patient.summary?.depositBalance ?? 0)}
-                  </p>
-                </div>
-                <Link href={`/finance?patientId=${id}`}>
-                  <Button className="w-full">
-                    <Wallet size={16} />
-                    Касса и оплаты
-                  </Button>
-                </Link>
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Снимки" description="Фото и рентген">
-              <div className="mb-3 flex gap-2">
-                <Input
-                  placeholder="Подпись"
-                  value={imgTitle}
-                  onChange={(e) => setImgTitle(e.target.value)}
-                  className="flex-1 text-sm"
-                />
-                <label className="inline-flex cursor-pointer items-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text)] transition-colors duration-150 hover:bg-[var(--surface-muted)]">
-                  {uploading ? '…' : '+ Файл'}
-                  <input
-                    type="file"
-                    accept="image/*,.dcm"
-                    className="hidden"
-                    onChange={(e) => e.target.files?.[0] && uploadImaging(e.target.files[0])}
-                  />
-                </label>
-              </div>
-              {patient.imagingStudies?.length ? (
-                <div className="grid grid-cols-2 gap-2">
-                  {patient.imagingStudies.slice(0, 4).map((img) => (
-                    <button
-                      key={img.id}
-                      type="button"
-                      onClick={() => setViewImg(img)}
-                      className="ds-card-hover flex flex-col items-center gap-2 p-3 text-center"
-                    >
-                      <FileImage size={24} className="text-[var(--accent)]" />
-                      <span className="line-clamp-2 text-xs font-medium text-[var(--text)]">{img.title ?? img.type}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="py-4 text-center text-sm text-[var(--muted)]">Снимков нет</p>
-              )}
-              {viewImg && (
-                <div className="ds-card mt-4 p-3">
-                  <div className="mb-2 flex items-center justify-between border-b border-[var(--border)] pb-2">
-                    <p className="text-sm font-medium text-[var(--text)]">{viewImg.title ?? 'Просмотр'}</p>
-                    <Button variant="ghost" size="sm" onClick={() => setViewImg(null)}>
-                      Закрыть
-                    </Button>
-                  </div>
-                  <DicomViewer fileUrl={viewImg.fileUrl} type={viewImg.type} title={viewImg.title} />
-                </div>
-              )}
-            </SectionCard>
-
-            {patient.familyMembers && patient.familyMembers.length > 0 && (
-              <SectionCard title="Семья" description="Связанные пациенты">
-                <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                  <Users size={18} className="text-[var(--accent)]" />
-                  {patient.familyMembers.map((m) => m.familyGroup.name).join(', ')}
-                </div>
-              </SectionCard>
+              </>
             )}
           </div>
-        </div>
-        </div>
-      )}
-
-      {tab === 'teeth' && (
-        <ToothInspector
-          patientId={id}
-          records={patient.toothRecords ?? []}
-          surfaces={patient.toothSurfaces ?? []}
-          events={patient.toothEvents ?? []}
-          plans={patient.treatmentPlans ?? []}
-          onChanged={load}
-        />
-      )}
-
-      {tab === 'perio' && (
-        <div className="mt-6">
-          <PerioChart patientId={id} />
-        </div>
-      )}
-
-      {tab === 'plans' && (
-        <div className="mt-6">
-          {patient.treatmentPlans?.length ? (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {patient.treatmentPlans.map((plan) => (
-                <PlanCard
-                  key={plan.id}
-                  id={plan.id}
-                  title={plan.title}
-                  statusLabel={label(PLAN_STATUS, plan.status)}
-                  statusVariant={PLAN_VARIANT[plan.status] ?? 'default'}
-                  totalPrice={plan.totalPrice}
-                  itemsCount={plan.items?.length ?? 0}
-                  completedCount={plan.items?.filter((i) => i.isCompleted).length}
-                />
-              ))}
-            </div>
+          {mode === 'imaging' ? (
+            <ImagingBoard patientId={params.id} tooth={tooth} />
+          ) : mode === 'formula' ? (
+            <ToothChart
+              surfaces={card.chart.surfaces}
+              items={view === 'before' ? [] : items}
+              view={view}
+              formula={formula}
+              condition={tool}
+              selected={tooth}
+              onCondition={setTool}
+              onPaint={paint}
+              onSelect={setTooth}
+            />
           ) : (
-            <EmptyBlock
-              icon={Stethoscope}
-              title="Планов лечения пока нет"
-              action={
-                <Link href="/clinical">
-                  <Button size="sm">Создать план</Button>
-                </Link>
-              }
+            <PerioChart
+              initial={card.perio}
+              onSave={async (teeth, notes) => {
+                await api(`/workspace/patients/${params.id}/perio`, { method: 'POST', body: JSON.stringify({ notes, teeth }) });
+                await load();
+              }}
             />
           )}
-        </div>
-      )}
-
-      {tab === 'finance' && (
-        <div className="mt-6 space-y-6">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="ds-card p-5">
-              <p className="ds-kicker">Долг</p>
-              <p className="mt-1 ds-display text-2xl tabular-nums text-[var(--danger)]">{formatMoney(patient.summary?.balanceDue ?? 0)}</p>
+          {tooth && (
+            <div>
+              <strong>Зуб {tooth}</strong>
+              {history.length === 0 && <p className="sd-muted">Истории пока нет.</p>}
+              {history.map((event) => <div key={event.id} className="sd-muted">{new Date(event.at).toLocaleDateString('ru-RU')} · {event.condition}{event.note ? ` · ${event.note}` : ''}</div>)}
             </div>
-            <div className="ds-card p-5">
-              <p className="ds-kicker">Депозит</p>
-              <p className="mt-1 ds-display text-2xl tabular-nums text-[var(--accent)]">{formatMoney(patient.deposit?.balance ?? 0)}</p>
-            </div>
-            <div className="ds-card p-5">
-              <p className="ds-kicker">Счетов</p>
-              <p className="mt-1 ds-display text-2xl tabular-nums text-[var(--text)]">{patient.invoices?.length ?? 0}</p>
-            </div>
-          </div>
-
-          <SectionCard title="Счета" description="Оплаты и остатки">
-            {patient.invoices?.length ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                {patient.invoices.map((inv) => (
-                  <InvoiceCard
-                    key={inv.id}
-                    number={inv.number}
-                    total={inv.totalAmount}
-                    paid={inv.paidAmount}
-                    statusLabel={label(INVOICE_STATUS, inv.status)}
-                    statusVariant={INVOICE_VARIANT[inv.status] ?? 'default'}
-                    payHref={
-                      inv.status !== 'PAID'
-                        ? `/finance?patientId=${id}&invoiceId=${inv.id}`
-                        : undefined
-                    }
-                  />
-                ))}
-              </div>
-            ) : (
-              <EmptyBlock icon={Receipt} title="Счетов пока нет" />
-            )}
-          </SectionCard>
-
-          {!!patient.installmentPlans?.length && (
-            <SectionCard title="Рассрочки">
-              <div className="space-y-3">
-                {patient.installmentPlans.map((pl) => (
-                  <div key={pl.id} className="ds-card p-4">
-                    <p className="font-semibold text-[var(--text)]">
-                      {formatMoney(pl.totalAmount)} · {label(INSTALLMENT_STATUS, pl.status)}
-                    </p>
-                    <ul className="mt-3 divide-y divide-[var(--border)]">
-                      {pl.schedule.map((line) => (
-                        <li key={line.id} className="flex items-center justify-between py-2 text-sm">
-                          <span className="tabular-nums text-[var(--text-secondary)]">{formatMoney(line.amount)}</span>
-                          <Badge variant={line.status === 'PAID' ? 'success' : 'warning'}>{line.status}</Badge>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
           )}
-        </div>
-      )}
-
-      {tab === 'oms' && (
-        <div className="mt-6">
-          <OmsPanel patientId={id} />
-        </div>
-      )}
-
-      {tab === 'documents' && (
-        <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <SectionCard title="Согласия" description="ПДн, лечение, маркетинг">
-            {patient.consents?.length ? (
-              <ul className="mb-4 divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)]">
-                {patient.consents.map((c) => (
-                  <li
-                    key={c.id}
-                    className="flex items-center justify-between bg-[var(--surface)] px-4 py-3 transition-colors duration-150 hover:bg-[var(--surface-muted)]"
-                  >
-                    <span className="text-sm font-medium text-[var(--text)]">{label(CONSENT_TYPE, c.type)}</span>
-                    <Badge variant={c.status === 'SIGNED' ? 'success' : 'default'}>
-                      {label(CONSENT_STATUS, c.status)}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mb-4 py-4 text-center text-sm text-[var(--muted)]">Согласий пока нет</p>
-            )}
-            <div className="flex gap-2">
-              <Select value={consentType} onChange={(e) => setConsentType(e.target.value)} className="flex-1">
-                {Object.entries(CONSENT_TYPE).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </Select>
-              <Button
-                onClick={async () => {
-                  await api('/clinical/consents', {
-                    method: 'POST',
-                    body: JSON.stringify({ patientId: id, type: consentType }),
-                  });
-                  load();
-                }}
-              >
-                Подписать
-              </Button>
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Депозит" description="Предоплата на балансе">
-            <p className="ds-display text-4xl tabular-nums text-[var(--accent)]">
-              {formatMoney(patient.deposit?.balance ?? 0)}
-            </p>
-            <div className="mt-6 flex gap-2">
-              <Input
-                type="number"
-                placeholder="Сумма"
-                value={depositAmount}
-                onChange={(e) => setDepositAmount(e.target.value)}
-                className="flex-1"
-              />
-              <Button
-                onClick={async () => {
-                  await api('/finance/deposits/top-up', {
-                    method: 'POST',
-                    body: JSON.stringify({ patientId: id, amount: +depositAmount }),
-                  });
-                  setDepositAmount('');
-                  load();
-                }}
-              >
-                Пополнить
-              </Button>
-            </div>
-          </SectionCard>
-        </div>
-      )}
-
-      <Modal
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        title="Редактировать пациента"
-        description="Изменения сохраняются в медкарту"
-        size="xl"
-      >
-        <PatientForm
-          initial={patientToForm(patient)}
-          submitLabel="Сохранить"
-          onCancel={() => setEditOpen(false)}
-          onSubmit={onUpdatePatient}
-        />
-      </Modal>
-    </Protected>
+          <p className="sd-muted">{card.patient.anamnesis}</p>
+          <p className="sd-muted">{[card.patient.chronicConditions, card.patient.medications].filter(Boolean).join(' · ')}</p>
+        </section>
+        <section className="sd-card">
+          <strong>Лента</strong>
+          <div className="sd-timeline">
+            {card.timeline.map((event) => (
+              <div className="sd-tl" key={event.id}>
+                <i />
+                <div>
+                  <b>{event.title}</b>
+                  <div>{event.detail}</div>
+                  <small>{new Date(event.at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>}
+    </div>
   );
 }
 
-function PlanSwitcher({
-  plans,
-  activeId,
-  onPick,
-}: {
-  plans: { id: string; title: string; status: string; totalPrice: string }[];
-  activeId?: string | null;
-  onPick: (id: string) => void;
-}) {
-  if (!plans.length) return null;
-  return (
-    <div className="flex gap-2 overflow-x-auto pb-1">
-      {plans.map((plan) => {
-        const active = plan.id === activeId;
-        return (
-          <button
-            key={plan.id}
-            type="button"
-            onClick={() => onPick(plan.id)}
-            className={`shrink-0 rounded-full border px-4 py-2 text-left text-sm transition-colors duration-150 ${
-              active
-                ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
-                : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)]'
-            }`}
-          >
-            <span className="font-semibold">{plan.title}</span>
-            <span className={active ? 'text-white/80' : 'text-[var(--muted)]'}>
-              {' · '}
-              {label(PLAN_STATUS, plan.status)}
-              {' · '}
-              {formatMoney(plan.totalPrice)}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
+function years(value: string) {
+  const born = new Date(value);
+  const now = new Date();
+  let age = now.getFullYear() - born.getFullYear();
+  if (now < new Date(born.setFullYear(now.getFullYear()))) age -= 1;
+  return age;
 }

@@ -3,9 +3,10 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { FocusProvider } from '@/lib/focus';
 import { Shell } from './shell';
 
-export function Protected({ children }: { children: React.ReactNode }) {
+export function Protected({ children, bare = false }: { children: React.ReactNode; bare?: boolean }) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
@@ -24,5 +25,10 @@ export function Protected({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <Shell>{children}</Shell>;
+  if (bare) return <>{children}</>;
+  return (
+    <FocusProvider>
+      <Shell>{children}</Shell>
+    </FocusProvider>
+  );
 }

@@ -13,6 +13,7 @@ export class UploadsController {
   @Post('imaging')
   @UseInterceptors(
     FileInterceptor('file', {
+      limits: { fileSize: 40 * 1024 * 1024 },
       storage: diskStorage({
         destination: (_req, _file, cb) => {
           mkdirSync(imagingDir, { recursive: true });

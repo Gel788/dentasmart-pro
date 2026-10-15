@@ -1,23 +1,15 @@
 import type { Metadata } from 'next';
-import localFont from 'next/font/local';
+import { Inter } from 'next/font/google';
 import { AuthProvider } from '@/lib/auth-context';
 import { BranchProvider } from '@/lib/branch-context';
 import { ThemeProvider } from '@/lib/theme-context';
 import { PwaRegister } from '@/components/pwa-register';
 import './globals.css';
 
-const fontSans = localFont({
-  src: '../fonts/GolosText.ttf',
+const inter = Inter({
+  subsets: ['cyrillic', 'latin'],
+  display: 'swap',
   variable: '--font-sans',
-  weight: '400 700',
-  display: 'swap',
-});
-
-const fontDisplay = localFont({
-  src: '../fonts/Unbounded.ttf',
-  variable: '--font-display',
-  weight: '500',
-  display: 'swap',
 });
 
 export const metadata: Metadata = {
@@ -29,17 +21,17 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru" className={`${fontSans.variable} ${fontDisplay.variable}`}>
+    <html lang="ru" className={inter.variable}>
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#141c22" />
+        <meta name="theme-color" content="#0f766e" />
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('dsp_theme');if(t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}`,
+            __html: `try{var t=localStorage.getItem('dsp_theme');if(t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark');var d=localStorage.getItem('sd_density')||'compact';document.documentElement.dataset.density=d}catch(e){}`,
           }}
         />
       </head>
-      <body className={fontSans.className}>
+      <body className={inter.className}>
         <ThemeProvider>
           <AuthProvider>
             <BranchProvider>

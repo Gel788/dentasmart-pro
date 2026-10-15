@@ -1,7 +1,222 @@
+import { mkdirSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { deflateSync } from 'zlib';
 import { PrismaClient } from '../src/generated/prisma';
 import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
+
+type SeedLine = {
+  title: string;
+  toothNum?: number;
+  surfaces?: string[];
+  price: number;
+  listPrice?: number;
+  discountPercent?: number;
+  serviceId?: string;
+  durationMin?: number;
+  sortOrder: number;
+};
+
+async function seedTier(data: {
+  id?: string;
+  organizationId: string;
+  patientId: string;
+  doctorId?: string;
+  title: string;
+  tier?: 'ECONOM' | 'OPTIMUM' | 'PREMIUM';
+  familyKey?: string;
+  status?: 'PROPOSED' | 'ACCEPTED' | 'IN_PROGRESS';
+  guaranteeMonths?: number;
+  durationWeeks?: number;
+  installmentMonths?: number;
+  createdAt?: Date;
+  presentedAt?: Date;
+  phases: { title: string; specialty?: string; healingDays?: number; dependsOnSort?: number; items: SeedLine[] }[];
+}) {
+  const total = data.phases.flatMap((p) => p.items).reduce((sum, line) => sum + line.price, 0);
+  const plan = await prisma.treatmentPlan.create({
+    data: {
+      id: data.id,
+      organizationId: data.organizationId,
+      patientId: data.patientId,
+      doctorId: data.doctorId,
+      title: data.title,
+      status: data.status ?? 'PROPOSED',
+      tier: data.tier,
+      familyKey: data.familyKey,
+      guaranteeMonths: data.guaranteeMonths ?? 12,
+      durationWeeks: data.durationWeeks ?? 4,
+      installmentMonths: data.installmentMonths ?? 0,
+      totalPrice: total,
+      presentedAt: data.presentedAt ?? new Date(),
+      createdAt: data.createdAt,
+    },
+  });
+  const phaseIds: string[] = [];
+  for (let index = 0; index < data.phases.length; index++) {
+    const phase = data.phases[index];
+    const created = await prisma.planPhase.create({
+      data: {
+        planId: plan.id,
+        title: phase.title,
+        sortOrder: index + 1,
+        specialty: phase.specialty,
+        healingDays: phase.healingDays ?? 0,
+        dependsOnId: phase.dependsOnSort ? phaseIds[phase.dependsOnSort - 1] : undefined,
+      },
+    });
+    phaseIds.push(created.id);
+    for (const line of phase.items) {
+      await prisma.treatmentPlanItem.create({
+        data: {
+          planId: plan.id,
+          phaseId: created.id,
+          phase: index + 1,
+          title: line.title,
+          toothNum: line.toothNum,
+          surfaces: line.surfaces ?? [],
+          price: line.price,
+          listPrice: line.listPrice ?? line.price,
+          discountPercent: line.discountPercent ?? 0,
+          serviceId: line.serviceId,
+          durationMin: line.durationMin ?? 30,
+          sortOrder: line.sortOrder,
+          status: data.status === 'IN_PROGRESS' || data.status === 'ACCEPTED' ? 'ACCEPTED' : 'PROPOSED',
+        },
+      });
+    }
+  }
+  return plan;
+}
+
+function writeClinicFiles() {
+  const dir = join(__dirname, '../../../apps/api/uploads/imaging');
+  mkdirSync(dir, { recursive: true });
+  const svg = (body: string) => `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240">${body}</svg>`;
+  writeFileSync(join(dir, 'smile-before.svg'), svg('<rect width="320" height="240" fill="#1c1917"/><ellipse cx="160" cy="110" rx="70" ry="86" fill="#e7c2a8"/><path d="M118 132 Q160 150 202 132" stroke="#7f1d1d" fill="none" stroke-width="4"/><text x="16" y="28" fill="#a8a29e" font-size="14" font-family="sans-serif">До · улыбка</text>'));
+  writeFileSync(join(dir, 'smile-after.svg'), svg('<rect width="320" height="240" fill="#111827"/><ellipse cx="160" cy="110" rx="70" ry="86" fill="#f3d2ba"/><path d="M112 128 Q160 156 208 128" stroke="#f8fafc" fill="#f8fafc" stroke-width="8"/><text x="16" y="28" fill="#99f6e4" font-size="14" font-family="sans-serif">После · улыбка</text>'));
+  writeFileSync(join(dir, 'face-rest.svg'), svg('<rect width="320" height="240" fill="#1c1917"/><ellipse cx="160" cy="112" rx="68" ry="84" fill="#e7c2a8"/><path d="M130 140 H190" stroke="#7c5a4a" stroke-width="3"/><text x="16" y="28" fill="#a8a29e" font-size="14" font-family="sans-serif">Покой</text>'));
+  writeFileSync(join(dir, 'profile.svg'), svg('<rect width="320" height="240" fill="#1c1917"/><path d="M120 40 Q200 50 190 120 Q210 150 170 200 Q130 160 140 90 Z" fill="#e7c2a8"/><text x="16" y="28" fill="#a8a29e" font-size="14" font-family="sans-serif">Профиль</text>'));
+  const teeth = Array.from({ length: 10 }, (_, i) => `<rect x="${82 + i * 16}" y="104" width="12" height="28" rx="2"/>`).join('');
+  writeFileSync(join(dir, 'retract.svg'), svg(`<rect width="320" height="240" fill="#1c1917"/><rect x="70" y="90" width="180" height="70" rx="16" fill="#fecdd3"/><g fill="#f8fafc">${teeth}</g><text x="16" y="28" fill="#a8a29e" font-size="14" font-family="sans-serif">Ретрактор, анфас</text>`));
+  writeFileSync(join(dir, 'tooth-16.svg'), svg('<rect width="320" height="240" fill="#0c0a09"/><rect x="118" y="36" width="84" height="150" rx="18" fill="#f5f5f4"/><ellipse cx="160" cy="78" rx="22" ry="14" fill="#7f1d1d"/><text x="16" y="28" fill="#a8a29e" font-size="14" font-family="sans-serif">Зуб 16</text>'));
+  const arch = Array.from({ length: 16 }, (_, i) => `<rect x="${20 + i * 18}" y="${i < 8 ? 70 : 130}" width="12" height="40" fill="#d4d4d8"/>`).join('');
+  writeFileSync(join(dir, 'opg.svg'), svg(`<rect width="320" height="240" fill="#09090b"/>${arch}<text x="16" y="28" fill="#e4e4e7" font-size="14" font-family="sans-serif">Панорама</text>`));
+  for (let slice = 0; slice < 8; slice++) {
+    writeFileSync(join(dir, `ct-${slice}.png`), pngGray(96, (x, y) => {
+      const dx = x - 48;
+      const dy = y - 48;
+      const ring = Math.abs(Math.hypot(dx, dy) - (18 + slice * 3));
+      return ring < 4 ? 210 : Math.hypot(dx, dy) < 14 ? 40 : 12;
+    }));
+  }
+  writeFileSync(join(dir, 'slice.dcm'), dicomGray(32));
+  writeFileSync(join(dir, 'tooth.stl'), `solid tooth
+facet normal 0 0 0
+  outer loop
+    vertex 0 0 0
+    vertex 20 0 0
+    vertex 10 24 6
+  endloop
+endfacet
+facet normal 0 0 0
+  outer loop
+    vertex 20 0 0
+    vertex 16 0 16
+    vertex 10 24 6
+  endloop
+endfacet
+facet normal 0 0 0
+  outer loop
+    vertex 16 0 16
+    vertex 0 0 0
+    vertex 10 24 6
+  endloop
+endfacet
+endsolid tooth
+`);
+}
+
+function pngGray(size: number, pixel: (x: number, y: number) => number) {
+  const raw = Buffer.alloc((size + 1) * size);
+  for (let y = 0; y < size; y++) {
+    raw[y * (size + 1)] = 0;
+    for (let x = 0; x < size; x++) raw[y * (size + 1) + 1 + x] = pixel(x, y);
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr[8] = 8;
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+function crc32(buf: Buffer) {
+  let crc = ~0;
+  for (const byte of buf) {
+    crc ^= byte;
+    for (let i = 0; i < 8; i++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return ~crc >>> 0;
+}
+
+function dicomGray(size: number) {
+  const pixels = Buffer.alloc(size * size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) pixels[y * size + x] = Math.hypot(x - size / 2, y - size / 2) < 10 ? 220 : 20;
+  }
+  const element = (group: number, tag: number, vr: string, value: Buffer) => {
+    const header = Buffer.alloc(8);
+    header.writeUInt16LE(group, 0);
+    header.writeUInt16LE(tag, 2);
+    header.write(vr, 4, 'ascii');
+    const even = value.length % 2 === 0 ? value : Buffer.concat([value, Buffer.from([0])]);
+    header.writeUInt16LE(even.length, 6);
+    return Buffer.concat([header, even]);
+  };
+  const ui = (group: number, tag: number, text: string) => element(group, tag, 'UI', Buffer.from(text));
+  const us = (group: number, tag: number, value: number) => {
+    const data = Buffer.alloc(2);
+    data.writeUInt16LE(value);
+    return element(group, tag, 'US', data);
+  };
+  const body = Buffer.concat([
+    ui(0x0008, 0x0016, '1.2.840.10008.5.1.4.1.1.2'),
+    ui(0x0008, 0x0018, '1.2.3.4.5.6'),
+    element(0x0008, 0x0060, 'CS', Buffer.from('CT')),
+    us(0x0028, 0x0002, 1),
+    element(0x0028, 0x0004, 'CS', Buffer.from('MONOCHROME2 ')),
+    us(0x0028, 0x0010, size),
+    us(0x0028, 0x0011, size),
+    us(0x0028, 0x0100, 8),
+    us(0x0028, 0x0101, 8),
+    us(0x0028, 0x0102, 7),
+    us(0x0028, 0x0103, 0),
+  ]);
+  const pixel = Buffer.alloc(12 + pixels.length);
+  pixel.writeUInt16LE(0x7fe0, 0);
+  pixel.writeUInt16LE(0x0010, 2);
+  pixel.write('OB', 4, 'ascii');
+  pixel.writeUInt16LE(0, 6);
+  pixel.writeUInt32LE(pixels.length, 8);
+  pixels.copy(pixel, 12);
+  const preamble = Buffer.alloc(132);
+  preamble.write('DICM', 128, 'ascii');
+  return Buffer.concat([preamble, body, pixel]);
+}
 
 const PERMISSIONS = [
   { code: 'org.manage', module: 'admin', description: 'Управление организацией' },
@@ -277,6 +492,8 @@ async function main() {
   const caries = svc('CARIES');
   const crown = svc('CROWN');
   const implant = svc('IMPLANT');
+  const endo = svc('ENDO');
+  const whitening = svc('WHITENING');
 
   const todayAt = (hour: number, minute = 0) => {
     const d = new Date();
@@ -301,17 +518,20 @@ async function main() {
     medications?: string;
     contraindications?: string;
     anamnesis?: string;
+    anxiety?: 'NONE' | 'MILD' | 'HIGH';
+    pregnant?: boolean;
+    anticoagulant?: boolean;
   };
 
   const DEMO_PATIENTS: DemoPatient[] = [
-    { id: 'seed-patient-anna', firstName: 'Анна', lastName: 'Смирнова', phone: '+7 (900) 123-45-67', email: 'anna@example.com', tags: ['VIP', 'постоянный'], gender: 'FEMALE', birthDate: new Date('1988-03-12'), notes: 'VIP: депозит и согласованный план на 16 зуб', allergies: ['Лидокаин', 'Латекс'], chronicConditions: 'Гипертоническая болезнь, давление контролируется', medications: 'Эналаприл 5 мг утром', contraindications: 'Адреналин в анестезии — только после согласования с кардиологом', anamnesis: 'Пломбы в боковом отделе. Хочет закрыть 16 коронкой после лечения кариеса.' },
+    { id: 'seed-patient-anna', firstName: 'Анна', lastName: 'Смирнова', phone: '+7 (900) 123-45-67', email: 'anna@example.com', tags: ['VIP', 'постоянный'], gender: 'FEMALE', birthDate: new Date('1988-03-12'), notes: 'Боится уколов. Просит объяснять каждый шаг.', allergies: ['Лидокаин', 'Латекс'], chronicConditions: 'Гипертоническая болезнь, давление контролируется', medications: 'Эналаприл 5 мг утром', contraindications: 'Адреналин в анестезии — только после согласования с кардиологом', anamnesis: 'Пломбы в боковом отделе. Хочет закрыть 16 коронкой после лечения кариеса. На 46 — новая полость.', anxiety: 'HIGH' },
     { id: 'seed-patient-petr', firstName: 'Пётр', lastName: 'Волков', phone: '+7 (900) 111-11-11', tags: ['new'], gender: 'MALE', birthDate: new Date('1995-07-20'), notes: 'Сегодня 09:00 — ждёт приёма' },
     { id: 'seed-patient-maria', firstName: 'Мария', lastName: 'Орлова', phone: '+7 (900) 222-22-22', gender: 'FEMALE', notes: 'Сегодня 09:30 — подтверждена' },
     { id: 'seed-patient-oleg', firstName: 'Олег', lastName: 'Новиков', phone: '+7 (900) 333-33-33', gender: 'MALE', notes: 'Сегодня 10:00' },
-    { id: 'seed-patient-elena', firstName: 'Елена', lastName: 'Морозова', phone: '+7 (900) 444-44-44', gender: 'FEMALE', notes: 'Сегодня 10:30' },
+    { id: 'seed-patient-elena', firstName: 'Елена', lastName: 'Морозова', phone: '+7 (900) 444-44-44', gender: 'FEMALE', notes: 'Беременность 22 недели, без рентгена', pregnant: true },
     { id: 'seed-patient-dmitry', firstName: 'Дмитрий', lastName: 'Кузнецов', phone: '+7 (900) 555-55-55', gender: 'MALE', notes: 'Сейчас на приёме' },
     { id: 'seed-patient-sofia', firstName: 'София', lastName: 'Лебедева', phone: '+7 (900) 666-66-66', gender: 'FEMALE', notes: 'Сегодня после обеда' },
-    { id: 'seed-patient-igor', firstName: 'Игорь', lastName: 'Соколов', phone: '+7 (900) 777-77-77', gender: 'MALE', notes: 'Опоздал — утренняя запись' },
+    { id: 'seed-patient-igor', firstName: 'Игорь', lastName: 'Соколов', phone: '+7 (900) 777-77-77', gender: 'MALE', notes: 'Постоянно принимает варфарин', medications: 'Варфарин 2.5 мг', anticoagulant: true },
     { id: 'seed-patient-natalia', firstName: 'Наталья', lastName: 'Попова', phone: '+7 (900) 888-88-88', gender: 'FEMALE', notes: 'Крупный долг по счёту' },
     { id: 'seed-patient-alex', firstName: 'Алексей', lastName: 'Фёдоров', phone: '+7 (900) 999-99-99', gender: 'MALE', notes: 'Всё оплачено' },
     { id: 'seed-patient-yulia', firstName: 'Юлия', lastName: 'Васильева', phone: '+7 (900) 101-01-01', gender: 'FEMALE', notes: 'Лист ожидания' },
@@ -322,7 +542,7 @@ async function main() {
     { id: 'seed-patient-max', firstName: 'Максим', lastName: 'Иванов', phone: '+7 (900) 606-06-06', gender: 'MALE', birthDate: new Date('2012-01-15'), notes: 'Ребёнок в семье' },
     { id: 'seed-patient-lidia', firstName: 'Лидия', lastName: 'Павлова', phone: '+7 (900) 707-07-07', gender: 'FEMALE', notes: 'Завтра — контроль' },
     { id: 'seed-patient-artem', firstName: 'Артём', lastName: 'Зайцев', phone: '+7 (900) 808-08-08', gender: 'MALE', notes: 'Неявка вчера' },
-    { id: 'seed-patient-vera', firstName: 'Вера', lastName: 'Никитина', phone: '+7 (900) 909-09-09', gender: 'FEMALE', notes: 'Согласия и снимки' },
+    { id: 'seed-patient-vera', firstName: 'Вера', lastName: 'Никитина', phone: '+7 (900) 909-09-09', gender: 'FEMALE', notes: 'Просит короткие визиты', anxiety: 'MILD' },
   ];
 
   const patientIds = DEMO_PATIENTS.map((p) => p.id);
@@ -353,6 +573,9 @@ async function main() {
         medications: p.medications,
         contraindications: p.contraindications,
         anamnesis: p.anamnesis,
+        anxiety: p.anxiety ?? 'NONE',
+        pregnant: p.pregnant ?? false,
+        anticoagulant: p.anticoagulant ?? false,
       },
       update: {
         firstName: p.firstName,
@@ -369,6 +592,9 @@ async function main() {
         medications: p.medications,
         contraindications: p.contraindications,
         anamnesis: p.anamnesis,
+        anxiety: p.anxiety ?? 'NONE',
+        pregnant: p.pregnant ?? false,
+        anticoagulant: p.anticoagulant ?? false,
       },
     });
   }
@@ -388,6 +614,7 @@ async function main() {
     doctorId?: string;
     cabinetId?: string;
     notes: string;
+    id?: string;
   }[] = [
     { patientId: 'seed-patient-petr', hour: 9, status: 'CONFIRMED', serviceId: consult?.id, notes: 'seed:today' },
     { patientId: 'seed-patient-maria', hour: 9, minute: 30, status: 'SCHEDULED', serviceId: hygiene?.id, notes: 'seed:today' },
@@ -396,9 +623,10 @@ async function main() {
     { patientId: 'seed-patient-dmitry', hour: 11, status: 'IN_PROGRESS', serviceId: caries?.id, notes: 'seed:today' },
     { patientId: 'seed-patient-igor', hour: 8, minute: 30, status: 'CONFIRMED', serviceId: consult?.id, notes: 'seed:today-late' },
     { patientId: 'seed-patient-sofia', hour: 14, status: 'CONFIRMED', serviceId: hygiene?.id, notes: 'seed:today' },
-    { patientId: 'seed-patient-roman', hour: 12, status: 'COMPLETED', serviceId: consult?.id, notes: 'seed:today' },
     { patientId: 'seed-patient-viktor', hour: 11, minute: 30, status: 'WAITING', serviceId: consult?.id, notes: 'seed:today-queue' },
     { patientId: 'seed-patient-tatiana', hour: 11, minute: 45, status: 'IN_PROGRESS', serviceId: caries?.id, notes: 'seed:today-chair' },
+    { id: 'seed-appt-anna', patientId: 'seed-patient-anna', hour: 15, status: 'CONFIRMED', serviceId: consult?.id, notes: 'seed:today-anna' },
+    { id: 'seed-appt-roman', patientId: 'seed-patient-roman', hour: 12, status: 'COMPLETED', serviceId: consult?.id, notes: 'seed:today' },
   ];
 
   for (const a of todayAppointments) {
@@ -406,10 +634,11 @@ async function main() {
     const duration = a.serviceId === hygiene?.id ? 60 : 30;
     await prisma.appointment.create({
       data: {
+        ...(a.id ? { id: a.id } : {}),
         organizationId: org.id,
         branchId: branch.id,
         cabinetId: a.cabinetId ?? 'seed-cabinet-1',
-        doctorId: a.doctorId ?? employee.id,
+        doctorId: a.doctorId ?? doctor2.id,
         patientId: a.patientId,
         serviceId: a.serviceId,
         startsAt,
@@ -528,46 +757,99 @@ async function main() {
     where: { patientId: { in: patientIds } },
     data: { parentPlanId: null },
   });
+  await prisma.treatmentPlanItem.updateMany({
+    where: { plan: { patientId: { in: patientIds } } },
+    data: { phaseId: null },
+  });
+  await prisma.planPhase.updateMany({
+    where: { plan: { patientId: { in: patientIds } } },
+    data: { dependsOnId: null },
+  });
+  await prisma.planPhase.deleteMany({ where: { plan: { patientId: { in: patientIds } } } });
   await prisma.treatmentPlan.deleteMany({ where: { patientId: { in: patientIds } } });
 
-  const plan = await prisma.treatmentPlan.create({
-    data: {
-      id: 'seed-plan-anna',
-      organizationId: org.id,
-      patientId: patient.id,
-      doctorId: employee.id,
-      title: 'Комплексная реставрация 16',
-      status: 'ACCEPTED',
-      discountPercent: 0,
-      acceptedAt: new Date(),
-      presentedAt: new Date(),
-      totalPrice: 30700,
-        items: {
-        create: [
-          { title: 'Лечение кариеса', toothNum: 16, surfaces: ['O', 'D'], phase: 1, price: 5500, listPrice: 5500, discountPercent: 0, sortOrder: 1, serviceId: caries?.id, durationMin: 60, status: 'ACCEPTED' },
-          { title: 'Коронка керамическая', toothNum: 16, surfaces: [], phase: 2, price: 25200, listPrice: 28000, discountPercent: 10, sortOrder: 2, serviceId: crown?.id, durationMin: 60, status: 'ACCEPTED' },
-        ],
-      },
-    },
+  const fill = (tooth: number, surfaces: string[], sort: number, discount = 0): SeedLine => ({
+    title: 'Лечение кариеса',
+    toothNum: tooth,
+    surfaces,
+    price: Math.round(5500 * (1 - discount / 100)),
+    listPrice: 5500,
+    discountPercent: discount,
+    serviceId: caries?.id,
+    durationMin: 60,
+    sortOrder: sort,
   });
-
-  await prisma.treatmentPlan.create({
-    data: {
-      id: 'seed-plan-anna-alt',
-      organizationId: org.id,
-      patientId: patient.id,
-      doctorId: employee.id,
-      title: 'Щадящий вариант: только пломба',
-      status: 'PROPOSED',
-      isAlternative: true,
-      parentPlanId: plan.id,
-      totalPrice: 5500,
-      items: {
-        create: [
-          { title: 'Лечение кариеса', toothNum: 16, surfaces: ['O'], phase: 1, price: 5500, listPrice: 5500, sortOrder: 1, serviceId: caries?.id, durationMin: 60, status: 'PROPOSED' },
+  await seedTier({
+    id: 'seed-plan-anna-econom',
+    organizationId: org.id,
+    patientId: patient.id,
+    doctorId: employee.id,
+    title: 'Реставрация · Эконом',
+    tier: 'ECONOM',
+    familyKey: 'seed-family-anna',
+    guaranteeMonths: 12,
+    durationWeeks: 2,
+    installmentMonths: 0,
+    phases: [{ title: 'Санация', specialty: 'Терапия', healingDays: 0, items: [fill(16, ['O', 'D'], 1), fill(46, ['O'], 2)] }],
+  });
+  await seedTier({
+    id: 'seed-plan-anna-optimum',
+    organizationId: org.id,
+    patientId: patient.id,
+    doctorId: employee.id,
+    title: 'Реставрация · Оптимум',
+    tier: 'OPTIMUM',
+    familyKey: 'seed-family-anna',
+    guaranteeMonths: 24,
+    durationWeeks: 6,
+    installmentMonths: 3,
+    phases: [
+      { title: 'Санация', specialty: 'Терапия', healingDays: 14, items: [fill(16, ['O', 'D'], 1), fill(46, ['O'], 2)] },
+      {
+        title: 'Ортопедия',
+        specialty: 'Ортопедия',
+        healingDays: 0,
+        dependsOnSort: 1,
+        items: [{ title: 'Коронка керамическая', toothNum: 16, surfaces: [], price: 25200, listPrice: 28000, discountPercent: 10, serviceId: crown?.id, durationMin: 60, sortOrder: 1 }],
+      },
+    ],
+  });
+  await seedTier({
+    id: 'seed-plan-anna-premium',
+    organizationId: org.id,
+    patientId: patient.id,
+    doctorId: employee.id,
+    title: 'Реставрация · Премиум',
+    tier: 'PREMIUM',
+    familyKey: 'seed-family-anna',
+    guaranteeMonths: 36,
+    durationWeeks: 12,
+    installmentMonths: 6,
+    phases: [
+      {
+        title: 'Эндодонтия',
+        specialty: 'Терапия',
+        healingDays: 21,
+        items: [
+          { title: 'Лечение каналов', toothNum: 16, surfaces: ['O', 'D'], price: 12000, listPrice: 12000, serviceId: endo?.id, durationMin: 90, sortOrder: 1 },
+          fill(46, ['O'], 2),
         ],
       },
-    },
+      {
+        title: 'Ортопедия',
+        specialty: 'Ортопедия',
+        healingDays: 7,
+        dependsOnSort: 1,
+        items: [{ title: 'Коронка керамическая', toothNum: 16, surfaces: [], price: 32200, listPrice: 32200, serviceId: crown?.id, durationMin: 60, sortOrder: 1 }],
+      },
+      {
+        title: 'Эстетика',
+        specialty: 'Гигиена',
+        healingDays: 0,
+        dependsOnSort: 2,
+        items: [{ title: 'Отбеливание', price: 18000, listPrice: 18000, serviceId: whitening?.id, durationMin: 60, sortOrder: 1 }],
+      },
+    ],
   });
 
   await prisma.treatmentPlan.create({
@@ -620,6 +902,7 @@ async function main() {
     data: [
       { patientId: patient.id, toothNum: 16, condition: 'CARIES', layer: 'PATHOLOGY', surfaces: ['O', 'D'], diagnosis: 'K02.1' },
       { patientId: patient.id, toothNum: 26, condition: 'FILLED', layer: 'EXISTING', surfaces: ['O'], diagnosis: 'Пломба 2022' },
+      { patientId: patient.id, toothNum: 46, condition: 'CARIES', layer: 'PATHOLOGY', surfaces: ['O'], diagnosis: 'K02.0' },
       { patientId: 'seed-patient-kate', toothNum: 36, condition: 'IMPLANT', layer: 'EXISTING', diagnosis: 'Имплант установлен' },
       { patientId: 'seed-patient-vera', toothNum: 11, condition: 'CARIES', layer: 'PATHOLOGY', surfaces: ['M'], diagnosis: 'K02.0' },
       { patientId: 'seed-patient-vera', toothNum: 21, condition: 'HEALTHY', layer: 'EXISTING' },
@@ -630,6 +913,7 @@ async function main() {
       { patientId: patient.id, toothNum: 16, surface: 'O', condition: 'CARIES', layer: 'PATHOLOGY', diagnosis: 'K02.1' },
       { patientId: patient.id, toothNum: 16, surface: 'D', condition: 'CARIES', layer: 'PATHOLOGY', diagnosis: 'K02.1' },
       { patientId: patient.id, toothNum: 26, surface: 'O', condition: 'FILLED', layer: 'EXISTING' },
+      { patientId: patient.id, toothNum: 46, surface: 'O', condition: 'CARIES', layer: 'PATHOLOGY', diagnosis: 'K02.0' },
       { patientId: 'seed-patient-kate', toothNum: 36, surface: 'TOOTH', condition: 'IMPLANT', layer: 'EXISTING' },
       { patientId: 'seed-patient-vera', toothNum: 11, surface: 'M', condition: 'CARIES', layer: 'PATHOLOGY', diagnosis: 'K02.0' },
     ],
@@ -640,6 +924,97 @@ async function main() {
       { patientId: patient.id, toothNum: 26, surfaces: ['O'], condition: 'FILLED', layer: 'EXISTING', note: 'Пломба стоит с 2022', source: 'EXAM' },
       { patientId: 'seed-patient-kate', toothNum: 36, surfaces: [], condition: 'IMPLANT', layer: 'EXISTING', note: 'Выполнено: установка импланта', source: 'PLAN_DONE' },
     ],
+  });
+
+  const ago = (days: number) => {
+    const date = new Date();
+    date.setDate(date.getDate() - days);
+    return date;
+  };
+  await prisma.perioExam.deleteMany({ where: { patientId: { in: patientIds } } });
+  await prisma.perioExam.create({
+    data: {
+      organizationId: org.id,
+      patientId: patient.id,
+      notes: 'Кровоточивость 16 и 17, карман до 5 мм',
+      teeth: {
+        create: [16, 17, 26].map((toothNum) => ({
+          toothNum,
+          mobility: toothNum === 16 ? 1 : 0,
+          sites: {
+            create: [0, 1, 2, 3, 4, 5].map((position) => ({
+              position,
+              pocket: toothNum === 16 && position < 3 ? 5 : toothNum === 17 ? 4 : 2,
+              bleeding: toothNum !== 26 && position % 2 === 0,
+            })),
+          },
+        })),
+      },
+    },
+  });
+
+  await prisma.patientConsent.deleteMany({ where: { patientId: { in: patientIds } } });
+  await prisma.patientConsent.createMany({
+    data: ['seed-patient-petr', 'seed-patient-maria', 'seed-patient-oleg', 'seed-patient-elena', 'seed-patient-dmitry', 'seed-patient-sofia', 'seed-patient-roman', 'seed-patient-viktor', 'seed-patient-tatiana'].map((patientId) => ({
+      organizationId: org.id,
+      patientId,
+      type: 'MEDICAL_TREATMENT' as const,
+      status: 'SIGNED' as const,
+      signedAt: new Date(),
+    })),
+  });
+
+  await prisma.patientCommunication.deleteMany({ where: { patientId: { in: patientIds } } });
+  await prisma.patientCommunication.createMany({
+    data: [
+      { patientId: patient.id, channel: 'PHONE', summary: 'Подтвердила визит. Просит анестезию без адреналина.', createdAt: ago(1) },
+      { patientId: patient.id, channel: 'TELEGRAM', summary: 'Напоминание: сегодня в 15:00, кабинет 1.', createdAt: ago(0) },
+      { patientId: patient.id, channel: 'WHATSAPP', summary: 'Пациентка прислала фото старой пломбы на 26.', createdAt: ago(12) },
+    ],
+  });
+
+  const annaPast = ago(18);
+  annaPast.setHours(11, 0, 0, 0);
+  await prisma.appointment.create({
+    data: {
+      organizationId: org.id,
+      branchId: branch.id,
+      cabinetId: 'seed-cabinet-1',
+      doctorId: employee.id,
+      patientId: patient.id,
+      serviceId: consult?.id,
+      startsAt: annaPast,
+      endsAt: new Date(annaPast.getTime() + 30 * 60_000),
+      status: 'COMPLETED',
+      notes: 'seed:history',
+    },
+  });
+
+  await seedTier({
+    id: 'seed-plan-abandoned',
+    organizationId: org.id,
+    patientId: 'seed-patient-artem',
+    doctorId: employee.id,
+    title: 'Санация · Оптимум',
+    tier: 'OPTIMUM',
+    familyKey: 'seed-family-artem',
+    guaranteeMonths: 24,
+    durationWeeks: 4,
+    installmentMonths: 2,
+    createdAt: ago(45),
+    presentedAt: ago(40),
+    phases: [{ title: 'Санация', specialty: 'Терапия', items: [fill(36, ['O'], 1)] }],
+  });
+
+  await prisma.branch.upsert({
+    where: { id: 'seed-branch-patriki' },
+    create: {
+      id: 'seed-branch-patriki',
+      organizationId: org.id,
+      name: 'Патриаршие',
+      address: 'г. Москва, Малый Палашёвский пер., 4',
+    },
+    update: { name: 'Патриаршие' },
   });
 
   await prisma.installmentSchedule.deleteMany({
@@ -797,12 +1172,13 @@ async function main() {
     data: { organizationId: org.id, primaryColor: '#3b9eff' },
   });
 
+  await prisma.medicalRecordHash.deleteMany({ where: { organizationId: org.id, recordId: 'seed-plan-anna-optimum' } });
   await prisma.medicalRecordHash.create({
     data: {
       organizationId: org.id,
       patientId: patient.id,
       recordType: 'TreatmentPlan',
-      recordId: plan.id,
+      recordId: 'seed-plan-anna-optimum',
       contentHash: 'sha256:demo-hash-chain',
     },
   });
@@ -863,14 +1239,145 @@ async function main() {
     ],
   });
 
+  await prisma.imagingAnnotation.deleteMany({ where: { study: { patientId: { in: patientIds } } } });
   await prisma.imagingStudy.deleteMany({ where: { patientId: { in: patientIds } } });
-  await prisma.imagingStudy.createMany({
-    data: [
-      { patientId: 'seed-patient-vera', type: 'PHOTO', fileUrl: '/demo/snapshot-vera.jpg', title: 'Фото 11 зуб' },
-      { patientId: 'seed-patient-kate', type: 'CT', fileUrl: '/demo/xray-36.jpg', title: 'КТ зона 36' },
-      { patientId: patient.id, type: 'OPG', fileUrl: '/demo/xray-anna.jpg', title: 'Панорамный снимок' },
-    ],
+  await prisma.photoProtocol.deleteMany({ where: { patientId: { in: patientIds } } });
+  await prisma.prescription.deleteMany({ where: { patientId: { in: patientIds } } });
+  await prisma.followUp.deleteMany({ where: { patientId: { in: patientIds } } });
+  writeClinicFiles();
+  const ortho = await prisma.planPhase.findFirst({ where: { planId: 'seed-plan-anna-optimum', title: 'Ортопедия' } });
+  const beforeProtocol = await prisma.photoProtocol.create({
+    data: {
+      organizationId: org.id,
+      patientId: patient.id,
+      appointmentId: 'seed-appt-anna',
+      moment: 'BEFORE',
+      title: 'До лечения',
+      takenAt: ago(18),
+      shots: {
+        create: [
+          { slot: 'FACE_SMILE', fileUrl: '/uploads/imaging/smile-before.svg' },
+          { slot: 'FACE_REST', fileUrl: '/uploads/imaging/face-rest.svg' },
+          { slot: 'FACE_PROFILE', fileUrl: '/uploads/imaging/profile.svg' },
+          { slot: 'RETRACT_FRONT', fileUrl: '/uploads/imaging/retract.svg' },
+          { slot: 'TOOTH', fileUrl: '/uploads/imaging/tooth-16.svg', toothNum: 16 },
+        ],
+      },
+    },
   });
+  await prisma.photoProtocol.create({
+    data: {
+      organizationId: org.id,
+      patientId: patient.id,
+      phaseId: ortho?.id,
+      moment: 'AFTER',
+      title: 'После ортопедии',
+      shots: { create: [{ slot: 'FACE_SMILE', fileUrl: '/uploads/imaging/smile-after.svg' }] },
+    },
+  });
+  const intraoral = await prisma.imagingStudy.create({
+    data: {
+      patientId: patient.id,
+      appointmentId: 'seed-appt-anna',
+      type: 'INTRAORAL',
+      title: 'Прицельный 16',
+      fileUrl: '/uploads/imaging/tooth-16.svg',
+      toothNum: 16,
+      takenAt: ago(18),
+    },
+  });
+  await prisma.imagingAnnotation.create({
+    data: {
+      studyId: intraoral.id,
+      toothNum: 16,
+      kind: 'CARIES',
+      source: 'AI',
+      label: 'Черновик: затемнение на 16, не диагноз',
+      confidence: 0.82,
+      x: 0.42,
+      y: 0.38,
+      w: 0.18,
+      h: 0.16,
+    },
+  });
+  await prisma.imagingStudy.create({
+    data: { patientId: patient.id, type: 'OPG', title: 'Панорама', fileUrl: '/uploads/imaging/opg.svg', takenAt: ago(18) },
+  });
+  await prisma.imagingStudy.create({
+    data: { patientId: patient.id, type: 'DICOM', title: 'Срез КТ', fileUrl: '/uploads/imaging/slice.dcm', toothNum: 16, seriesKey: 'seed-ct-anna', sliceIndex: 0, takenAt: ago(18) },
+  });
+  for (let slice = 0; slice < 8; slice++) {
+    await prisma.imagingStudy.create({
+      data: {
+        patientId: patient.id,
+        type: 'CT',
+        title: 'КТ нижней челюсти',
+        fileUrl: `/uploads/imaging/ct-${slice}.png`,
+        toothNum: 16,
+        seriesKey: 'seed-ct-stack',
+        sliceIndex: slice,
+        takenAt: ago(18),
+      },
+    });
+  }
+  await prisma.imagingStudy.create({
+    data: { patientId: patient.id, type: 'STL', title: 'Скан 16', fileUrl: '/uploads/imaging/tooth.stl', toothNum: 16, phaseId: ortho?.id },
+  });
+  await prisma.visitNote.upsert({
+    where: { appointmentId: 'seed-appt-roman' },
+    create: {
+      appointmentId: 'seed-appt-roman',
+      complaints: 'Чувствительность на холодное',
+      objective: 'Зуб 26, пломба состоятельна',
+      diagnosis: 'K03.8 гиперчувствительность',
+      treatment: 'Осмотр, рекомендации по пасте',
+      recommendations: 'Контроль через 6 месяцев',
+    },
+    update: {},
+  });
+  await prisma.prescription.create({
+    data: {
+      organizationId: org.id,
+      patientId: 'seed-patient-roman',
+      appointmentId: 'seed-appt-roman',
+      doctorId: employee.id,
+      drug: 'Ибупрофен',
+      dose: '200 мг',
+      sig: 'при боли, не чаще 3 раз в сутки',
+      days: 3,
+    },
+  });
+  const recallAt = new Date();
+  recallAt.setDate(recallAt.getDate() - 200);
+  await prisma.appointment.create({
+    data: {
+      organizationId: org.id,
+      branchId: branch.id,
+      cabinetId: 'seed-cabinet-1',
+      doctorId: employee.id,
+      patientId: 'seed-patient-alex',
+      serviceId: hygiene?.id,
+      startsAt: recallAt,
+      endsAt: new Date(recallAt.getTime() + 60 * 60_000),
+      status: 'COMPLETED',
+      notes: 'seed:recall',
+    },
+  });
+  const followDue = new Date();
+  followDue.setDate(followDue.getDate() + 5);
+  await prisma.followUp.create({
+    data: {
+      organizationId: org.id,
+      patientId: 'seed-patient-kate',
+      dueAt: followDue,
+      reason: 'Снять слепок под коронку на имплант 36',
+    },
+  });
+  const birthday = new Date();
+  birthday.setDate(birthday.getDate() + 2);
+  birthday.setFullYear(1992);
+  await prisma.patient.update({ where: { id: 'seed-patient-sofia' }, data: { birthDate: birthday } });
+  void beforeProtocol;
 
   await prisma.patientDeposit.upsert({
     where: { patientId: patient.id },

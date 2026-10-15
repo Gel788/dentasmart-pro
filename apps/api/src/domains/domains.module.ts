@@ -25,6 +25,10 @@ import { IntegrationsController } from './integrations.controller';
 import { IntegrationsService } from './integrations.service';
 import { SterilizationController } from './sterilization.controller';
 import { SterilizationService } from './sterilization.service';
+import { WorkspaceController } from './workspace.controller';
+import { WorkspaceService } from './workspace.service';
+import { FlowController } from './flow.controller';
+import { FlowService } from './flow.service';
 
 @Module({
   controllers: [
@@ -41,6 +45,8 @@ import { SterilizationService } from './sterilization.service';
     RemindersController,
     IntegrationsController,
     SterilizationController,
+    WorkspaceController,
+    FlowController,
   ],
   providers: [
     ClinicalService,
@@ -56,6 +62,8 @@ import { SterilizationService } from './sterilization.service';
     RemindersService,
     IntegrationsService,
     SterilizationService,
+    WorkspaceService,
+    FlowService,
   ],
 })
 export class DomainsModule {}

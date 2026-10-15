@@ -10,3 +10,4 @@ dist
 apps/api/uploads/
 coverage
 *.tsbuildinfo
+packages/database/src/generated/

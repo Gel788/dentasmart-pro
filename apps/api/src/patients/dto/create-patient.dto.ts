@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsDateString, IsEmail, IsEnum, IsOptional, IsString } from 'class-validator';
-import { PatientGender } from '@dentasmart/database';
+import { IsArray, IsBoolean, IsDateString, IsEmail, IsEnum, IsOptional, IsString } from 'class-validator';
+import { AnxietyLevel, PatientGender } from '@dentasmart/database';
 
 export class CreatePatientDto {
   @ApiProperty()
@@ -77,4 +77,19 @@ export class CreatePatientDto {
   @IsOptional()
   @IsString()
   anamnesis?: string;
+
+  @ApiPropertyOptional({ enum: AnxietyLevel })
+  @IsOptional()
+  @IsEnum(AnxietyLevel)
+  anxiety?: AnxietyLevel;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  pregnant?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  anticoagulant?: boolean;
 }

@@ -1,180 +1,166 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { LogOut, Menu, Moon, Sun, X } from 'lucide-react';
-import clsx from 'clsx';
+import { usePathname, useRouter } from 'next/navigation';
+import { Calendar, CalendarRange, Moon, RotateCcw, Search, Sun, Tags, Users } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
-import { useBranch } from '@/lib/branch-context';
 import { useTheme } from '@/lib/theme-context';
-import { Select } from '@/components/ui/input';
-import { findNavItem, isNavActive, NAV_GROUPS, NAVIGATION } from '@/config/navigation';
+import { useFocus } from '@/lib/focus';
+import { api } from '@/lib/api';
+import { ContextPanel } from './studio/panels';
+
+const NAV = [
+  { href: '/', label: 'Сегодня', icon: Calendar, perm: 'patient.read' },
+  { href: '/patients', label: 'Пациенты', icon: Users, perm: 'patient.read' },
+  { href: '/schedule', label: 'Расписание', icon: CalendarRange, perm: 'schedule.read' },
+  { href: '/return', label: 'Возврат планов', icon: RotateCcw, perm: 'medical.read' },
+  { href: '/price', label: 'Прайс', icon: Tags, perm: 'patient.read' },
+];
+
+type Hit = { id: string; firstName: string; lastName: string; phone: string | null };
 
 export function Shell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
-  const { branches, branchId, setBranchId, loading: branchLoading } = useBranch();
-  const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-  const navRef = useRef<HTMLElement>(null);
-  const markerRef = useRef<HTMLSpanElement>(null);
-  const markerSeen = useRef(false);
+  const { panelOpen, setPanelOpen, setFocus } = useFocus();
+  const [palette, setPalette] = useState(false);
+  const [query, setQuery] = useState('');
+  const [hits, setHits] = useState<Hit[]>([]);
+  const [cursor, setCursor] = useState(0);
+  const [density, setDensity] = useState<'compact' | 'comfort'>('compact');
+
+  const links = NAV.filter((item) => user?.permissions.includes(item.perm));
 
   useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+    const stored = localStorage.getItem('sd_density');
+    if (stored === 'comfort' || stored === 'compact') setDensity(stored);
+  }, []);
 
-  useLayoutEffect(() => {
-    const nav = navRef.current;
-    const marker = markerRef.current;
-    if (!nav || !marker) return;
-    const active = nav.querySelector<HTMLElement>('[aria-current="page"]');
-    if (!active) return;
-    if (!markerSeen.current) marker.style.transition = 'none';
-    marker.style.transform = `translateY(${active.offsetTop}px)`;
-    marker.style.height = `${active.offsetHeight}px`;
-    if (!markerSeen.current) {
-      marker.getBoundingClientRect();
-      marker.style.transition = '';
-      markerSeen.current = true;
-    }
-  }, [pathname]);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setPalette((open) => !open);
+      }
+      if (event.key === 'Escape') setPalette(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
-  const permissions = user?.permissions ?? [];
-  const navigation = NAVIGATION.filter((item) => !item.permission || permissions.includes(item.permission));
-  const groups = NAV_GROUPS.filter((group) => navigation.some((item) => item.group === group));
-  const current = findNavItem(pathname);
-  const person = user?.employee
-    ? `${user.employee.firstName} ${user.employee.lastName}`
-    : user?.email;
+  useEffect(() => {
+    if (!palette || query.trim().length < 2) { setHits([]); return; }
+    const handle = setTimeout(() => {
+      api<Hit[]>(`/workspace/search?q=${encodeURIComponent(query)}`).then(setHits).catch(() => setHits([]));
+    }, 140);
+    return () => clearTimeout(handle);
+  }, [palette, query]);
+
+  const commands = useMemo(() => {
+    const pages = links.map((link) => ({ id: link.href, label: link.label, run: () => router.push(link.href) }));
+    const people = hits.map((hit) => ({
+      id: hit.id,
+      label: `${hit.lastName} ${hit.firstName}${hit.phone ? ` · ${hit.phone}` : ''}`,
+      run: () => {
+        setFocus({ type: 'patient', id: hit.id });
+        router.push(`/patients/${hit.id}`);
+      },
+    }));
+    const tools = [
+      { id: 'theme', label: theme === 'dark' ? 'Светлая тема' : 'Тёмная тема', run: toggle },
+      { id: 'density', label: density === 'compact' ? 'Плотность: комфорт' : 'Плотность: компакт', run: () => switchDensity(density === 'compact' ? 'comfort' : 'compact') },
+    ];
+    const pool = query.trim().length < 2 ? [...pages, ...tools] : [...people, ...pages];
+    return pool;
+  }, [links, hits, query, router, setFocus, theme, toggle, density]);
+
+  useEffect(() => { setCursor(0); }, [query, palette]);
+
+  const switchDensity = (next: 'compact' | 'comfort') => {
+    setDensity(next);
+    localStorage.setItem('sd_density', next);
+    document.documentElement.dataset.density = next;
+  };
+
+  const run = (index: number) => {
+    const command = commands[index];
+    if (!command) return;
+    command.run();
+    setPalette(false);
+    setQuery('');
+  };
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
-      {open && (
-        <button
-          type="button"
-          className="fixed inset-0 z-30 bg-[#161916]/40 lg:hidden"
-          aria-label="Закрыть меню"
-          onClick={() => setOpen(false)}
-        />
-      )}
-
-      <aside
-        className={clsx(
-          'fixed inset-y-0 left-0 z-40 flex w-[272px] flex-col border-r border-white/5 bg-[var(--sidebar)] text-[var(--sidebar-text)] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:translate-x-0',
-          open ? 'translate-x-0' : '-translate-x-full',
-        )}
-      >
-        <div className="flex items-center justify-between px-5 pb-3 pt-6">
-          <Link href="/reception" className="flex min-w-0 items-center gap-3">
-            <span className="ds-display flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent)] text-sm text-white">
-              С
-            </span>
-            <span className="min-w-0">
-              <span className="ds-display block truncate text-[15px] tracking-tight text-white">Седракович Дент</span>
-              <span className="block truncate text-[11px] text-white/45">{user?.organization.name}</span>
-            </span>
-          </Link>
-          <button
-            type="button"
-            className="rounded-md p-1 text-white/70 lg:hidden"
-            aria-label="Закрыть меню"
-            onClick={() => setOpen(false)}
-          >
-            <X size={18} />
-          </button>
+    <div className="sd-app">
+      <aside className="sd-nav">
+        <div className="sd-brand">
+          <div className="sd-mark">С</div>
+          <div className="sd-brand-text">
+            <strong>Седракович Дент</strong>
+            <span>Sedrakovich Dent</span>
+          </div>
         </div>
-
-        <nav ref={navRef} className="relative mt-4 flex-1 overflow-y-auto px-3 pb-4" aria-label="Разделы">
-          <span ref={markerRef} className="ds-nav-marker" aria-hidden />
-          {groups.map((group) => (
-            <div key={group} className="mb-4">
-              <p className="mb-1 px-3 pt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/35">{group}</p>
-              {navigation.filter((item) => item.group === group).map((item) => {
-                const Icon = item.icon;
-                const active = isNavActive(pathname, item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    aria-current={active ? 'page' : undefined}
-                    title={item.description}
-                    className={clsx(
-                      'relative z-[1] mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] transition-colors duration-150',
-                      active
-                        ? 'font-semibold text-white'
-                        : 'text-[var(--sidebar-text)] hover:text-white',
-                    )}
-                  >
-                    <Icon size={16} strokeWidth={1.75} className={active ? 'text-[var(--sidebar-active)]' : 'text-white/45'} />
-                    <span className="truncate">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
-
-        <div className="border-t border-white/10 px-5 py-4">
-          <p className="truncate text-sm text-white">{person}</p>
-          <p className="truncate text-[11px] text-white/45">{user?.email}</p>
-          <button type="button" onClick={logout} className="mt-3 inline-flex items-center gap-2 text-xs text-white/70 hover:text-white">
-            <LogOut size={14} />
-            Выйти
+        {links.map((link) => {
+          const Icon = link.icon;
+          const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href);
+          return (
+            <Link key={link.href} href={link.href} className={`sd-link ${active ? 'active' : ''}`}>
+              <Icon />
+              <span className="sd-nav-label">{link.label}</span>
+            </Link>
+          );
+        })}
+        <div className="sd-nav-foot">
+          <button className="sd-icon-btn" type="button" onClick={toggle} aria-label="Тема">
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           </button>
+          <div className="sd-user">
+            <b>{user?.employee ? `${user.employee.lastName} ${user.employee.firstName}` : user?.email}</b>
+            <span>{user?.organization.name}</span>
+          </div>
+          <button className="sd-btn-ghost" type="button" onClick={logout}>Выйти</button>
         </div>
       </aside>
-
-      <div className="flex min-h-screen min-w-0 flex-col lg:pl-[272px]">
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface)]/90 px-3 py-2.5 backdrop-blur sm:px-6">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <button
-              type="button"
-              className="rounded-lg p-2 text-[var(--text)] hover:bg-[var(--surface-muted)] lg:hidden"
-              aria-label="Открыть меню"
-              onClick={() => setOpen(true)}
-            >
-              <Menu size={18} />
-            </button>
-            <p className="truncate text-sm font-medium text-[var(--text)]">{current?.label ?? 'Клиника'}</p>
-            {current?.description && (
-              <p className="hidden truncate text-sm text-[var(--muted)] md:block">{current.description}</p>
-            )}
-          </div>
-          <div className="flex min-w-0 items-center gap-3">
-            <p className="hidden whitespace-nowrap text-xs text-[var(--muted)] xl:block">
-              {new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' }).format(new Date())}
-            </p>
-            <button
-              type="button"
-              onClick={toggle}
-              className="rounded-lg border border-[var(--border)] p-2 text-[var(--text-secondary)] hover:bg-[var(--surface-muted)]"
-              aria-label={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
-            >
-              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-            {branches.length > 0 && (
-              <Select
-                value={branchId}
-                onChange={(e) => setBranchId(e.target.value)}
-                disabled={branchLoading}
-                className="max-w-[9.5rem] text-sm sm:max-w-[220px]"
-                aria-label="Филиал"
-              >
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </div>
+      <div className="sd-main">
+        <header className="sd-top">
+          <button className="sd-search" type="button" onClick={() => setPalette(true)}>
+            <Search size={15} />
+            Поиск пациента и команды
+            <kbd>⌘K</kbd>
+          </button>
+          <button className="sd-btn-ghost sd-panel-toggle" type="button" onClick={() => setPanelOpen(!panelOpen)}>Контекст</button>
         </header>
-        <main className="flex-1 px-4 py-6 sm:px-8 sm:py-8">
-          <div className="ds-page">{children}</div>
-        </main>
+        <div className="sd-workspace">{children}</div>
       </div>
+      <aside className={`sd-panel ${panelOpen ? 'open' : ''}`}>
+        <ContextPanel />
+      </aside>
+      {palette && (
+        <div className="sd-palette" onMouseDown={() => setPalette(false)}>
+          <div className="sd-palette-box" onMouseDown={(event) => event.stopPropagation()}>
+            <input
+              autoFocus
+              placeholder="Пациент, экран, команда"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowDown') { event.preventDefault(); setCursor((n) => Math.min(commands.length - 1, n + 1)); }
+                if (event.key === 'ArrowUp') { event.preventDefault(); setCursor((n) => Math.max(0, n - 1)); }
+                if (event.key === 'Enter') run(cursor);
+              }}
+            />
+            {commands.map((command, index) => (
+              <button key={command.id} className={`sd-cmd ${index === cursor ? 'on' : ''}`} type="button" onMouseEnter={() => setCursor(index)} onClick={() => run(index)}>
+                {command.label}
+              </button>
+            ))}
+            {commands.length === 0 && <p className="sd-muted" style={{ padding: 14 }}>Ничего не найдено</p>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
