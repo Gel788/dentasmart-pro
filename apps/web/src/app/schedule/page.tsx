@@ -73,7 +73,21 @@ function Board() {
           <h1>Расписание</h1>
           <p>Пустое окно — запись. Визит — приём.</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="sd-btn" type="button" onClick={() => {
+            if (!date || !data) return;
+            const starts = new Date(`${date}T00:00:00`);
+            const hour = new Date().getHours();
+            starts.setHours(Math.min(END - 1, Math.max(START, hour)), 0, 0, 0);
+            const cabinet = data.branches[0]?.cabinets[0];
+            setFocus({
+              type: 'slot',
+              startsAt: starts.toISOString(),
+              cabinetId: mode === 'doctor' ? cabinet?.id : columns[0]?.id,
+              doctorId: mode === 'doctor' ? columns[0]?.id : data.doctors[0]?.id,
+              label: columns[0]?.name ?? 'Новая запись',
+            });
+          }}>Новая запись</button>
           <div className="sd-seg">
             <button type="button" className={mode !== 'doctor' ? 'on' : ''} onClick={() => setMode('chair')}>Кресла</button>
             <button type="button" className={mode === 'doctor' ? 'on' : ''} onClick={() => setMode('doctor')}>Врачи</button>
@@ -163,11 +177,10 @@ function Board() {
                   const top = ((start.getHours() + start.getMinutes() / 60) - START) * HOUR;
                   const height = Math.max(28, ((end.getTime() - start.getTime()) / 3600000) * HOUR);
                   return (
-                    <button
+                    <div
                       key={appt.id}
                       className="sd-appt"
                       style={{ top, height }}
-                      type="button"
                       draggable
                       onDragStart={(event) => { event.dataTransfer.setData('text/plain', appt.id); event.dataTransfer.effectAllowed = 'move'; }}
                       onDragEnd={() => { skipClick.current = true; }}
@@ -180,7 +193,22 @@ function Board() {
                     >
                       <b>{appt.patient}</b>
                       <small>{appt.service}</small>
-                    </button>
+                      <button
+                        className="sd-appt-edit"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setFocus({
+                            type: 'slot',
+                            startsAt: appt.startsAt,
+                            cabinetId: appt.cabinetId ?? undefined,
+                            doctorId: appt.doctorId ?? undefined,
+                            label: appt.patient,
+                            appointmentId: appt.id,
+                          });
+                        }}
+                      >Изменить</button>
+                    </div>
                   );
                 })}
               </div>

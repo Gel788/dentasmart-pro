@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Protected } from '@/components/protected';
 import { ToothChart, type ChartItem, type ChartSurface } from '@/components/studio/chart';
 import { PerioChart } from '@/components/studio/perio';
@@ -9,8 +9,10 @@ import { ImagingBoard } from '@/components/studio/imaging';
 import { PlanJourney } from '@/components/studio/journey';
 import { MarketStrip } from '@/components/studio/market-strip';
 import { type Family, type PlanCard } from '@/components/studio/plans';
+import { PatientForm } from '@/components/studio/patient-form';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
+import { useAuth } from '@/lib/auth-context';
 import { useFocus } from '@/lib/focus';
 
 type Alert = { tone: 'danger' | 'warning' | 'info'; text: string };
@@ -33,9 +35,13 @@ export default function PatientPage() {
 
 function CardScreen() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const { user } = useAuth();
+  const canWrite = user?.permissions.includes('patient.write') ?? false;
   const { setPanelOpen } = useFocus();
   const [card, setCard] = useState<Card | null>(null);
   const [error, setError] = useState('');
+  const [editing, setEditing] = useState(false);
   const [mode, setMode] = useState<'plan' | 'formula' | 'perio' | 'imaging'>('plan');
   const [view, setView] = useState<'before' | 'plan' | 'after'>('before');
   const [formula, setFormula] = useState<'ADULT' | 'CHILD' | 'MIXED'>('ADULT');
@@ -98,13 +104,23 @@ function CardScreen() {
           <h1>{card.patient.lastName} {card.patient.firstName}</h1>
           <p>{age != null ? `${age} лет` : 'возраст не указан'}{card.patient.phone ? ` · ${card.patient.phone}` : ''} · {card.debt > 0 ? `долг ${formatMoney(card.debt)}` : 'долга нет'}</p>
         </div>
-        <div className="sd-seg">
-          <button type="button" className={mode === 'plan' ? 'on' : ''} onClick={() => setMode('plan')}>План</button>
-          <button type="button" className={mode === 'formula' ? 'on' : ''} onClick={() => setMode('formula')}>Формула</button>
-          <button type="button" className={mode === 'perio' ? 'on' : ''} onClick={() => setMode('perio')}>Пародонт</button>
-          <button type="button" className={mode === 'imaging' ? 'on' : ''} onClick={() => setMode('imaging')}>Снимки</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {canWrite && <button className="sd-btn-ghost" type="button" onClick={() => setEditing(true)}>Изменить</button>}
+          <div className="sd-seg">
+            <button type="button" className={mode === 'plan' ? 'on' : ''} onClick={() => setMode('plan')}>План</button>
+            <button type="button" className={mode === 'formula' ? 'on' : ''} onClick={() => setMode('formula')}>Формула</button>
+            <button type="button" className={mode === 'perio' ? 'on' : ''} onClick={() => setMode('perio')}>Пародонт</button>
+            <button type="button" className={mode === 'imaging' ? 'on' : ''} onClick={() => setMode('imaging')}>Снимки</button>
+          </div>
         </div>
       </div>
+      <PatientForm
+        open={editing}
+        patientId={params.id}
+        onClose={() => setEditing(false)}
+        onSaved={() => { setEditing(false); void load(); }}
+        onArchived={() => router.push('/patients')}
+      />
       {card.alerts.length > 0 && (
         <div className="sd-alertbar">
           {card.alerts.map((alert) => <span key={alert.text} className={`sd-chip ${alert.tone}`}>{alert.text}</span>)}

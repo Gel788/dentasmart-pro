@@ -28,6 +28,16 @@ export class LabController {
     return this.svc.createOrder(orgId, body);
   }
 
+  @Patch('orders/:id')
+  @RequirePermissions('medical.write')
+  update(
+    @OrgId() orgId: string,
+    @Param('id') id: string,
+    @Body() body: { title?: string; patientId?: string; doctorId?: string; dueAt?: string; costAmount?: number; labName?: string; technician?: string; fittingAt?: string; shade?: string },
+  ) {
+    return this.svc.updateOrder(orgId, id, body);
+  }
+
   @Patch('orders/:id/status')
   @RequirePermissions('medical.write')
   status(@Param('id') id: string, @Body() body: { status: string }) {

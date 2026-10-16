@@ -1,3 +1,4 @@
+import { phoneDigits } from '../phone';
 import snapshot from './snapshot.json';
 
 const KEY = 'sd.demo.v1';
@@ -23,6 +24,7 @@ type Appointment = {
   doctor: string;
   cabinet: string;
   service: string;
+  serviceId?: string | null;
   allergies?: string[];
 };
 
@@ -227,9 +229,13 @@ function anchorPath(pathname: string, query: Record<string, string>) {
 
 function patientPage(bag: Bag, query: Record<string, string>) {
   const needle = (query.search || '').trim().toLowerCase();
-  let items = patients(bag);
+  const digits = needle.replace(/\D/g, '');
+  let items = patients(bag).filter((row) => row.isActive !== false);
   if (needle) {
-    items = items.filter((row) => `${row.lastName} ${row.firstName} ${row.middleName ?? ''} ${row.phone ?? ''}`.toLowerCase().includes(needle));
+    items = items.filter((row) => {
+      const text = `${row.lastName} ${row.firstName} ${row.middleName ?? ''} ${row.phone ?? ''}`.toLowerCase();
+      return text.includes(needle) || (digits.length >= 4 && phoneDigits(row.phone).includes(digits));
+    });
   }
   const pageSize = Number(query.pageSize || 40);
   const page = Number(query.page || 1);
@@ -237,13 +243,13 @@ function patientPage(bag: Bag, query: Record<string, string>) {
 }
 
 function searchPeople(bag: Bag, raw: string) {
-  const needle = decodeURIComponent(raw).replace(/\D/g, '').length > 3
-    ? decodeURIComponent(raw).toLowerCase()
-    : decodeURIComponent(raw).trim().toLowerCase();
-  if (needle.length < 2) return [];
+  const needle = decodeURIComponent(raw).trim().toLowerCase();
+  const digits = needle.replace(/\D/g, '');
+  if (needle.length < 2 && digits.length < 4) return [];
   return patients(bag)
+    .filter((row) => row.isActive !== false)
     .filter((row) => `${row.lastName} ${row.firstName} ${row.phone ?? ''}`.toLowerCase().includes(needle)
-      || (row.phone ?? '').replace(/\D/g, '').includes(needle.replace(/\D/g, '')))
+      || (digits.length >= 4 && phoneDigits(row.phone).includes(digits)))
     .slice(0, 8)
     .map((row) => ({ id: row.id, firstName: row.firstName, lastName: row.lastName, phone: row.phone ?? null, birthDate: row.birthDate ?? null }));
 }
@@ -251,7 +257,7 @@ function searchPeople(bag: Bag, raw: string) {
 function scheduleFor(bag: Bag, date: string) {
   const shell = bag.gets[`/workspace/schedule?date=${ANCHOR}`] as AnyRec;
   const day = shiftString(date.slice(0, 10), -1);
-  const appointments = bag.appointments.filter((row) => row.startsAt.slice(0, 10) === day);
+  const appointments = bag.appointments.filter((row) => row.startsAt.slice(0, 10) === day && row.status !== 'CANCELLED');
   return { ...shell, date: `${day}T00:00:00.000Z`, appointments };
 }
 
@@ -284,11 +290,7 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
   if (patientCreate) return addPatient(bag, data);
 
   const patientPatch = pathname.match(/^\/patients\/([^/]+)$/);
-  if (patientPatch && method === 'PATCH') {
-    const row = findPatient(bag, patientPatch[1]);
-    if (row) Object.assign(row, data);
-    return row ?? data;
-  }
+  if (patientPatch && method === 'PATCH') return patchPatient(bag, patientPatch[1], data);
 
   if (pathname === '/market/calls/missed') return addLead(bag, data);
   const leadPatch = pathname.match(/^\/market\/leads\/([^/]+)$/);
@@ -324,13 +326,9 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
     }
     return { ok: true };
   }
-  if (pathname === '/config/stock') return pushConfig(bag, 'stock', { id: uid(), name: data.name, unit: data.unit ?? 'шт', minStock: data.minStock ?? 5, quantity: data.quantity ?? 10, cost: data.cost ?? 100 });
+  if (pathname === '/config/stock') return data.id ? updateStock(bag, data.id, data) : addStock(bag, data);
   const receive = pathname.match(/^\/config\/stock\/([^/]+)\/receive$/);
-  if (receive) {
-    const row = (config(bag).stock as AnyRec[]).find((item) => item.id === receive[1]);
-    if (row) row.quantity = Number(row.quantity ?? 0) + Number(data.quantity ?? 1);
-    return row ?? { ok: true };
-  }
+  if (receive) return receiveStock(bag, receive[1], Number(data.quantity ?? 1));
   if (pathname === '/config/visit-templates') return saveTemplate(bag, data);
   if (pathname === '/config/plan-templates') return pushConfig(bag, 'planTemplates', { id: uid(), ...data });
   if (pathname === '/config/documents') return pushConfig(bag, 'documents', { id: uid(), ...data });
@@ -340,6 +338,12 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
   }
   if (pathname === '/config/cabinets') return pushConfig(bag, 'cabinets', { id: uid(), name: data.name });
   if (pathname === '/config/employees') return saveEmployee(bag, data);
+  if (pathname === '/employees' && method === 'POST') return saveEmployee(bag, data);
+  if (pathname === '/employees/schedules' && method === 'POST') return addShift(bag, data);
+  const employeePatch = pathname.match(/^\/employees\/([^/]+)$/);
+  if (employeePatch && !['schedules', 'roles', 'payroll'].includes(employeePatch[1]) && (method === 'PATCH' || method === 'POST')) {
+    return saveEmployee(bag, { id: employeePatch[1], ...data });
+  }
   if (pathname === '/config/roles') return saveRole(bag, data);
   if (pathname === '/config/promos') return pushConfig(bag, 'promos', { id: uid(), code: data.code, discountPct: data.discountPct ?? 10, isActive: true });
   if (pathname === '/config/rules') return pushConfig(bag, 'rules', { id: uid(), ...data, isActive: true });
@@ -365,6 +369,8 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
   if (restore) return restorePlan(bag, restore[1], restore[2]);
 
   if (pathname === '/lab/orders' && method === 'POST') return addLab(bag, data);
+  const labEdit = pathname.match(/^\/lab\/orders\/([^/]+)$/);
+  if (labEdit && method === 'PATCH') return editLab(bag, labEdit[1], data);
   const labStatus = pathname.match(/^\/lab\/orders\/([^/]+)\/(status|scan)$/);
   if (labStatus) return patchLab(bag, labStatus[1], labStatus[2] === 'scan' ? { stlFileUrl: data.fileUrl } : { status: data.status });
 
@@ -381,8 +387,29 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
   if (portalBook) return portalWrite(bag, portalBook[1], portalBook[2], data);
 
   if (pathname === '/finance/invoices' && method === 'POST') return pushList(bag, '/finance/invoices', invoiceRow(bag, data));
-  if (pathname === '/finance/payments' && method === 'POST') return pushList(bag, '/finance/payments', { id: uid(), ...data, paidAt: anchorNow() });
+  const discount = pathname.match(/^\/finance\/invoices\/([^/]+)\/discount$/);
+  if (discount) return discountInvoice(bag, discount[1], Number(data.discountAmount) || 0);
+  if (pathname === '/finance/payments' && method === 'POST') return addPayment(bag, data);
+  const refund = pathname.match(/^\/finance\/payments\/([^/]+)\/refund$/);
+  if (refund) return refundPayment(bag, refund[1], Number(data.amount) || 0);
   if (pathname === '/finance/payroll/accrue') return { count: 1 };
+  if (pathname === '/warehouse/items' && method === 'POST') return addStock(bag, data);
+  const stockPatch = pathname.match(/^\/warehouse\/items\/([^/]+)$/);
+  if (stockPatch && method === 'PATCH') return updateStock(bag, stockPatch[1], data);
+  if (pathname === '/warehouse/inventory/start') return startInventory(bag);
+  const stockLine = pathname.match(/^\/warehouse\/inventory\/lines\/([^/]+)$/);
+  if (stockLine && method === 'PATCH') return patchInventoryLine(bag, stockLine[1], Number(data.actualQty));
+  const stockDone = pathname.match(/^\/warehouse\/inventory\/([^/]+)\/complete$/);
+  if (stockDone) return finishInventory(bag);
+  const closeShift = pathname.match(/^\/finance\/cash-shift\/([^/]+)\/close$/);
+  if (closeShift) {
+    for (const key of Object.keys(bag.gets)) {
+      if (!key.startsWith('/finance/cash-shift/current')) continue;
+      const shift = bag.gets[key] as AnyRec | null;
+      if (shift?.id === closeShift[1]) bag.gets[key] = { ...shift, status: 'CLOSED', closingCash: String(data.closingCash ?? 0) };
+    }
+    return { ok: true };
+  }
   if (pathname === '/finance/cash-shift/open') {
     const opened = { id: uid(), status: 'OPEN', openingCash: String(data.openingCash ?? data.amount ?? 0), openedAt: anchorNow() };
     const key = Object.keys(bag.gets).find((item) => item.startsWith('/finance/cash-shift/current')) ?? '/finance/cash-shift/current';
@@ -400,34 +427,145 @@ function login(data: AnyRec) {
 }
 
 function addPatient(bag: Bag, data: AnyRec) {
-  const row = {
-    id: uid(),
+  assertUniquePhone(bag, data.phone);
+  if (data.consentPd === false) throw new Error('Нужно согласие на обработку персональных данных (152-ФЗ)');
+  const row = patientRecord(data, uid());
+  patients(bag).unshift(row);
+  publishPatient(bag, row, true);
+  if (data.dmsInsurer && data.dmsNumber) attachPolicy(bag, row, data.dmsInsurer, data.dmsNumber);
+  return row;
+}
+
+function patchPatient(bag: Bag, id: string, data: AnyRec) {
+  const row = findPatient(bag, id);
+  if (!row) throw new Error('Пациент не найден');
+  if (data.phone) assertUniquePhone(bag, data.phone, id);
+  const next = patientRecord({ ...row, ...data, allergies: data.allergies ?? row.allergies }, id);
+  if (data.isActive === false) next.isActive = false;
+  Object.assign(row, next);
+  publishPatient(bag, row, false);
+  if (data.dmsInsurer && data.dmsNumber) attachPolicy(bag, row, data.dmsInsurer, data.dmsNumber);
+  return row;
+}
+
+function patientRecord(data: AnyRec, id: string) {
+  return {
+    id,
     firstName: data.firstName ?? '',
     lastName: data.lastName ?? '',
     middleName: data.middleName ?? null,
     phone: data.phone ?? null,
     email: data.email ?? null,
     birthDate: data.birthDate ?? null,
-    tags: [],
-    allergies: [],
-    isActive: true,
+    gender: data.gender ?? null,
+    tags: data.tags ?? [],
+    allergies: Array.isArray(data.allergies) ? data.allergies : [],
+    chronicConditions: data.chronicConditions ?? null,
+    medications: data.medications ?? null,
+    contraindications: data.contraindications ?? null,
+    anamnesis: data.anamnesis ?? null,
+    notes: data.notes ?? null,
+    anxiety: data.anxiety ?? 'NONE',
+    pregnant: !!data.pregnant,
+    anticoagulant: !!data.anticoagulant,
+    isActive: data.isActive !== false,
     source: data.source ?? 'WALK_IN',
-    createdAt: anchorNow(),
+    dmsInsurer: data.dmsInsurer ?? null,
+    dmsNumber: data.dmsNumber ?? null,
+    createdAt: data.createdAt ?? anchorNow(),
+    consentPd: data.consentPd !== false,
   };
-  patients(bag).unshift(row);
-  const card = {
-    patient: row,
+}
+
+function assertUniquePhone(bag: Bag, phone: string | undefined, exceptId?: string) {
+  const digits = phoneDigits(phone);
+  if (digits.length < 10) return;
+  const hit = patients(bag).find((row) => row.isActive !== false && row.id !== exceptId && phoneDigits(row.phone).slice(-10) === digits.slice(-10));
+  if (hit) throw new Error(`Пациент с таким телефоном уже есть: ${hit.lastName} ${hit.firstName}`);
+}
+
+function publishPatient(bag: Bag, row: AnyRec, created: boolean) {
+  const alerts = alertsOf(row);
+  const card = (bag.gets[`/workspace/patients/${row.id}/card`] as AnyRec | undefined) ?? {
     debt: 0,
-    alerts: [],
     timeline: [],
     chart: { surfaces: [], events: [] },
     perio: null,
     families: [],
   };
+  card.patient = row;
+  card.alerts = alerts;
+  if (created && row.consentPd !== false) {
+    card.timeline = [{ id: uid(), at: anchorNow(), kind: 'consent', title: 'Согласие 152-ФЗ', detail: 'Подписано при создании карты' }, ...(card.timeline ?? [])];
+  }
   bag.gets[`/workspace/patients/${row.id}/card`] = card;
-  bag.gets[`/workspace/patients/${row.id}/brief`] = { id: row.id, name: personName(row), alerts: [], next: null };
+  bag.gets[`/workspace/patients/${row.id}/brief`] = {
+    id: row.id,
+    firstName: row.firstName,
+    lastName: row.lastName,
+    middleName: row.middleName,
+    phone: row.phone,
+    birthDate: row.birthDate,
+    allergies: row.allergies,
+    anxiety: row.anxiety,
+    pregnant: row.pregnant,
+    anticoagulant: row.anticoagulant,
+    contraindications: row.contraindications,
+    debt: card.debt ?? 0,
+    alerts,
+    next: null,
+  };
   bag.gets[`/patients/${row.id}`] = row;
-  return row;
+  bag.gets[`/patients/${row.id}/full`] = row;
+  bag.gets[`/flow/patients/${row.id}/imaging`] = bag.gets[`/flow/patients/${row.id}/imaging`] ?? { compare: { before: null, after: null }, protocols: [], studies: [] };
+  const sample = bag.gets['/market/patients/seed-patient-anna'] as AnyRec | undefined;
+  bag.gets[`/market/patients/${row.id}`] = bag.gets[`/market/patients/${row.id}`] ?? {
+    curator: null,
+    source: row.source,
+    ortho: null,
+    calls: [],
+    allocations: [],
+    threads: [],
+    consents: row.consentPd === false ? [] : [{ id: uid(), status: 'SIGNED', documentUrl: null }],
+    employees: sample?.employees ?? [],
+    leads: [],
+  };
+}
+
+function alertsOf(row: AnyRec) {
+  const alerts: { tone: string; text: string }[] = [];
+  for (const item of row.allergies ?? []) alerts.push({ tone: 'danger', text: `Аллергия: ${item}` });
+  if (row.anticoagulant) alerts.push({ tone: 'danger', text: 'Антикоагулянты' });
+  if (row.pregnant) alerts.push({ tone: 'warning', text: 'Беременность' });
+  if (row.anxiety === 'HIGH') alerts.push({ tone: 'warning', text: 'Выраженный страх лечения' });
+  return alerts;
+}
+
+function attachPolicy(bag: Bag, patient: AnyRec, insurerName: string, number: string) {
+  patient.dmsInsurer = insurerName;
+  patient.dmsNumber = number;
+  const insurance = bag.gets['/market/insurance'] as AnyRec | undefined;
+  const insurerId = uid();
+  if (insurance) {
+    const insurers = (insurance.insurers ?? []) as AnyRec[];
+    let insurer = insurers.find((row) => row.name === insurerName);
+    if (!insurer) {
+      insurer = { id: insurerId, name: insurerName };
+      insurers.unshift(insurer);
+      insurance.insurers = insurers;
+    }
+    const policies = (insurance.policies ?? []) as AnyRec[];
+    const existing = policies.find((row) => row.patientId === patient.id);
+    const policy = { id: existing?.id ?? uid(), patientId: patient.id, number, insurer: { id: insurer.id, name: insurerName }, insurerId: insurer.id, limitAmount: '100000', patient: { firstName: patient.firstName, lastName: patient.lastName } };
+    insurance.policies = [policy, ...policies.filter((row) => row.patientId !== patient.id)];
+  }
+  const finance = bag.gets['/finance/policies'];
+  if (Array.isArray(finance)) {
+    const policy = { id: uid(), patientId: patient.id, number, limitAmount: '100000', patient: { id: patient.id, firstName: patient.firstName, lastName: patient.lastName }, insurer: { name: insurerName } };
+    const rest = (finance as AnyRec[]).filter((row) => row.patientId !== patient.id);
+    finance.splice(0, finance.length, policy, ...rest);
+  }
+  bag.gets[`/patients/${patient.id}`] = { ...patient, insurancePolicies: [{ number, insurer: { name: insurerName } }] };
 }
 
 function addLead(bag: Bag, data: AnyRec) {
@@ -550,12 +688,134 @@ function saveTemplate(bag: Bag, data: AnyRec) {
 
 function saveEmployee(bag: Bag, data: AnyRec) {
   const list = (config(bag).employees ?? []) as AnyRec[];
-  if (data.id) {
-    const row = list.find((item) => item.id === data.id);
-    if (row) Object.assign(row, data);
-    return row ?? data;
+  let row = data.id ? list.find((item) => item.id === data.id) : undefined;
+  if (!row) {
+    row = {
+      id: data.id || uid(),
+      status: 'ACTIVE',
+      commission: Number(data.commission ?? 30),
+      schedule: (data.days ?? [1, 2, 3, 4, 5]).map((day: number) => ({ dayOfWeek: day, startsAt: data.startsAt ?? '09:00', endsAt: data.endsAt ?? '18:00' })),
+    };
+    list.unshift(row);
+    config(bag).employees = list;
   }
-  return pushConfig(bag, 'employees', { id: uid(), firstName: data.firstName, lastName: data.lastName, specialization: data.specialization ?? '', commission: data.commission ?? 0, days: data.days ?? [1, 2, 3, 4, 5] });
+  Object.assign(row, {
+    firstName: data.firstName ?? row.firstName,
+    lastName: data.lastName ?? row.lastName,
+    email: data.email ?? row.email ?? '',
+    phone: data.phone ?? row.phone ?? null,
+    specialization: data.specialization ?? row.specialization ?? '',
+    commission: data.commission ?? row.commission ?? 0,
+    status: data.status ?? row.status ?? 'ACTIVE',
+  });
+  if (!Array.isArray(row.schedule)) row.schedule = [];
+  syncStaff(bag, row);
+  return row;
+}
+
+function syncStaff(bag: Bag, row: AnyRec) {
+  const employees = bag.gets['/employees'] as AnyRec[];
+  const shaped = {
+    id: row.id,
+    firstName: row.firstName,
+    lastName: row.lastName,
+    phone: row.phone ?? null,
+    specialization: row.specialization,
+    status: row.status ?? 'ACTIVE',
+    user: { email: row.email ?? '', isActive: row.status !== 'INACTIVE' },
+    branches: [{ branch: { id: 'seed-branch-main', name: 'Главный филиал' }, isPrimary: true }],
+  };
+  const index = employees.findIndex((item) => item.id === row.id);
+  if (index >= 0) employees[index] = { ...employees[index], ...shaped };
+  else employees.unshift(shaped);
+  const schedule = bag.gets[`/workspace/schedule?date=${ANCHOR}`] as AnyRec;
+  const doctors = (schedule.doctors ?? []) as AnyRec[];
+  const name = personName(row);
+  const existing = doctors.find((item) => item.id === row.id);
+  if (row.status === 'INACTIVE') schedule.doctors = doctors.filter((item) => item.id !== row.id);
+  else if (existing) existing.name = name;
+  else doctors.push({ id: row.id, name });
+}
+
+function addShift(bag: Bag, data: AnyRec) {
+  const list = bag.gets['/employees/schedules'];
+  const person = (bag.gets['/employees'] as AnyRec[]).find((item) => item.id === data.employeeId);
+  const row = { id: uid(), dayOfWeek: data.dayOfWeek, startsAt: data.startsAt, endsAt: data.endsAt, employee: { firstName: person?.firstName ?? '', lastName: person?.lastName ?? '' } };
+  if (Array.isArray(list)) list.unshift(row);
+  return row;
+}
+
+function addStock(bag: Bag, data: AnyRec) {
+  const id = uid();
+  const quantity = Number(data.quantity ?? 10);
+  const row = { id, name: data.name, sku: data.sku ?? null, unit: data.unit ?? 'шт', minStock: Number(data.minStock ?? 5), isActive: true, quantity, cost: Number(data.cost ?? 100) };
+  (config(bag).stock as AnyRec[]).unshift(row);
+  const item = { id, name: row.name, sku: row.sku, unit: row.unit, category: 'MATERIAL', minStock: String(row.minStock), isActive: true, batches: [{ id: uid(), quantity: String(quantity), costPrice: String(row.cost), expiresAt: null }] };
+  const items = bag.gets['/warehouse/items'];
+  if (Array.isArray(items)) items.unshift(item);
+  return item;
+}
+
+function updateStock(bag: Bag, id: string, data: AnyRec) {
+  const stock = (config(bag).stock as AnyRec[]).find((item) => item.id === id);
+  const items = bag.gets['/warehouse/items'] as AnyRec[];
+  const item = items.find((row) => row.id === id);
+  if (stock) {
+    if (data.name) stock.name = data.name;
+    if (data.quantity != null) stock.quantity = Number(data.quantity);
+    if (data.cost != null) stock.cost = Number(data.cost);
+    if (data.minStock != null) stock.minStock = Number(data.minStock);
+    if (typeof data.isActive === 'boolean') stock.isActive = data.isActive;
+  }
+  if (item) {
+    if (data.name) item.name = data.name;
+    if (typeof data.isActive === 'boolean') item.isActive = data.isActive;
+    if (data.quantity != null && item.batches?.[0]) item.batches[0].quantity = String(data.quantity);
+  }
+  return stock ?? item ?? { id, ...data };
+}
+
+function receiveStock(bag: Bag, id: string, quantity: number) {
+  const row = (config(bag).stock as AnyRec[]).find((item) => item.id === id);
+  if (row) row.quantity = Number(row.quantity ?? 0) + quantity;
+  const item = (bag.gets['/warehouse/items'] as AnyRec[]).find((entry) => entry.id === id);
+  if (item?.batches?.[0] && row) item.batches[0].quantity = String(row.quantity);
+  return row ?? { ok: true };
+}
+
+function startInventory(bag: Bag) {
+  const items = (bag.gets['/warehouse/items'] as AnyRec[]).filter((item) => item.isActive !== false);
+  const session = {
+    id: uid(),
+    lines: items.map((item) => {
+      const expected = item.batches?.reduce((sum: number, batch: AnyRec) => sum + Number(batch.quantity), 0) ?? 0;
+      return { id: uid(), expectedQty: String(expected), actualQty: String(expected), diffQty: '0', item: { name: item.name } };
+    }),
+  };
+  for (const key of Object.keys(bag.gets)) {
+    if (key.startsWith('/warehouse/inventory/active')) bag.gets[key] = session;
+  }
+  return session;
+}
+
+function patchInventoryLine(bag: Bag, id: string, actualQty: number) {
+  for (const key of Object.keys(bag.gets)) {
+    if (!key.startsWith('/warehouse/inventory/active')) continue;
+    const session = bag.gets[key] as AnyRec | null;
+    const line = session?.lines?.find((item: AnyRec) => item.id === id);
+    if (!line) continue;
+    line.actualQty = String(actualQty);
+    line.diffQty = String(actualQty - Number(line.expectedQty));
+    return line;
+  }
+  return { id, actualQty };
+}
+
+function finishInventory(bag: Bag) {
+  for (const key of Object.keys(bag.gets)) {
+    if (key.startsWith('/warehouse/inventory/active')) bag.gets[key] = null;
+  }
+  return { ok: true };
 }
 
 function saveRole(bag: Bag, data: AnyRec) {
@@ -585,6 +845,7 @@ function book(bag: Bag, data: AnyRec) {
     doctor: doctor?.name ?? 'Врач',
     cabinet: cabinet?.name ?? 'Кресло',
     service: service?.name ?? 'Приём',
+    serviceId: data.serviceId ?? null,
     allergies: patient?.allergies ?? [],
   };
   bag.appointments.push(row);
@@ -596,9 +857,30 @@ function book(bag: Bag, data: AnyRec) {
 function moveAppointment(bag: Bag, id: string, data: AnyRec) {
   const row = bag.appointments.find((item) => item.id === id);
   if (!row) throw new Error('Запись не найдена');
-  Object.assign(row, data);
+  if (data.patientId) {
+    const patient = findPatient(bag, data.patientId);
+    row.patientId = data.patientId;
+    row.patient = personName(patient);
+    row.allergies = patient?.allergies ?? [];
+  }
+  if (data.serviceId) {
+    const service = serviceById(bag, data.serviceId);
+    if (service) row.service = service.name;
+    row.serviceId = data.serviceId;
+  }
+  if (data.startsAt) row.startsAt = data.startsAt;
+  if (data.endsAt) row.endsAt = data.endsAt;
+  else if (data.startsAt && data.durationMin) row.endsAt = new Date(Date.parse(data.startsAt) + Number(data.durationMin) * 60000).toISOString();
+  if (data.cabinetId) row.cabinetId = data.cabinetId;
+  if (data.doctorId) row.doctorId = data.doctorId;
+  if (data.status) row.status = data.status;
+  const schedule = bag.gets[`/workspace/schedule?date=${ANCHOR}`] as AnyRec;
+  const doctor = (schedule.doctors as AnyRec[]).find((item) => item.id === row.doctorId);
+  const cabinet = (schedule.branches as AnyRec[]).flatMap((branch) => branch.cabinets).find((item: AnyRec) => item.id === row.cabinetId);
+  if (doctor) row.doctor = doctor.name;
+  if (cabinet) row.cabinet = cabinet.name;
   const visit = bag.gets[`/flow/visits/${id}`] as AnyRec | undefined;
-  if (visit) Object.assign(visit, { startsAt: row.startsAt, endsAt: row.endsAt });
+  if (visit) Object.assign(visit, { startsAt: row.startsAt, endsAt: row.endsAt, status: row.status, service: row.service });
   return row;
 }
 
@@ -807,6 +1089,17 @@ function patchLab(bag: Bag, id: string, data: AnyRec) {
   return row ?? data;
 }
 
+function editLab(bag: Bag, id: string, data: AnyRec) {
+  const patient = data.patientId ? findPatient(bag, data.patientId) : undefined;
+  const doctor = data.doctorId ? (bag.gets['/employees'] as AnyRec[]).find((row) => row.id === data.doctorId) : undefined;
+  return patchLab(bag, id, {
+    ...data,
+    ...(patient ? { patient: { firstName: patient.firstName, lastName: patient.lastName } } : {}),
+    ...(doctor ? { doctor: { firstName: doctor.firstName, lastName: doctor.lastName } } : {}),
+    costAmount: data.costAmount ?? undefined,
+  });
+}
+
 function importRows(bag: Bag, rows: AnyRec[]) {
   let created = 0;
   let skipped = 0;
@@ -889,7 +1182,66 @@ function marketWrite(bag: Bag, patientId: string, action: string | undefined, da
 
 function invoiceRow(bag: Bag, data: AnyRec) {
   const patient = findPatient(bag, data.patientId);
-  return { id: uid(), number: data.number || `СЧ-${Date.now().toString().slice(-4)}`, totalAmount: data.totalAmount, status: 'ISSUED', patientId: data.patientId, patient };
+  const row = {
+    id: uid(),
+    number: data.number || `СЧ-${Date.now().toString().slice(-4)}`,
+    totalAmount: String(data.totalAmount ?? 0),
+    paidAmount: '0',
+    discountAmount: '0',
+    status: 'ISSUED',
+    patientId: data.patientId,
+    patient: { id: patient?.id, firstName: patient?.firstName ?? '', lastName: patient?.lastName ?? '' },
+  };
+  const summary = bag.gets['/finance/summary'] as AnyRec | undefined;
+  if (summary) {
+    summary.openInvoices = Number(summary.openInvoices ?? 0) + 1;
+    summary.receivable = Number(summary.receivable ?? 0) + Number(row.totalAmount);
+  }
+  return row;
+}
+
+function addPayment(bag: Bag, data: AnyRec) {
+  const row = { id: uid(), patientId: data.patientId, invoiceId: data.invoiceId ?? null, amount: String(data.amount), method: data.method || 'CASH', paidAt: anchorNow() };
+  pushList(bag, '/finance/payments', row);
+  applyPaid(bag, data.invoiceId, Number(data.amount) || 0);
+  const summary = bag.gets['/finance/summary'] as AnyRec | undefined;
+  if (summary) {
+    summary.totalPayments = Number(summary.totalPayments ?? 0) + Number(data.amount || 0);
+    summary.paymentCount = Number(summary.paymentCount ?? 0) + 1;
+  }
+  return row;
+}
+
+function discountInvoice(bag: Bag, id: string, discountAmount: number) {
+  const invoice = (bag.gets['/finance/invoices'] as AnyRec[]).find((item) => item.id === id);
+  if (!invoice) throw new Error('Счёт не найден');
+  const total = Number(invoice.totalAmount);
+  const discount = Math.min(Math.max(0, discountAmount), total);
+  invoice.discountAmount = String(discount);
+  const due = total - discount;
+  const paid = Number(invoice.paidAmount ?? 0);
+  invoice.status = paid <= 0 ? 'ISSUED' : paid >= due ? 'PAID' : 'PARTIAL';
+  return invoice;
+}
+
+function refundPayment(bag: Bag, id: string, amount: number) {
+  const payments = bag.gets['/finance/payments'] as AnyRec[];
+  const payment = payments.find((item) => item.id === id);
+  if (!payment) throw new Error('Оплата не найдена');
+  const refund = { id: uid(), patientId: payment.patientId, invoiceId: payment.invoiceId, amount: String(-Math.abs(amount || Number(payment.amount))), method: payment.method, paidAt: anchorNow(), refundOfId: id };
+  payments.unshift(refund);
+  if (payment.invoiceId) applyPaid(bag, payment.invoiceId, -Math.abs(amount || Number(payment.amount)));
+  return refund;
+}
+
+function applyPaid(bag: Bag, invoiceId: string | undefined, delta: number) {
+  if (!invoiceId) return;
+  const invoice = (bag.gets['/finance/invoices'] as AnyRec[]).find((item) => item.id === invoiceId);
+  if (!invoice) return;
+  const paid = Math.max(0, Number(invoice.paidAmount ?? 0) + delta);
+  const due = Number(invoice.totalAmount) - Number(invoice.discountAmount ?? 0);
+  invoice.paidAmount = String(paid);
+  invoice.status = paid <= 0 ? 'ISSUED' : paid >= due ? 'PAID' : 'PARTIAL';
 }
 
 function remember(bag: Bag, pathname: string, method: string, data: AnyRec, _token: string) {

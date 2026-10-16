@@ -55,6 +55,16 @@ export class WarehouseController {
     return this.svc.createItem(orgId, body);
   }
 
+  @Patch('items/:id')
+  @RequirePermissions('warehouse.write')
+  updateItem(
+    @OrgId() orgId: string,
+    @Param('id') id: string,
+    @Body() body: { name?: string; minStock?: number; quantity?: number; isActive?: boolean },
+  ) {
+    return this.svc.updateItem(orgId, id, body);
+  }
+
   @Post('movements')
   @RequirePermissions('warehouse.write')
   movement(@OrgId() orgId: string, @Body() body: { itemId: string; branchId: string; type: string; quantity: number; notes?: string }) {

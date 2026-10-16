@@ -92,4 +92,24 @@ export class CreatePatientDto {
   @IsOptional()
   @IsBoolean()
   anticoagulant?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  consentPd?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  dmsInsurer?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  dmsNumber?: string;
 }

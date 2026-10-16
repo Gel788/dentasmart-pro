@@ -1,8 +1,11 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Protected } from '@/components/protected';
+import { PatientForm, type PatientSeed } from '@/components/studio/patient-form';
 import { api } from '@/lib/api';
+import { samePhone, splitName } from '@/lib/phone';
 
 type Lead = {
   id: string;
@@ -26,7 +29,10 @@ export default function LeadsPage() {
 }
 
 function Desk() {
+  const router = useRouter();
   const [items, setItems] = useState<Lead[]>([]);
+  const [people, setPeople] = useState<{ id: string; phone: string | null }[] | null>(null);
+  const [draft, setDraft] = useState<PatientSeed | null>(null);
   const [conversion, setConversion] = useState(0);
   const [filter, setFilter] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -43,6 +49,7 @@ function Desk() {
   useEffect(() => {
     setFilter(sessionStorage.getItem('sd.leads.filter') || 'ALL');
     void load();
+    api<{ items: { id: string; phone: string | null }[] }>('/patients?pageSize=500').then((res) => setPeople(res.items)).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -116,6 +123,9 @@ function Desk() {
                 <p className="sd-muted">{row.phone} · {row.source}{row.calls.some((call) => call.missed) ? ' · пропущен' : ''}{row.refusalReason ? ` · ${row.refusalReason}` : ''}</p>
               </div>
               {next && <button className={row.id === primaryId ? 'sd-btn' : 'sd-btn-ghost'} type="button" onClick={() => setStatus(row.id, next.status)}>{next.label}</button>}
+              {people && row.status !== 'REFUSED' && !people.some((person) => samePhone(person.phone, row.phone)) && (
+                <button className="sd-btn-ghost" type="button" onClick={() => setDraft({ ...splitName(row.name === 'Неизвестный номер' ? '' : row.name), phone: row.phone, source: 'CALL' })}>Новый пациент</button>
+              )}
               {!next && <span className="lead-status">{row.status === 'VISITED' ? 'Пришёл' : 'Отказ'}</span>}
               {row.status !== 'REFUSED' && row.status !== 'VISITED' && (
                 refusing === row.id
@@ -136,6 +146,12 @@ function Desk() {
           </div>
         )}
       </div>
+      <PatientForm
+        open={Boolean(draft)}
+        seed={draft ?? undefined}
+        onClose={() => setDraft(null)}
+        onSaved={(patient) => router.push(`/patients/${patient.id}`)}
+      />
     </div>
   );
 }

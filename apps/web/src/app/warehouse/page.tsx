@@ -28,6 +28,7 @@ export default function WarehousePage() {
   } | null>(null);
   const [modal, setModal] = useState(false);
   const [name, setName] = useState('');
+  const [editing, setEditing] = useState<{ id: string; name: string; quantity: number } | null>(null);
   const [norms, setNorms] = useState<unknown[]>([]);
   const [expiring, setExpiring] = useState<{ id: string; quantity: string; expiresAt: string; costPrice?: string | null; item: { name: string } }[]>([]);
   const [monthCost, setMonthCost] = useState(0);
@@ -146,6 +147,7 @@ export default function WarehousePage() {
                     <p className="mt-2 text-sm">
                       Остаток: <span className="font-medium text-[var(--text)]">{qty}</span>
                     </p>
+                    <Button className="mt-3" variant="ghost" onClick={() => setEditing({ id: it.id, name: it.name, quantity: qty })}>Изменить</Button>
                   </Card>
                 );
               })}
@@ -237,6 +239,27 @@ export default function WarehousePage() {
           )}
         </div>
       )}
+
+      <Modal open={Boolean(editing)} onClose={() => setEditing(null)} title="Позиция" description="Название и остаток">
+        {editing && (
+          <form className="space-y-3" onSubmit={async (event) => {
+            event.preventDefault();
+            await api(`/warehouse/items/${editing.id}`, { method: 'PATCH', body: JSON.stringify({ name: editing.name, quantity: editing.quantity }) });
+            setEditing(null);
+            load();
+          }}>
+            <div>
+              <Label>Название</Label>
+              <Input required value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} />
+            </div>
+            <div>
+              <Label>Остаток</Label>
+              <Input type="number" value={editing.quantity} onChange={(event) => setEditing({ ...editing, quantity: Number(event.target.value) })} />
+            </div>
+            <Button type="submit" className="w-full">Сохранить</Button>
+          </form>
+        )}
+      </Modal>
 
       <Modal open={modal} onClose={() => setModal(false)} title="Новая позиция" description="Добавление материала на склад">
         <form onSubmit={onCreate} className="space-y-3">

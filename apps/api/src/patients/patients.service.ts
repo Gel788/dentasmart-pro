@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { AuthUser } from '@dentasmart/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/audit.service';
@@ -42,21 +42,29 @@ export class PatientsService {
   async findOne(orgId: string, id: string) {
     const patient = await this.prisma.patient.findFirst({
       where: { id, organizationId: orgId },
-      include: { toothRecords: { orderBy: { toothNum: 'asc' } } },
+      include: {
+        toothRecords: { orderBy: { toothNum: 'asc' } },
+        insurancePolicies: { include: { insurer: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+      },
     });
     if (!patient) throw new NotFoundException('Пациент не найден');
     return patient;
   }
 
   async create(user: AuthUser, dto: CreatePatientDto) {
-    const { birthDate, ...rest } = dto;
+    if (dto.consentPd === false) throw new BadRequestException('Нужно согласие на обработку персональных данных (152-ФЗ)');
+    await this.assertPhoneFree(user.organizationId, dto.phone);
+    const { birthDate, consentPd, dmsInsurer, dmsNumber, isActive, ...rest } = dto;
     const patient = await this.prisma.patient.create({
       data: {
         ...rest,
         birthDate: birthDate ? new Date(birthDate) : undefined,
         organizationId: user.organizationId,
+        ...(isActive === undefined ? {} : { isActive }),
       },
     });
+    if (consentPd) await this.signConsent(user.organizationId, patient.id);
+    if (dmsInsurer && dmsNumber) await this.savePolicy(user.organizationId, patient.id, dmsInsurer, dmsNumber);
 
     await this.audit.log({
       organizationId: user.organizationId,
@@ -136,16 +144,20 @@ export class PatientsService {
   }
 
   async update(orgId: string, id: string, dto: Partial<CreatePatientDto>, userId: string) {
-    const { birthDate, ...rest } = dto;
+    if (dto.phone) await this.assertPhoneFree(orgId, dto.phone, id);
+    const { birthDate, consentPd, dmsInsurer, dmsNumber, isActive, ...rest } = dto;
     const patient = await this.prisma.patient.update({
       where: { id },
       data: {
         ...rest,
+        ...(isActive === undefined ? {} : { isActive }),
         ...(birthDate !== undefined
           ? { birthDate: birthDate ? new Date(birthDate) : null }
           : {}),
       },
     });
+    if (consentPd) await this.signConsent(orgId, id);
+    if (dmsInsurer && dmsNumber) await this.savePolicy(orgId, id, dmsInsurer, dmsNumber);
     await this.audit.log({
       organizationId: orgId,
       userId,
@@ -165,4 +177,54 @@ export class PatientsService {
     }
     return { created: items.length, items };
   }
+
+  private async assertPhoneFree(orgId: string, phone: string | undefined, exceptId?: string) {
+    const digits = phoneDigits(phone);
+    if (digits.length < 10) return;
+    const rows = await this.prisma.patient.findMany({
+      where: { organizationId: orgId, isActive: true, phone: { not: null } },
+      select: { id: true, phone: true, firstName: true, lastName: true },
+      take: 1000,
+    });
+    const hit = rows.find((row) => row.id !== exceptId && phoneDigits(row.phone).slice(-10) === digits.slice(-10));
+    if (hit) throw new BadRequestException(`Пациент с таким телефоном уже есть: ${hit.lastName} ${hit.firstName}`);
+  }
+
+  private async signConsent(orgId: string, patientId: string) {
+    const existing = await this.prisma.patientConsent.findFirst({
+      where: { patientId, organizationId: orgId, type: 'PD_PROCESSING', status: 'SIGNED' },
+    });
+    if (existing) return existing;
+    return this.prisma.patientConsent.create({
+      data: { organizationId: orgId, patientId, type: 'PD_PROCESSING', status: 'SIGNED', signedAt: new Date() },
+    });
+  }
+
+  private async savePolicy(orgId: string, patientId: string, insurerName: string, number: string) {
+    const name = insurerName.trim();
+    const policyNumber = number.trim();
+    if (!name || !policyNumber) return;
+    const insurer = await this.prisma.insurer.upsert({
+      where: { organizationId_name: { organizationId: orgId, name } },
+      create: { organizationId: orgId, name },
+      update: {},
+    });
+    const current = await this.prisma.insurancePolicy.findFirst({
+      where: { organizationId: orgId, patientId, insurerId: insurer.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (current) {
+      return this.prisma.insurancePolicy.update({ where: { id: current.id }, data: { number: policyNumber } });
+    }
+    return this.prisma.insurancePolicy.create({
+      data: { organizationId: orgId, patientId, insurerId: insurer.id, number: policyNumber, limitAmount: 100000 },
+    });
+  }
+}
+
+function phoneDigits(value: string | null | undefined) {
+  let digits = (value ?? '').replace(/\D/g, '');
+  if (digits.startsWith('8')) digits = `7${digits.slice(1)}`;
+  if (digits && !digits.startsWith('7')) digits = `7${digits}`;
+  return digits.slice(0, 11);
 }

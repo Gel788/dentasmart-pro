@@ -4,7 +4,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 
 export type Focus =
   | { type: 'patient'; id: string }
-  | { type: 'slot'; startsAt: string; cabinetId?: string; doctorId?: string; label: string }
+  | { type: 'slot'; startsAt: string; cabinetId?: string; doctorId?: string; label: string; appointmentId?: string }
   | null;
 
 type FocusValue = {

@@ -27,7 +27,7 @@ type Bundle = {
   planTemplates: { id: string; name: string; note: string | null; isArchived: boolean }[];
   visitTemplates: { id: string; name: string; icd10: string | null; complaints: string; diagnosis: string; treatment: string; recommendations: string; isArchived: boolean }[];
   documents: { id: string; kind: string; name: string; body: string; isArchived: boolean }[];
-  employees: { id: string; firstName: string; lastName: string; specialization: string | null; phone: string | null; email: string; commission: number; schedule: { dayOfWeek: number }[] }[];
+  employees: { id: string; firstName: string; lastName: string; specialization: string | null; phone: string | null; email: string; commission: number; status?: string; schedule: { dayOfWeek: number }[] }[];
   cabinets: { id: string; name: string; isActive: boolean }[];
   roles: { id: string; name: string; code: string; seeCost: boolean; maxDiscountPercent: number; editClosedVisits: boolean; editPrice: boolean; seeAllFinance: boolean; canExport: boolean; permissions: string[] }[];
   permissions: { code: string; description: string | null }[];
@@ -64,8 +64,10 @@ export function ClinicSettings() {
       await work();
       setNotice('Сохранено');
       await load();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не сохранилось');
+      return false;
     }
   };
 
@@ -105,7 +107,7 @@ export function ClinicSettings() {
   );
 }
 
-function Price({ data }: { data: Bundle; query: string; flash: (work: () => Promise<unknown>) => Promise<void> }) {
+function Price({ data }: { data: Bundle; query: string; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
   const count = data.services.filter((row) => row.code && row.isActive).length;
   return (
     <section className="sd-card sd-stack">
@@ -116,9 +118,11 @@ function Price({ data }: { data: Bundle; query: string; flash: (work: () => Prom
   );
 }
 
-function Stock({ data, query, flash }: { data: Bundle; query: string; flash: (work: () => Promise<unknown>) => Promise<void> }) {
+function Stock({ data, query, flash }: { data: Bundle; query: string; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
   const [name, setName] = useState('');
-  const rows = data.stock.filter((row) => !query || row.name.toLowerCase().includes(query));
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ name: '', quantity: 0, cost: 0 });
+  const rows = data.stock.filter((row) => row.isActive !== false && (!query || row.name.toLowerCase().includes(query)));
   return (
     <section className="sd-stack">
       <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/stock', { method: 'POST', body: JSON.stringify({ name, unit: 'шт', minStock: 5, quantity: 10, cost: 100 }) })); setName(''); }}>
@@ -127,16 +131,29 @@ function Stock({ data, query, flash }: { data: Bundle; query: string; flash: (wo
       </form>
       {rows.map((row) => (
         <article key={row.id} className="cfg-row">
-          <b>{row.name}</b>
-          <span>{row.quantity} {row.unit} · закупка {formatMoney(row.cost)} · мин {row.minStock}</span>
-          <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api(`/config/stock/${row.id}/receive`, { method: 'POST', body: JSON.stringify({ quantity: 1, cost: row.cost || 100 }) }))}>+1</button>
+          {editing === row.id ? (
+            <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/stock', { method: 'POST', body: JSON.stringify({ id: row.id, name: draft.name, quantity: draft.quantity, cost: draft.cost }) })).then((ok) => { if (ok) setEditing(null); }); }}>
+              <input className="sd-input" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} required />
+              <input className="sd-input" type="number" aria-label="Количество" value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: Number(event.target.value) })} />
+              <input className="sd-input" type="number" aria-label="Закупка" value={draft.cost} onChange={(event) => setDraft({ ...draft, cost: Number(event.target.value) })} />
+              <button className="sd-btn" type="submit">Сохранить</button>
+            </form>
+          ) : (
+            <>
+              <b>{row.name}</b>
+              <span>{row.quantity} {row.unit} · закупка {formatMoney(row.cost)} · мин {row.minStock}</span>
+              <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api(`/config/stock/${row.id}/receive`, { method: 'POST', body: JSON.stringify({ quantity: 1, cost: row.cost || 100 }) }))}>+1</button>
+              <button className="sd-btn-ghost" type="button" onClick={() => { setEditing(row.id); setDraft({ name: row.name, quantity: row.quantity, cost: row.cost }); }}>Изменить</button>
+              <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api('/config/stock', { method: 'POST', body: JSON.stringify({ id: row.id, isActive: false }) }))}>В архив</button>
+            </>
+          )}
         </article>
       ))}
     </section>
   );
 }
 
-function Templates({ data, query, flash }: { data: Bundle; query: string; flash: (work: () => Promise<unknown>) => Promise<void> }) {
+function Templates({ data, query, flash }: { data: Bundle; query: string; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
   const [name, setName] = useState('Осмотр');
   const visits = data.visitTemplates.filter((row) => !query || row.name.toLowerCase().includes(query));
   return (
@@ -165,7 +182,7 @@ function Templates({ data, query, flash }: { data: Bundle; query: string; flash:
   );
 }
 
-function Brand({ data, flash }: { data: Bundle; flash: (work: () => Promise<unknown>) => Promise<void> }) {
+function Brand({ data, flash }: { data: Bundle; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
   const [form, setForm] = useState(data.brand);
   const [chair, setChair] = useState('');
   return (
@@ -201,29 +218,50 @@ function Brand({ data, flash }: { data: Bundle; flash: (work: () => Promise<unkn
   );
 }
 
-function Staff({ data, query, flash }: { data: Bundle; query: string; flash: (work: () => Promise<unknown>) => Promise<void> }) {
+function Staff({ data, query, flash }: { data: Bundle; query: string; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', specialization: 'Терапевт', commission: 30 });
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ firstName: '', lastName: '', specialization: '', phone: '', commission: 0 });
   const rows = data.employees.filter((row) => !query || `${row.lastName} ${row.firstName}`.toLowerCase().includes(query));
   return (
     <section className="sd-stack">
-      <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/employees', { method: 'POST', body: JSON.stringify({ ...form, days: [1, 2, 3, 4, 5], startsAt: '09:00', endsAt: '18:00' }) })); }}>
-        <input className="sd-input" placeholder="Имя" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} required />
-        <input className="sd-input" placeholder="Фамилия" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} required />
-        <input className="sd-input" placeholder="Почта" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required />
+      <form className="cfg-new" onSubmit={(event) => {
+        event.preventDefault();
+        void flash(() => api('/config/employees', { method: 'POST', body: JSON.stringify({ ...form, days: [1, 2, 3, 4, 5], startsAt: '09:00', endsAt: '18:00' }) })).then((ok) => { if (!ok) return;
+          setForm({ firstName: '', lastName: '', email: '', specialization: 'Терапевт', commission: 30 });
+        });
+      }}>
+        <label>Имя<input className="sd-input" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} required /></label>
+        <label>Фамилия<input className="sd-input" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} required /></label>
+        <label>Почта<input className="sd-input" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
         <button className="sd-btn" type="submit">Врач, пн–пт</button>
       </form>
       {rows.map((row) => (
-        <article key={row.id} className="cfg-row">
-          <b>{row.lastName} {row.firstName}</b>
-          <span>{row.specialization} · {row.email} · {row.commission}% · смен {row.schedule.length}</span>
-          <input className="sd-input" type="number" defaultValue={row.commission} onBlur={(event) => void flash(() => api('/config/employees', { method: 'POST', body: JSON.stringify({ id: row.id, firstName: row.firstName, lastName: row.lastName, specialization: row.specialization, commission: Number(event.target.value) }) }))} />
+        <article key={row.id} className={`cfg-row${row.status === 'INACTIVE' ? ' off' : ''}`}>
+          {editing === row.id ? (
+            <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/employees', { method: 'POST', body: JSON.stringify({ id: row.id, ...draft, email: row.email }) })).then((ok) => { if (ok) setEditing(null); }); }}>
+              <label>Фамилия<input className="sd-input" value={draft.lastName} onChange={(event) => setDraft({ ...draft, lastName: event.target.value })} required /></label>
+              <label>Имя<input className="sd-input" value={draft.firstName} onChange={(event) => setDraft({ ...draft, firstName: event.target.value })} required /></label>
+              <label>Специализация<input className="sd-input" value={draft.specialization} onChange={(event) => setDraft({ ...draft, specialization: event.target.value })} /></label>
+              <label>Телефон<input className="sd-input" value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} /></label>
+              <label>Процент<input className="sd-input" type="number" value={draft.commission} onChange={(event) => setDraft({ ...draft, commission: Number(event.target.value) })} /></label>
+              <button className="sd-btn" type="submit">Сохранить</button>
+            </form>
+          ) : (
+            <>
+              <b>{row.lastName} {row.firstName}</b>
+              <span>{row.specialization} · {row.email} · {row.commission}% · смен {row.schedule.length}{row.status === 'INACTIVE' ? ' · архив' : ''}</span>
+              <button className="sd-btn-ghost" type="button" onClick={() => { setEditing(row.id); setDraft({ firstName: row.firstName, lastName: row.lastName, specialization: row.specialization ?? '', phone: row.phone ?? '', commission: row.commission }); }}>Изменить</button>
+              <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api('/config/employees', { method: 'POST', body: JSON.stringify({ id: row.id, firstName: row.firstName, lastName: row.lastName, specialization: row.specialization, email: row.email, commission: row.commission, status: row.status === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE' }) }))}>{row.status === 'INACTIVE' ? 'Вернуть' : 'В архив'}</button>
+            </>
+          )}
         </article>
       ))}
     </section>
   );
 }
 
-function Roles({ data, flash }: { data: Bundle; flash: (work: () => Promise<unknown>) => Promise<void> }) {
+function Roles({ data, flash }: { data: Bundle; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
   return (
     <section className="sd-stack">
       {data.roles.map((role) => (
@@ -244,7 +282,7 @@ function Roles({ data, flash }: { data: Bundle; flash: (work: () => Promise<unkn
   );
 }
 
-function Offers({ data, flash }: { data: Bundle; flash: (work: () => Promise<unknown>) => Promise<void> }) {
+function Offers({ data, flash }: { data: Bundle; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
   const [code, setCode] = useState('ВЕСНА10');
   return (
     <section className="sd-stack">

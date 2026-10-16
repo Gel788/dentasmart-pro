@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveBranchId } from '../common/resolve-branch';
 import { consumeStock } from './stock-consume';
@@ -52,6 +52,24 @@ export class WarehouseService {
         category: (data.category as never) ?? 'MATERIAL',
         minStock: data.minStock ?? 0,
       },
+      include: { batches: true },
+    });
+  }
+
+  async updateItem(orgId: string, id: string, data: { name?: string; minStock?: number; quantity?: number; isActive?: boolean }) {
+    const item = await this.prisma.inventoryItem.findFirst({ where: { id, organizationId: orgId }, include: { batches: true } });
+    if (!item) throw new NotFoundException('Позиция не найдена');
+    if (data.quantity != null && item.batches[0]) {
+      await this.prisma.stockBatch.update({ where: { id: item.batches[0].id }, data: { quantity: data.quantity } });
+    }
+    return this.prisma.inventoryItem.update({
+      where: { id },
+      data: {
+        name: data.name,
+        minStock: data.minStock,
+        ...(data.isActive === undefined ? {} : { isActive: data.isActive }),
+      },
+      include: { batches: true },
     });
   }
 

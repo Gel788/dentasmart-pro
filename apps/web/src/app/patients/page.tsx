@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Protected } from '@/components/protected';
+import { PatientForm } from '@/components/studio/patient-form';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 
 type Patient = {
   id: string;
@@ -23,9 +25,12 @@ export default function PatientsPage() {
 
 function List() {
   const router = useRouter();
+  const { user } = useAuth();
+  const canWrite = user?.permissions.includes('patient.write') ?? false;
   const [query, setQuery] = useState<string | null>(null);
   const [rows, setRows] = useState<Patient[]>([]);
   const [error, setError] = useState('');
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     setQuery(sessionStorage.getItem('sd.patients.q') ?? '');
@@ -53,8 +58,16 @@ function List() {
           <h1>Пациенты</h1>
           <p>Фамилия или телефон.</p>
         </div>
-        <input className="sd-input" style={{ maxWidth: 280 }} placeholder="Смирнова или 900" value={query ?? ''} onChange={(e) => setQuery(e.target.value)} />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input className="sd-input" style={{ maxWidth: 280 }} placeholder="Смирнова или 900" value={query ?? ''} onChange={(e) => setQuery(e.target.value)} />
+          {canWrite && <button className="sd-btn" type="button" onClick={() => setCreating(true)}>Новый пациент</button>}
+        </div>
       </div>
+      <PatientForm
+        open={creating}
+        onClose={() => setCreating(false)}
+        onSaved={(patient) => router.push(`/patients/${patient.id}`)}
+      />
       {error && <p>{error}</p>}
       <div className="sd-card">
         <table className="sd-table">

@@ -487,6 +487,19 @@ html.dark .sd-appt { background: linear-gradient(180deg, rgba(15, 118, 110, 0.55
 .sd-appt:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 12px 22px rgba(15, 118, 110, 0.24); z-index: 2; }
 .sd-appt:active { cursor: grabbing; transform: scale(0.98); }
 .sd-appt small { display: block; color: var(--muted); }
+.sd-appt-edit { position: absolute; right: 6px; bottom: 4px; border: 0; background: transparent; color: var(--accent); font-size: 11px; padding: 0; }
+.sd-sheet-back { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; background: rgba(7, 11, 10, 0.46); backdrop-filter: blur(8px); }
+.sd-sheet { width: min(760px, 100%); max-height: min(92vh, 900px); overflow: auto; background: var(--surface-solid); border: 1px solid var(--border); border-radius: 24px; box-shadow: var(--shadow); padding: 22px 22px 18px; animation: sd-rise 220ms cubic-bezier(.2,.8,.2,1); }
+.sd-sheet-head, .sd-sheet-actions { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.sd-sheet-actions { align-items: center; margin-top: 8px; }
+.sd-sheet h2 { margin: 0; font-size: 32px; letter-spacing: -0.045em; }
+.sd-kicker { margin: 0 0 4px; color: var(--accent); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+.sd-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin: 16px 0 8px; }
+.sd-form-grid label, .sd-sheet .sd-field { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12px; }
+.sd-area { min-height: 72px; resize: vertical; padding-top: 8px; }
+.sd-consent { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0 12px; padding: 12px; border-radius: 14px; background: var(--accent-soft); }
+.sd-consent input { margin-top: 2px; }
+@media (max-width: 720px) { .sd-form-grid { grid-template-columns: 1fr; } .sd-sheet { padding: 16px; } .sd-sheet h2 { font-size: 26px; } }
 
 .sd-palette { position: fixed; inset: 0; z-index: 40; background: rgba(7, 11, 10, 0.46); backdrop-filter: blur(6px); display: flex; justify-content: center; padding-top: 12vh; animation: sd-rise 160ms ease; }
 .sd-palette-box { width: min(560px, calc(100vw - 24px)); max-height: 60vh; overflow: auto; background: var(--surface-solid); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow); }

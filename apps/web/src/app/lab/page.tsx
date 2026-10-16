@@ -44,6 +44,7 @@ function Desk() {
   const [dueAt, setDueAt] = useState('');
   const [costAmount, setCostAmount] = useState('');
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
 
   const load = () => api<Order[]>('/lab/orders').then(setOrders).catch((err: Error) => setError(err.message));
   useEffect(() => {
@@ -59,24 +60,24 @@ function Desk() {
     event.preventDefault();
     setError('');
     try {
-      await api('/lab/orders', {
-        method: 'POST',
-        body: JSON.stringify({
-          title,
-          patientId: patientId || undefined,
-          doctorId: doctorId || undefined,
-          dueAt: dueAt || undefined,
-          costAmount: costAmount ? Number(costAmount) : undefined,
-          labName: labName || undefined,
-          technician: technician || undefined,
-          fittingAt: fittingAt || undefined,
-        }),
-      });
+      const body = {
+        title,
+        patientId: patientId || undefined,
+        doctorId: doctorId || undefined,
+        dueAt: dueAt || undefined,
+        costAmount: costAmount ? Number(costAmount) : undefined,
+        labName: labName || undefined,
+        technician: technician || undefined,
+        fittingAt: fittingAt || undefined,
+      };
+      if (editing) await api(`/lab/orders/${editing}`, { method: 'PATCH', body: JSON.stringify(body) });
+      else await api('/lab/orders', { method: 'POST', body: JSON.stringify(body) });
       setTitle('');
       setCostAmount('');
       setLabName('');
       setTechnician('');
       setCreating(false);
+      setEditing(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Наряд не создался');
@@ -120,8 +121,8 @@ function Desk() {
           <label>Себестоимость, ₽<input className="sd-input" type="number" min={0} value={costAmount} onChange={(event) => setCostAmount(event.target.value)} /></label>
         </div>
         <div className="sd-inline">
-          <button className="sd-btn" type="submit">Создать наряд</button>
-          <button className="sd-btn-ghost" type="button" onClick={() => setCreating(false)}>Отмена</button>
+          <button className="sd-btn" type="submit">{editing ? 'Сохранить наряд' : 'Создать наряд'}</button>
+          <button className="sd-btn-ghost" type="button" onClick={() => { setCreating(false); setEditing(null); }}>Отмена</button>
         </div>
       </form>}
       {orders.map((order) => (
@@ -141,6 +142,18 @@ function Desk() {
               ].filter(Boolean).join(' · ')}
             </p>
           </div>
+          <button className="sd-btn-ghost" type="button" onClick={() => {
+            setEditing(order.id);
+            setCreating(true);
+            setTitle(order.title);
+            setLabName(order.labName ?? '');
+            setTechnician(order.technician ?? '');
+            setDueAt(order.dueAt ? order.dueAt.slice(0, 10) : '');
+            setFittingAt(order.fittingAt ? order.fittingAt.slice(0, 10) : '');
+            setCostAmount(order.costAmount ? String(Number(order.costAmount)) : '');
+            setPatientId(patients.find((row) => row.lastName === order.patient?.lastName && row.firstName === order.patient?.firstName)?.id ?? '');
+            setDoctorId(doctors.find((row) => row.lastName === order.doctor?.lastName)?.id ?? '');
+          }}>Изменить</button>
           <select className="sd-input" style={{ width: 150 }} aria-label="Статус наряда" value={order.status} onChange={(event) => setStatus(order.id, event.target.value)}>
             {LAB_STATUS.map((status) => <option key={status} value={status}>{LAB_LABEL[status]}</option>)}
           </select>

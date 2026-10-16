@@ -51,6 +51,29 @@ export class LabService {
     return this.prisma.labOrder.update({ where: { id }, data: { status: status as never } });
   }
 
+  async updateOrder(
+    orgId: string,
+    id: string,
+    data: { title?: string; patientId?: string; doctorId?: string; dueAt?: string; costAmount?: number; labName?: string; technician?: string; fittingAt?: string; shade?: string },
+  ) {
+    const order = await this.prisma.labOrder.findFirst({ where: { id, organizationId: orgId } });
+    if (!order) throw new NotFoundException('Наряд не найден');
+    return this.prisma.labOrder.update({
+      where: { id },
+      data: {
+        title: data.title,
+        shade: data.shade,
+        patientId: data.patientId || undefined,
+        doctorId: data.doctorId || undefined,
+        dueAt: data.dueAt ? new Date(data.dueAt) : undefined,
+        costAmount: data.costAmount,
+        labName: data.labName,
+        technician: data.technician,
+        fittingAt: data.fittingAt ? new Date(data.fittingAt) : undefined,
+      },
+    });
+  }
+
   addMessage(orderId: string, body: string, authorId?: string) {
     return this.prisma.labMessage.create({ data: { orderId, body, authorId } });
   }
