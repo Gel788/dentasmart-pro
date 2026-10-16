@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Protected } from '@/components/protected';
+import { BreakdownTable } from '@/components/studio/breakdown-table';
 import { api } from '@/lib/api';
+import { consumablesFor, patientLines, type CatalogService, type CatalogStock } from '@/lib/breakdown';
 import { formatMoney } from '@/lib/format';
-import type { PlanCard } from '@/components/studio/plans';
+import type { Phase, PlanCard } from '@/components/studio/plans';
 
 type Sheet = {
   clinic: string;
@@ -24,9 +26,19 @@ export default function PrintPlanPage() {
 function SheetBody() {
   const params = useParams<{ id: string }>();
   const [data, setData] = useState<Sheet | null>(null);
+  const [catalog, setCatalog] = useState<{ services: CatalogService[]; stock: CatalogStock[] }>({ services: [], stock: [] });
   const [error, setError] = useState('');
   useEffect(() => {
-    api<Sheet>(`/workspace/plans/${params.id}/sheet`).then(setData).catch((err: Error) => setError(err.message));
+    let live = true;
+    Promise.all([
+      api<Sheet>(`/workspace/plans/${params.id}/sheet`),
+      api<{ services: CatalogService[]; stock: CatalogStock[] }>('/config').catch(() => ({ services: [] as CatalogService[], stock: [] as CatalogStock[] })),
+    ]).then(([sheet, config]) => {
+      if (!live) return;
+      setData(sheet);
+      setCatalog({ services: config.services ?? [], stock: config.stock ?? [] });
+    }).catch((err: Error) => { if (live) setError(err.message); });
+    return () => { live = false; };
   }, [params.id]);
   if (error) return <p>{error}</p>;
   if (!data) return <p style={{ padding: 24 }}>Собираем лист…</p>;
@@ -50,19 +62,8 @@ function SheetBody() {
         </header>
         <p>Гарантия {data.plan.guaranteeMonths} мес. · срок около {data.plan.durationWeeks} нед. · цена действительна 14 дней.</p>
         <h2>Этапы</h2>
-        {data.plan.phases.map((phase) => (
-          <section key={phase.id} style={{ marginBottom: 12 }}>
-            <b>{phase.title}</b>
-            <div style={{ color: '#57534e' }}>{phase.specialty}{phase.healingDays ? ` · заживление ${phase.healingDays} дн.` : ''}</div>
-            {phase.items.map((item) => (
-              <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e7e5e4', padding: '6px 0' }}>
-                <span>{item.toothNum ? `Зуб ${item.toothNum}` : ''} {item.title}{item.surfaces.length ? ` (${item.surfaces.join('')})` : ''}</span>
-                <span>{formatMoney(item.price)}</span>
-              </div>
-            ))}
-          </section>
-        ))}
-        <p style={{ fontSize: 28, letterSpacing: '-0.04em' }}>Итого {formatMoney(data.plan.total)}</p>
+        <PlanStages plan={data.plan} catalog={catalog} />
+        <p className="pr-grand">Итого {formatMoney(data.plan.total)}</p>
         {data.parts.length > 0 && (
           <>
             <h2>График платежей</h2>
@@ -88,6 +89,36 @@ function SheetBody() {
         </footer>
       </article>
     </div>
+  );
+}
+
+function PlanStages({ plan, catalog }: { plan: PlanCard; catalog: { services: CatalogService[]; stock: CatalogStock[] } }) {
+  const show = plan.showBreakdown !== false;
+  const stages: Phase[] = plan.phases.length
+    ? plan.phases
+    : [{ id: 'loose', title: 'Позиции', specialty: null, healingDays: 0, dependsOnTitle: null, waitDays: 0, items: plan.looseItems }];
+  return (
+    <>
+      {stages.map((phase) => {
+        const subtotal = phase.items.reduce((sum, item) => sum + item.price, 0);
+        return (
+          <section key={phase.id} className="pr-phase" data-breakdown={show ? 'on' : 'off'}>
+            <h3>{phase.title}</h3>
+            <div className="pr-meta">{phase.specialty}{phase.healingDays ? ` · заживление ${phase.healingDays} дн.` : ''}</div>
+            {phase.items.map((item) => (
+              <div key={item.id}>
+                <div className="pr-svc">
+                  <span>{item.toothNum ? `Зуб ${item.toothNum} · ` : ''}{item.title}{item.surfaces.length ? ` (${item.surfaces.join('')})` : ''}</span>
+                  <b>{formatMoney(item.price)}</b>
+                </div>
+                {show && <BreakdownTable lines={patientLines(item.price, consumablesFor(item.title, catalog.services, catalog.stock))} />}
+              </div>
+            ))}
+            <div className="pr-sub"><span>Подытог</span><b>{formatMoney(subtotal)}</b></div>
+          </section>
+        );
+      })}
+    </>
   );
 }
 

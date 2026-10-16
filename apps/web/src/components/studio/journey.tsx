@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ToothChart, type ChartItem, type ChartSurface } from '@/components/studio/chart';
 import { PricePicker, type PriceService } from '@/components/studio/price-picker';
+import { BreakdownTable } from '@/components/studio/breakdown-table';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
+import { consumablesFor, explainPrice, type CatalogService, type CatalogStock } from '@/lib/breakdown';
 import { formatMoney } from '@/lib/format';
 import { kitOf } from '@/lib/service-kit';
 import type { Family, PlanItem } from '@/components/studio/plans';
@@ -31,6 +34,10 @@ export function PlanJourney({
   building: boolean;
 }) {
   const router = useRouter();
+  const { user } = useAuth();
+  const owner = user?.permissions.includes('org.manage') ?? false;
+  const [catalog, setCatalog] = useState<{ services: CatalogService[]; stock: CatalogStock[] }>({ services: [], stock: [] });
+  const [priced, setPriced] = useState(false);
   const family = families.find((item) => item.key === familyKey)
     ?? families.find((item) => item.plans.some((plan) => plan.id === activeId))
     ?? [...families].sort((a, b) => b.plans.length - a.plans.length)[0];
@@ -40,12 +47,20 @@ export function PlanJourney({
   const [tooth, setTooth] = useState<number | null>(null);
   const [picker, setPicker] = useState<{ phaseId: string; tooth: number | null } | null>(null);
   const [discount, setDiscount] = useState(plan?.discountPercent ?? 0);
+  const [disclosure, setDisclosure] = useState(plan?.showBreakdown !== false);
   const [saved, setSaved] = useState('');
   const [sent, setSent] = useState('');
   const [versions, setVersions] = useState<{ id: string; note: string | null; createdAt: string }[] | null>(null);
 
   useEffect(() => { setDiscount(plan?.discountPercent ?? 0); }, [plan?.id, plan?.discountPercent]);
+  useEffect(() => { setDisclosure(plan?.showBreakdown !== false); }, [plan?.id, plan?.showBreakdown]);
   useEffect(() => { setPicker(null); setTooth(null); }, [plan?.id]);
+  useEffect(() => {
+    api<{ services: CatalogService[]; stock: CatalogStock[] }>('/config')
+      .then((data) => setCatalog({ services: data.services ?? [], stock: data.stock ?? [] }))
+      .catch(() => undefined)
+      .finally(() => setPriced(true));
+  }, []);
 
   const phases = plan
     ? (plan.phases.length ? plan.phases : [{ id: 'loose', title: 'Позиции', specialty: null, healingDays: 0, dependsOnTitle: null, waitDays: 0, items: plan.looseItems }])
@@ -165,13 +180,14 @@ export function PlanJourney({
                         <button className="sd-btn-ghost" type="button" onClick={() => void api<{ startsAt: string }>(`/workspace/plans/${plan.id}/phases/${phase.id}/book`, { method: 'POST', body: '{}' }).then((result) => setSaved(`«${phase.title}» записан на ${new Date(result.startsAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`)).catch((err: Error) => setSaved(err.message))}>Записать</button>
                       )}
                       <span>{done} из {phase.items.length}</span>
+                      <span>Подытог</span>
                       <b>{formatMoney(price)}</b>
                     </div>
                   </header>
                   {phase.dependsOnTitle && <p className="jn-wait">После «{phase.dependsOnTitle}» пауза {phase.waitDays} дн.</p>}
                   <ul>
                     {phase.items.map((item) => (
-                      <ServiceLine key={item.id} item={item} tooth={tooth} />
+                      <ServiceLine key={item.id} item={item} tooth={tooth} catalog={catalog} show={disclosure && priced} owner={owner} />
                     ))}
                   </ul>
                   <button className="sd-btn-ghost jn-add" type="button" data-plan-add="stage" onClick={() => setPicker({ phaseId: phase.id, tooth })}>+ Услуга</button>
@@ -189,6 +205,22 @@ export function PlanJourney({
         <label>Скидка, %
           <input aria-label="Скидка, %" type="number" min={0} max={40} value={discount} onChange={(event) => setDiscount(Number(event.target.value))} />
         </label>
+        {owner && (
+          <label className="jn-toggle">
+            <input
+              type="checkbox"
+              checked={disclosure}
+              onChange={(event) => {
+                const show = event.target.checked;
+                setDisclosure(show);
+                void api(`/workspace/plans/${plan.id}/disclosure`, { method: 'POST', body: JSON.stringify({ showBreakdown: show }) })
+                  .then(() => onAdded())
+                  .catch((err: Error) => setSaved(err.message));
+              }}
+            />
+            Показывать расшифровку
+          </label>
+        )}
         <div>
           <span>{months > 1 ? `Рассрочка ${months} мес.` : 'Одним платежом'}</span>
           <strong>{formatMoney(perMonth)}{months > 1 ? '/мес' : ''}</strong>
@@ -229,8 +261,22 @@ export function PlanJourney({
   );
 }
 
-function ServiceLine({ item, tooth }: { item: PlanItem; tooth: number | null }) {
+function ServiceLine({
+  item,
+  tooth,
+  catalog,
+  show,
+  owner,
+}: {
+  item: PlanItem;
+  tooth: number | null;
+  catalog: { services: CatalogService[]; stock: CatalogStock[] };
+  show: boolean;
+  owner: boolean;
+}) {
   const dim = tooth != null && item.toothNum !== tooth;
+  const parts = consumablesFor(item.title, catalog.services, catalog.stock);
+  const explanation = explainPrice(item.price, parts);
   return (
     <li className={dim ? 'dim' : tooth === item.toothNum ? 'hot' : ''}>
       <span className="jn-badge">{item.toothNum ?? '—'}</span>
@@ -240,6 +286,16 @@ function ServiceLine({ item, tooth }: { item: PlanItem; tooth: number | null }) 
         <span className="jn-kit">Расходники: {item.kit || kitOf(item.title)}</span>
       </div>
       <em>{formatMoney(item.price)}</em>
+      {show && (
+        <details className="jn-fold">
+          <summary>Расшифровка</summary>
+          <BreakdownTable lines={explanation.lines} />
+          {owner && <p className="jn-own">Себестоимость {formatMoney(explanation.internalCost)} · маржа {formatMoney(explanation.margin)}</p>}
+        </details>
+      )}
+      {owner && explanation.overflow && <p className="jn-flag">Расходники дороже цены на {formatMoney(explanation.overflowAmount)}. Работа врача — 0 ₽.</p>}
+      {owner && !explanation.overflow && explanation.internalCost > item.price && <p className="jn-flag">Себестоимость расходников выше цены на {formatMoney(explanation.internalCost - item.price)}.</p>}
+      {owner && !show && <p className="jn-own">Себестоимость {formatMoney(explanation.internalCost)} · маржа {formatMoney(explanation.margin)}</p>}
     </li>
   );
 }

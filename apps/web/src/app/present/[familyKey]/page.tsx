@@ -7,7 +7,9 @@ import { Protected } from '@/components/protected';
 import { api, assetUrl } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import type { PlanCard } from '@/components/studio/plans';
+import { BreakdownTable } from '@/components/studio/breakdown-table';
 import { SmilePreview } from '@/components/studio/smile';
+import { consumablesFor, patientLines, type CatalogService, type CatalogStock } from '@/lib/breakdown';
 
 type Payload = {
   patient: { id: string; firstName: string; lastName: string };
@@ -29,6 +31,8 @@ export default function PresentPage() {
 function Story() {
   const params = useParams<{ familyKey: string }>();
   const [data, setData] = useState<Payload | null>(null);
+  const [catalog, setCatalog] = useState<{ services: CatalogService[]; stock: CatalogStock[] }>({ services: [], stock: [] });
+  const [priced, setPriced] = useState(false);
   const [photos, setPhotos] = useState<{ before: string | null; after: string | null; xray: string | null }>({ before: null, after: null, xray: null });
   const [step, setStep] = useState(0);
   const [months, setMonths] = useState(6);
@@ -55,6 +59,10 @@ function Story() {
         }))
         .catch(() => undefined);
     }).catch((err: Error) => setError(err.message));
+    api<{ services: CatalogService[]; stock: CatalogStock[] }>('/config')
+      .then((config) => setCatalog({ services: config.services ?? [], stock: config.stock ?? [] }))
+      .catch(() => undefined)
+      .finally(() => setPriced(true));
   }, [params.familyKey]);
 
   if (error && !data) return <p>{error}</p>;
@@ -112,16 +120,31 @@ function Story() {
         <section className="pv-chapter" key="plan">
           <h2>Что предлагаем</h2>
           <p className="lead">Рекомендуем вариант «{recommended.tierLabel}». Этапы идут по очереди: следующий начинается, когда предыдущий зажил.</p>
-          {recommended.phases.map((phase, index) => (
-            <div className="pv-phase" key={phase.id}>
-              <div className="pv-num">0{index + 1}</div>
-              <div>
-                <b>{phase.title}</b>
-                <p>{STORY[phase.title] ?? phase.specialty ?? 'Этот этап идёт следом за предыдущим.'}</p>
-                <p className="sd-muted">{phase.items.map((item) => item.toothNum ? `зуб ${item.toothNum}` : item.title).join(' · ')}</p>
+          {recommended.phases.map((phase, index) => {
+            const subtotal = phase.items.reduce((sum, item) => sum + item.price, 0);
+            const show = recommended.showBreakdown !== false;
+            return (
+              <div className="pv-phase" key={phase.id}>
+                <div className="pv-num">0{index + 1}</div>
+                <div>
+                  <b>{phase.title}</b>
+                  <p>{STORY[phase.title] ?? phase.specialty ?? 'Этот этап идёт следом за предыдущим.'}</p>
+                  {!show && <p className="sd-muted">{phase.items.map((item) => item.toothNum ? `зуб ${item.toothNum}` : item.title).join(' · ')}</p>}
+                  {show && priced && phase.items.map((item) => (
+                    <div key={item.id}>
+                      <div className="pr-svc">
+                        <span>{item.toothNum ? `Зуб ${item.toothNum} · ` : ''}{item.title}</span>
+                        <b>{formatMoney(item.price)}</b>
+                      </div>
+                      <BreakdownTable lines={patientLines(item.price, consumablesFor(item.title, catalog.services, catalog.stock))} />
+                    </div>
+                  ))}
+                  {show && <div className="pr-sub"><span>Подытог</span><b>{formatMoney(subtotal)}</b></div>}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
+          {recommended.showBreakdown !== false && <p className="pr-grand">Итого {formatMoney(recommended.total)}</p>}
         </section>
       )}
       {step === 2 && (

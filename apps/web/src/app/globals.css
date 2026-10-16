@@ -733,6 +733,29 @@ html.dark .sd-appt { background: linear-gradient(180deg, rgba(15, 118, 110, 0.55
 .pr-cover { min-height: 240mm; display: flex; flex-direction: column; justify-content: space-between; background: linear-gradient(165deg, #06221e, #134e4a 55%, #f6f3ee 55%); color: #ecfdf5; margin: -18mm -16mm 12mm; padding: 18mm 16mm; }
 .pr-cover h1 { font-family: Georgia, serif; font-weight: 500; font-size: 48px; line-height: 1; margin: 0; color: #1c1917; }
 .pr-name { font-size: 28px; color: #1c1917; }
+.pr-phase { margin: 0 0 14px; break-inside: avoid; }
+.pr-phase h3 { margin: 0; font-size: 15px; }
+.pr-meta { color: #78716c; font-size: 12px; margin-bottom: 4px; }
+.pr-svc, .pr-sub { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.pr-svc { padding-top: 8px; font-size: 13px; }
+.pr-sub { margin-top: 2px; padding-top: 4px; border-top: 1px solid #e7e5e4; font-size: 13px; }
+.pr-grand { font-size: 28px; letter-spacing: -0.04em; margin: 8px 0 12px; }
+.bk { width: 100%; border-collapse: collapse; margin: 3px 0 6px; font-size: 11px; color: var(--muted); }
+.bk th { font-weight: 500; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; text-align: left; color: #a8a29e; padding: 0 10px 2px 0; }
+.bk td { padding: 1px 10px 1px 0; vertical-align: baseline; }
+.bk .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bk tr.work td { color: var(--text); }
+.bk tr.total td { border-top: 1px solid var(--border); padding-top: 3px; color: var(--text); }
+.pr-page .bk, .pv .bk { color: #78716c; }
+.pr-page .bk tr.work td, .pv .bk tr.work td, .pr-page .bk tr.total td, .pv .bk tr.total td { color: #1c1917; }
+.pr-page .bk tr.total td, .pv .bk tr.total td { border-top-color: #e7e5e4; }
+.jn-fold, .jn-flag, .jn-own { grid-column: 1 / -1; }
+.jn-fold summary { cursor: pointer; color: var(--muted); font-size: 12px; width: fit-content; }
+.jn-fold summary:hover { color: var(--text); }
+.jn-flag { margin: 0; color: #9a3412; font-size: 12px; }
+.jn-own { margin: 0; color: var(--muted); font-size: 11px; }
+.jn-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+@page { size: A4; margin: 0; }
 @media print {
   .sd-app, .jn-dock, .pv-nav, .pr-actions { display: none !important; }
   .pr-page { box-shadow: none; margin: 0; }

@@ -195,6 +195,9 @@ function read(path: string, token: string): unknown {
   }
   if (pathname === '/market/export-1c') return bag.gets[pathname] ?? { filename: '1c.json', json: { demo: true } };
 
+  const sheetPath = pathname.match(/^\/workspace\/plans\/([^/]+)\/sheet$/);
+  if (sheetPath) return buildSheet(bag, sheetPath[1]);
+
   const anchored = anchorPath(pathname, query);
   if (anchored in bag.gets) return bag.gets[anchored];
   if (pathname + url.search in bag.gets) return bag.gets[pathname + url.search];
@@ -362,6 +365,8 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
   if (pathname === '/workspace/plans/from-chart') return fromChart(bag, data.patientId);
   const save = pathname.match(/^\/workspace\/plans\/([^/]+)\/save$/);
   if (save) return savePlan(bag, save[1], data);
+  const disclosure = pathname.match(/^\/workspace\/plans\/([^/]+)\/disclosure$/);
+  if (disclosure && method === 'POST') return setDisclosure(bag, disclosure[1], data.showBreakdown !== false);
   const addItem = pathname.match(/^\/workspace\/plans\/([^/]+)\/items$/);
   if (addItem && method === 'POST') return addPlanItem(bag, addItem[1], data);
   const bookPhase = pathname.match(/^\/workspace\/plans\/([^/]+)\/phases\/([^/]+)\/book$/);
@@ -1040,6 +1045,52 @@ function addPlanItem(bag: Bag, planId: string, data: AnyRec) {
   });
   if (!added) throw new Error('План не найден');
   return item;
+}
+
+function buildSheet(bag: Bag, planId: string) {
+  const found: AnyRec[] = [];
+  eachPlan(bag, (row) => {
+    if (row.id === planId && found.length === 0) found.push(row);
+  });
+  const plan = found[0];
+  const stored = bag.gets[`/workspace/plans/${planId}/sheet`] as AnyRec | undefined;
+  if (!plan) {
+    if (stored) return stored;
+    throw new Error('План не найден');
+  }
+  const months = Number(plan.installmentMonths) >= 2 ? Number(plan.installmentMonths) : 0;
+  const total = Number(plan.total) || 0;
+  const parts = stored && Number(stored.plan?.total) === total ? stored.parts : (months ? installments(total, months) : []);
+  return {
+    clinic: stored?.clinic ?? 'Седракович Дент',
+    city: stored?.city ?? 'Москва',
+    patient: stored?.patient ?? { firstName: '', lastName: '' },
+    doctor: stored?.doctor ?? 'Козлова Елена',
+    plan: { ...plan, showBreakdown: plan.showBreakdown !== false },
+    parts,
+    share: stored?.share ?? '',
+  };
+}
+
+function installments(total: number, months: number) {
+  const each = Math.floor(total / months);
+  return Array.from({ length: months }, (_, index) => ({
+    dueDate: new Date(Date.parse(`${ANCHOR}T00:00:00.000Z`) + (index + 1) * 30 * 86400000).toISOString(),
+    amount: index === months - 1 ? total - each * (months - 1) : each,
+  }));
+}
+
+function setDisclosure(bag: Bag, planId: string, show: boolean) {
+  const seen = new Set<AnyRec>();
+  let found = false;
+  eachPlan(bag, (plan) => {
+    if (plan.id !== planId || seen.has(plan)) return;
+    seen.add(plan);
+    plan.showBreakdown = show;
+    found = true;
+  });
+  if (!found) throw new Error('План не найден');
+  return { showBreakdown: show };
 }
 
 function savePlan(bag: Bag, planId: string, data: AnyRec) {

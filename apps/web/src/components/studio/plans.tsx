@@ -36,6 +36,7 @@ export type PlanCard = {
   installmentMonths: number;
   signedAt: string | null;
   explanation: string;
+  showBreakdown?: boolean;
   phases: Phase[];
   looseItems: PlanItem[];
 };
