@@ -38,6 +38,13 @@ export function OwnerHome({ data }: { data: {
         <Metric label="Загрузка кресел" amount={data.loadPercent} suffix="%" hint="сегодня, от 10 часов" ring />
         <Metric label="Конверсия планов" amount={data.conversion.rate} suffix="%" hint={`LTV ${formatMoney(data.ltv)}`} />
       </div>
+      <Link href="/radar" className="radar-teaser">
+        <i />
+        <span>
+          <b>Радар денег</b>
+          <em>Незакрытые планы, неявки, отзыв и долги</em>
+        </span>
+      </Link>
       <Retention />
       <details className="sd-card">
         <summary>Деньги и планы</summary>

@@ -197,6 +197,7 @@ export function PlanJourney({
             <button className="sd-btn-ghost" type="button" onClick={() => void api<{ id: string; note: string | null; createdAt: string }[]>(`/workspace/plans/${plan.id}/versions`).then(setVersions).catch((err: Error) => setSaved(err.message))}>Версии</button>
             <button className="sd-btn-ghost" type="button" onClick={() => window.open(`/print/plan/${plan.id}`, '_blank')}>Печать</button>
             <button className="sd-btn-ghost" type="button" onClick={() => void send()}>Ссылка</button>
+            <button className="sd-btn-ghost" type="button" onClick={() => familyKey && router.push(`/smile/${familyKey}`)}>3D</button>
           </details>
           <button className="sd-btn-ghost" type="button" onClick={() => void save()}>Сохранить</button>
           <button className="sd-btn" type="button" onClick={() => familyKey && router.push(`/present/${familyKey}`)}>Показать</button>

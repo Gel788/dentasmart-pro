@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Activity, Calendar, CalendarRange, ClipboardCheck, FlaskConical, Moon, PhoneIncoming, QrCode, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users } from 'lucide-react';
+import { Activity, Calendar, CalendarRange, ClipboardCheck, FlaskConical, Moon, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
 import { useFocus } from '@/lib/focus';
@@ -27,6 +27,7 @@ const MORE = [
   { href: '/insurance', label: 'ДМС', icon: Shield, perm: 'finance.read' },
   { href: '/kpis', label: 'Врачи', icon: Trophy, perm: 'patient.read' },
   { href: '/autopilot', label: 'Автопилот', icon: Repeat, perm: 'patient.read' },
+  { href: '/radar', label: 'Радар', icon: Radar, perm: 'finance.read' },
   { href: '/return', label: 'Возврат', icon: RotateCcw, perm: 'medical.read' },
   { href: '/portal', label: 'Кабинет пациента', icon: Smartphone, perm: 'patient.read' },
   { href: '/check-in', label: 'QR стойки', icon: QrCode, perm: 'schedule.read' },

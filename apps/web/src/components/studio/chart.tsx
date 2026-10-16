@@ -35,6 +35,7 @@ export function ToothChart({
   onPaint,
   onSelect,
   quiet,
+  pulse,
 }: {
   surfaces: ChartSurface[];
   items: ChartItem[];
@@ -46,6 +47,7 @@ export function ToothChart({
   onPaint: (tooth: number, surface: string) => void;
   onSelect: (tooth: number) => void;
   quiet?: boolean;
+  pulse?: number[];
 }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -84,6 +86,7 @@ export function ToothChart({
                 <Tooth
                   tooth={tooth}
                   selected={selected === tooth}
+                  hot={pulse?.includes(tooth)}
                   quiet={quiet}
                   paint={(surface) => onPaint(tooth, surface)}
                   onSelect={() => onSelect(tooth)}
@@ -110,6 +113,7 @@ const FACETS: Record<string, string> = {
 function Tooth({
   tooth,
   selected,
+  hot,
   quiet,
   face,
   paint,
@@ -117,6 +121,7 @@ function Tooth({
 }: {
   tooth: number;
   selected: boolean;
+  hot?: boolean;
   quiet?: boolean;
   face: (surface: string) => { color: string; planned: boolean };
   paint: (surface: string) => void;
@@ -126,7 +131,7 @@ function Tooth({
   const gid = `enamel-${tooth}`;
   const body = face('O');
   return (
-    <div className="sd-tooth">
+    <div className={`sd-tooth${hot ? ' hot' : ''}`}>
       {upper && <div className="num">{tooth}</div>}
       <svg viewBox="0 0 52 64" className={`sd-tooth-svg ${selected ? 'on' : ''}`} role="img" aria-label={`Зуб ${tooth}`}>
         <defs>

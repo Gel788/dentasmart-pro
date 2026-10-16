@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, assetUrl } from '@/lib/api';
+import { XrayAssistant } from '@/components/studio/xray';
 
 type Mark = { id: string; toothNum: number | null; kind: string; source: string; label: string; confidence: number | null; sliceIndex: number | null; x: number; y: number; w: number; h: number };
 type Study = { id: string; type: string; title: string | null; fileUrl: string; toothNum: number | null; takenAt: string; seriesKey: string | null; sliceIndex: number | null; annotations: Mark[] };
@@ -44,6 +45,7 @@ export function ImagingBoard({ patientId, appointmentId, tooth }: { patientId: s
 
   return (
     <div className="sd-stack">
+      <XrayAssistant patientId={patientId} />
       {data.compare.before && data.compare.after && <Compare before={data.compare.before} after={data.compare.after} />}
       <section className="sd-card sd-stack">
         <div className="sd-h" style={{ margin: 0 }}>
@@ -70,7 +72,7 @@ export function ImagingBoard({ patientId, appointmentId, tooth }: { patientId: s
       <section className="sd-card sd-stack">
         <div className="sd-h" style={{ margin: 0 }}>
           <strong>Рентген, КТ и сканы{tooth ? ` · зуб ${tooth}` : ''}</strong>
-          <label className="sd-btn">
+          <label className="sd-btn-ghost">
             Загрузить
             <input hidden type="file" accept=".dcm,.stl,.ply,image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file, 'study'); }} />
           </label>

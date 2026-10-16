@@ -383,6 +383,7 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
   if (pathname === '/showcase/check-in') return checkIn(bag, data.code);
   if (pathname === '/showcase/retention/send') return sendRetention(bag, data.ids ?? []);
   if (pathname === '/market/copilot/apply') return applyCopilot(bag, data.patientId);
+  if (pathname === '/showcase/xray/apply') return applyXray(bag, data);
   const portalBook = pathname.match(/^\/showcase\/portal\/([^/]+)\/(book|chat)$/);
   if (portalBook) return portalWrite(bag, portalBook[1], portalBook[2], data);
 
@@ -1027,6 +1028,7 @@ function bookPhaseVisit(bag: Bag, planId: string, phaseId: string) {
 
 function acceptPlan(bag: Bag, planId: string, action: string, data: AnyRec) {
   const appointments: { startsAt: string; title: string }[] = [];
+  const booked = new Set<string>();
   eachPlan(bag, (plan, family, card) => {
     if (plan.id !== planId) return;
     if (action === 'abandon') {
@@ -1040,6 +1042,9 @@ function acceptPlan(bag: Bag, planId: string, action: string, data: AnyRec) {
     const chosen = new Set<string>(data.phaseIds ?? (plan.phases as AnyRec[]).map((phase) => phase.id));
     (plan.phases as AnyRec[]).forEach((phase, index) => {
       if (!chosen.has(phase.id)) return;
+      const mark = `${plan.id}:${phase.id}`;
+      if (booked.has(mark)) return;
+      booked.add(mark);
       const starts = new Date(Date.parse(`${ANCHOR}T09:00:00.000Z`) + (index + 1) * 86400000);
       const patientId = card?.patient?.id ?? family.patient?.id;
       if (patientId) {
@@ -1134,6 +1139,63 @@ function sendRetention(bag: Bag, ids: string[]) {
   }
   if (board.stats) board.stats.sentToday = Number(board.stats.sentToday ?? 0) + sent;
   return { sent };
+}
+
+function applyXray(bag: Bag, data: AnyRec) {
+  const patientId = String(data.patientId ?? '');
+  const card = bag.gets[`/workspace/patients/${patientId}/card`] as AnyRec | undefined;
+  if (!card?.chart) throw new Error('Пациент не найден');
+  const findings = (data.findings ?? []) as AnyRec[];
+  for (const finding of findings) {
+    paint(bag, patientId, {
+      toothNum: finding.toothNum,
+      surface: finding.surface ?? 'O',
+      condition: finding.condition,
+      diagnosis: finding.title,
+    });
+  }
+  const items = findings.map((finding) => ({
+    id: uid(),
+    title: finding.title || 'Находка',
+    toothNum: finding.toothNum ?? null,
+    surfaces: [finding.surface || 'O'],
+    price: Number(finding.price) || 0,
+    status: 'PROPOSED',
+  }));
+  const total = items.reduce((sum, item) => sum + item.price, 0);
+  const family = {
+    key: uid(),
+    title: 'По снимку',
+    plans: [{
+      id: uid(),
+      tier: 'OPTIMUM',
+      tierLabel: 'Оптимум',
+      title: 'По снимку',
+      status: 'PROPOSED',
+      total,
+      discountPercent: 0,
+      guaranteeMonths: 12,
+      durationWeeks: 4,
+      installmentMonths: 0,
+      signedAt: null,
+      signedName: null,
+      abandonedAt: null,
+      looseItems: [],
+      explanation: 'Собрано из находок снимка.',
+      phases: [{
+        id: uid(),
+        title: 'По снимку',
+        specialty: 'Терапия',
+        healingDays: 0,
+        dependsOnTitle: null,
+        waitDays: 0,
+        items,
+      }],
+    }],
+  };
+  card.families = [...(card.families ?? []), family];
+  publishFamily(bag, patientId, family);
+  return { familyKey: family.key, total, count: items.length };
 }
 
 function applyCopilot(bag: Bag, patientId: string) {

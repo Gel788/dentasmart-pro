@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Protected } from '@/components/protected';
@@ -9,6 +9,9 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { formatMoney } from '@/lib/format';
 import { Copilot } from '@/components/studio/copilot';
+import { VoiceChart } from '@/components/studio/voice-chart';
+import { XrayAssistant } from '@/components/studio/xray';
+import type { VoiceNote } from '@/lib/voice';
 
 type Visit = {
   id: string;
@@ -51,11 +54,11 @@ function Cockpit() {
   const [seconds, setSeconds] = useState(0);
   const [summary, setSummary] = useState(false);
   const [error, setError] = useState('');
-  const [voice, setVoice] = useState('');
   const [followDate, setFollowDate] = useState('');
   const [reason, setReason] = useState('');
   const [library, setLibrary] = useState<{ id: string; label: string; note: typeof TEMPLATES[number]['note'] }[]>([]);
-  const recorder = useRef<MediaRecorder | null>(null);
+  const [spoken, setSpoken] = useState<ChartSurface[]>([]);
+  const [hot, setHot] = useState<number[]>([]);
 
   const load = () => api<Visit>(`/flow/visits/${params.id}`).then((data) => {
     setVisit(data);
@@ -114,24 +117,17 @@ function Cockpit() {
     }
   };
 
-  const record = async () => {
-    if (recorder.current) {
-      recorder.current.stop();
-      recorder.current = null;
-      return;
-    }
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const media = new MediaRecorder(stream);
-    const chunks: Blob[] = [];
-    media.ondataavailable = (event) => chunks.push(event.data);
-    media.onstop = () => {
-      const url = URL.createObjectURL(new Blob(chunks));
-      setVoice(url);
-      stream.getTracks().forEach((track) => track.stop());
-    };
-    media.start();
-    recorder.current = media;
-    setVoice('идёт запись…');
+  const hear = (parsed: { findings: { tooth: number; surface: string; condition: string }[]; note: VoiceNote; activeTooth: number | null }) => {
+    setHot(parsed.activeTooth ? [parsed.activeTooth] : parsed.findings.map((item) => item.tooth));
+    setSpoken(parsed.findings.map((item) => ({ toothNum: item.tooth, formula: 'ADULT', surface: item.surface, condition: item.condition, layer: 'CURRENT' })));
+    setNote((prev) => ({
+      ...prev,
+      ...(parsed.note.complaints ? { complaints: parsed.note.complaints } : {}),
+      ...(parsed.note.diagnosis ? { diagnosis: parsed.note.diagnosis } : {}),
+      ...(parsed.note.treatment ? { treatment: parsed.note.treatment } : {}),
+      ...(parsed.note.recommendations ? { recommendations: parsed.note.recommendations } : {}),
+      ...(parsed.note.objective ? { objective: parsed.note.objective } : {}),
+    }));
   };
 
   if (!visit) return <p className="sd-muted">{error || 'Открываем приём…'}</p>;
@@ -177,7 +173,11 @@ function Cockpit() {
               <span><b>{item.toothNum ? `Зуб ${item.toothNum}` : item.title}</b><div className="sd-muted">{item.title} · {formatMoney(item.price)}</div></span>
             </label>
           ))}
-          <ToothChart surfaces={surfaces} items={[]} view="before" formula="ADULT" condition="CARIES" selected={null} quiet onCondition={() => undefined} onPaint={() => undefined} onSelect={() => undefined} />
+          <ToothChart surfaces={[...surfaces, ...spoken]} items={[]} view="before" formula="ADULT" condition="CARIES" selected={null} quiet pulse={hot} onCondition={() => undefined} onPaint={() => undefined} onSelect={() => undefined} />
+          <details className="xr-fold">
+            <summary>Снимок</summary>
+            <XrayAssistant patientId={visit.patient.id} primary={false} />
+          </details>
         </section>
         <section className="sd-stack">
           <div className="sd-card sd-stack">
@@ -186,9 +186,31 @@ function Cockpit() {
               {[...library, ...TEMPLATES].map((template) => (
                 <button key={template.id} className="sd-chip" type="button" onClick={() => setNote({ ...note, ...template.note })}>{template.label}</button>
               ))}
-              <button className="sd-chip" type="button" onClick={() => void record().catch(() => setVoice('Микрофон недоступен'))}>{recorder.current ? 'Стоп' : 'Голос'}</button>
             </div>
-            {voice && <p className="sd-muted">{voice.startsWith('blob:') ? <audio controls src={voice} /> : voice}</p>}
+            <VoiceChart
+              canWrite={!!medical && visit.status === 'IN_PROGRESS'}
+              onChange={hear}
+              onConfirm={async (parsed) => {
+                for (const item of parsed.findings) {
+                  await api(`/workspace/patients/${visit.patient.id}/chart`, {
+                    method: 'POST',
+                    body: JSON.stringify({ toothNum: item.tooth, surface: item.surface, condition: item.condition, diagnosis: item.label }),
+                  });
+                }
+                const next = {
+                  ...note,
+                  ...(parsed.note.complaints ? { complaints: parsed.note.complaints } : {}),
+                  ...(parsed.note.diagnosis ? { diagnosis: parsed.note.diagnosis } : {}),
+                  ...(parsed.note.treatment ? { treatment: parsed.note.treatment } : {}),
+                  ...(parsed.note.recommendations ? { recommendations: parsed.note.recommendations } : {}),
+                  ...(parsed.note.objective ? { objective: parsed.note.objective } : {}),
+                };
+                await act('note', next);
+                setSurfaces((prev) => [...prev, ...parsed.findings.map((item) => ({ toothNum: item.tooth, formula: 'ADULT', surface: item.surface, condition: item.condition, layer: 'CURRENT' }))]);
+                setSpoken([]);
+                setHot([]);
+              }}
+            />
             {(['complaints', 'diagnosis', 'treatment', 'recommendations'] as const).map((field) => (
               <label key={field} className="sd-field">{field === 'complaints' ? 'Жалобы' : field === 'diagnosis' ? 'Диагноз' : field === 'treatment' ? 'Что сделали' : 'Рекомендации'}
                 <input className="sd-input" value={note[field]} onChange={(event) => setNote({ ...note, [field]: event.target.value })} />

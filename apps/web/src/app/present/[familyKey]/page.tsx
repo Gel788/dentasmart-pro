@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Protected } from '@/components/protected';
 import { api, assetUrl } from '@/lib/api';
@@ -87,6 +88,7 @@ function Story() {
       <header className="pv-top">
         <div className="pv-brand">Седракович Дент</div>
         <div className="pv-steps">
+          <Link href={`/smile/${params.familyKey}`}>Челюсть 3D</Link>
           {['Сейчас', 'План', 'Улыбка', 'Пути', 'Месяц', 'Подпись'].map((label, index) => (
             <button key={label} className={index === step ? 'on' : ''} type="button" onClick={() => setStep(index)}>{label}</button>
           ))}
