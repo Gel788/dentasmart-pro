@@ -1,4 +1,5 @@
 import { phoneDigits } from '../phone';
+import { resultFor, serviceKit, surfacesFor } from '../service-kit';
 import snapshot from './snapshot.json';
 
 const KEY = 'sd.demo.v1';
@@ -361,6 +362,8 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
   if (pathname === '/workspace/plans/from-chart') return fromChart(bag, data.patientId);
   const save = pathname.match(/^\/workspace\/plans\/([^/]+)\/save$/);
   if (save) return savePlan(bag, save[1], data);
+  const addItem = pathname.match(/^\/workspace\/plans\/([^/]+)\/items$/);
+  if (addItem && method === 'POST') return addPlanItem(bag, addItem[1], data);
   const bookPhase = pathname.match(/^\/workspace\/plans\/([^/]+)\/phases\/([^/]+)\/book$/);
   if (bookPhase) return bookPhaseVisit(bag, bookPhase[1], bookPhase[2]);
   const accept = pathname.match(/^\/workspace\/plans\/([^/]+)\/(accept|accept-partial|abandon)$/);
@@ -999,6 +1002,44 @@ function publishFamily(bag: Bag, patientId: string, family: AnyRec) {
     debt: card?.debt ?? 0,
     plans: family.plans,
   };
+}
+
+function addPlanItem(bag: Bag, planId: string, data: AnyRec) {
+  const service = serviceById(bag, String(data.serviceId ?? ''));
+  if (!service || service.isCategory || !service.code) throw new Error('Услуги нет в прайсе');
+  const name = String(service.name ?? 'Услуга');
+  const item = {
+    id: uid(),
+    title: name,
+    toothNum: data.toothNum == null || data.toothNum === '' ? null : Number(data.toothNum),
+    surfaces: surfacesFor(name, service.code),
+    price: Number(service.price) || 0,
+    listPrice: Number(service.price) || 0,
+    discountPercent: 0,
+    status: 'PROPOSED',
+    durationMin: Number(service.durationMin) || 30,
+    result: resultFor(name, service.code),
+    kit: serviceKit(name, service.norms),
+  };
+  const seen = new Set<AnyRec>();
+  let added = false;
+  eachPlan(bag, (plan) => {
+    if (plan.id !== planId || seen.has(plan)) return;
+    seen.add(plan);
+    const phaseId = data.phaseId ? String(data.phaseId) : '';
+    const phases = (plan.phases ?? []) as AnyRec[];
+    let phase = phaseId && phaseId !== 'loose' ? phases.find((row) => row.id === phaseId) : null;
+    if (!phase && phaseId !== 'loose' && phases.length) {
+      phase = phases.find((row) => (row.items ?? []).some((line: AnyRec) => line.status !== 'DONE' && line.status !== 'ACCEPTED')) ?? phases[0];
+    }
+    const copy = { ...item, surfaces: [...item.surfaces] };
+    if (phase) phase.items = [...(phase.items ?? []), copy];
+    else plan.looseItems = [...(plan.looseItems ?? []), copy];
+    plan.total = planItems(plan).reduce((sum, line) => sum + (Number(line.price) || 0), 0);
+    added = true;
+  });
+  if (!added) throw new Error('План не найден');
+  return item;
 }
 
 function savePlan(bag: Bag, planId: string, data: AnyRec) {

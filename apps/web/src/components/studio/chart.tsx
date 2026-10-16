@@ -133,7 +133,7 @@ function Tooth({
   return (
     <div className={`sd-tooth${hot ? ' hot' : ''}`}>
       {upper && <div className="num">{tooth}</div>}
-      <svg viewBox="0 0 52 64" className={`sd-tooth-svg ${selected ? 'on' : ''}`} role="img" aria-label={`Зуб ${tooth}`}>
+      <svg viewBox="0 0 52 64" className={`sd-tooth-svg ${selected ? 'on' : ''}`} role="img" aria-label={`Зуб ${tooth}`} onClick={onSelect}>
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="#fffefb" />

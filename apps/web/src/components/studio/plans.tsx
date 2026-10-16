@@ -12,6 +12,7 @@ export type PlanItem = {
   discountPercent: number;
   status: string;
   result: string;
+  kit?: string;
 };
 export type Phase = {
   id: string;

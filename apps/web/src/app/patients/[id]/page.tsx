@@ -42,7 +42,7 @@ function CardScreen() {
   const [card, setCard] = useState<Card | null>(null);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
-  const [mode, setMode] = useState<'plan' | 'formula' | 'perio' | 'imaging'>('plan');
+  const [mode, setMode] = useState<'plan' | 'formula' | 'perio' | 'imaging' | 'care'>('plan');
   const [view, setView] = useState<'before' | 'plan' | 'after'>('before');
   const [formula, setFormula] = useState<'ADULT' | 'CHILD' | 'MIXED'>('ADULT');
   const [tool, setTool] = useState('CARIES');
@@ -61,7 +61,7 @@ function CardScreen() {
   useEffect(() => {
     setPanelOpen(false);
     const saved = sessionStorage.getItem(`sd.card.${params.id}.mode`);
-    if (saved === 'plan' || saved === 'formula' || saved === 'perio' || saved === 'imaging') setMode(saved);
+    if (saved === 'plan' || saved === 'formula' || saved === 'perio' || saved === 'imaging' || saved === 'care') setMode(saved);
     setModeReady(true);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -99,7 +99,7 @@ function CardScreen() {
 
   return (
     <div className="sd-stack">
-      <div className="sd-h">
+      <div className="sd-h" style={{ flexWrap: 'wrap' }}>
         <div>
           <h1>{card.patient.lastName} {card.patient.firstName}</h1>
           <p>{age != null ? `${age} лет` : 'возраст не указан'}{card.patient.phone ? ` · ${card.patient.phone}` : ''} · {card.debt > 0 ? `долг ${formatMoney(card.debt)}` : 'долга нет'}</p>
@@ -111,6 +111,7 @@ function CardScreen() {
             <button type="button" className={mode === 'formula' ? 'on' : ''} onClick={() => setMode('formula')}>Формула</button>
             <button type="button" className={mode === 'perio' ? 'on' : ''} onClick={() => setMode('perio')}>Пародонт</button>
             <button type="button" className={mode === 'imaging' ? 'on' : ''} onClick={() => setMode('imaging')}>Снимки</button>
+            <button type="button" className={mode === 'care' ? 'on' : ''} onClick={() => setMode('care')}>Сопровождение</button>
           </div>
         </div>
       </div>
@@ -126,10 +127,8 @@ function CardScreen() {
           {card.alerts.map((alert) => <span key={alert.text} className={`sd-chip ${alert.tone}`}>{alert.text}</span>)}
         </div>
       )}
-      <MarketStrip patientId={params.id} />
       {mode === 'plan' ? (
         <PlanJourney
-          patientId={params.id}
           patientName={`${card.patient.lastName} ${card.patient.firstName}`}
           familyKey={(card.families.find((family) => family.plans.some((plan) => plan.id === picked?.id)) ?? [...card.families].sort((a, b) => b.plans.length - a.plans.length)[0])?.key ?? null}
           surfaces={card.chart.surfaces}
@@ -137,6 +136,7 @@ function CardScreen() {
           activeId={picked?.id ?? null}
           onPick={setActivePlan}
           building={building}
+          onAdded={() => load()}
           onBuild={async () => {
             setBuilding(true);
             try { await api('/workspace/plans/from-chart', { method: 'POST', body: JSON.stringify({ patientId: params.id }) }); await load(); }
@@ -145,7 +145,8 @@ function CardScreen() {
           }}
         />
       ) : null}
-      {mode !== 'plan' && <div className="sd-split">
+      {mode === 'care' ? <MarketStrip patientId={params.id} /> : null}
+      {(mode === 'formula' || mode === 'perio' || mode === 'imaging') && <div className="sd-split">
         <section className="sd-card sd-stack">
           {mode === 'formula' && (
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
