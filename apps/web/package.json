@@ -20,7 +20,8 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-odontogram": "0.5.5",
-    "three": "^0.186.1"
+    "three": "^0.186.1",
+    "xlsx": "0.18.5"
   },
   "devDependencies": {
     "@types/node": "^22.15.21",

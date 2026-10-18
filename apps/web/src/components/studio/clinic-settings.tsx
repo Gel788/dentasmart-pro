@@ -34,6 +34,7 @@ type Bundle = {
   promos: { id: string; code: string; discountPct: number; isActive: boolean }[];
   rules: { id: string; name: string; trigger: string; channel: string; body: string; isActive: boolean }[];
   history: { id: string; at: string; email: string; entityType: string; action: string; changes: unknown }[];
+  aiPlans?: boolean;
 };
 
 const SECTIONS = [
@@ -80,6 +81,14 @@ export function ClinicSettings() {
         <div>
           <h1>Настройки</h1>
           <p>Клиника, люди, склад и обмен.</p>
+          <label className="jn-toggle">
+            <input
+              type="checkbox"
+              checked={data.aiPlans !== false}
+              onChange={(event) => void flash(() => api('/config/ai', { method: 'POST', body: JSON.stringify({ enabled: event.target.checked }) }))}
+            />
+            ИИ-план на карте пациента
+          </label>
         </div>
         <input className="sd-input" placeholder="Поиск" value={query} onChange={(event) => setQuery(event.target.value)} style={{ maxWidth: 240 }} />
       </div>

@@ -1,18 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ToothChart, type ChartItem, type ChartSurface } from '@/components/studio/chart';
 import { PricePicker, type PriceService } from '@/components/studio/price-picker';
 import { BreakdownTable } from '@/components/studio/breakdown-table';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { AiPlan } from '@/components/studio/ai-plan';
 import { consumablesFor, explainPrice, type CatalogService, type CatalogStock } from '@/lib/breakdown';
 import { formatMoney } from '@/lib/format';
+import { paymentSchedule } from '@/lib/plan-engine';
 import { kitOf } from '@/lib/service-kit';
 import type { Family, PlanItem } from '@/components/studio/plans';
 
 export function PlanJourney({
+  patientId,
   patientName,
   familyKey,
   surfaces,
@@ -23,6 +26,7 @@ export function PlanJourney({
   onAdded,
   building,
 }: {
+  patientId: string;
   patientName: string;
   familyKey: string | null;
   surfaces: ChartSurface[];
@@ -51,13 +55,20 @@ export function PlanJourney({
   const [saved, setSaved] = useState('');
   const [sent, setSent] = useState('');
   const [versions, setVersions] = useState<{ id: string; note: string | null; createdAt: string }[] | null>(null);
+  const [payMonths, setPayMonths] = useState(plan && plan.installmentMonths >= 2 ? plan.installmentMonths : 1);
+  const [aiOn, setAiOn] = useState(true);
+  const marker = useRef<((tooth: number) => boolean) | null>(null);
 
   useEffect(() => { setDiscount(plan?.discountPercent ?? 0); }, [plan?.id, plan?.discountPercent]);
+  useEffect(() => { setPayMonths(plan && plan.installmentMonths >= 2 ? plan.installmentMonths : 1); }, [plan?.id, plan?.installmentMonths]);
   useEffect(() => { setDisclosure(plan?.showBreakdown !== false); }, [plan?.id, plan?.showBreakdown]);
   useEffect(() => { setPicker(null); setTooth(null); }, [plan?.id]);
   useEffect(() => {
-    api<{ services: CatalogService[]; stock: CatalogStock[] }>('/config')
-      .then((data) => setCatalog({ services: data.services ?? [], stock: data.stock ?? [] }))
+    api<{ services: CatalogService[]; stock: CatalogStock[]; aiPlans?: boolean }>('/config')
+      .then((data) => {
+        setCatalog({ services: data.services ?? [], stock: data.stock ?? [] });
+        setAiOn(data.aiPlans !== false);
+      })
       .catch(() => undefined)
       .finally(() => setPriced(true));
   }, []);
@@ -68,8 +79,9 @@ export function PlanJourney({
   const visibleItems = phases.flatMap((phase) => phase.items);
   const subtotal = visibleItems.reduce((sum, item) => sum + item.price, 0);
   const total = Math.round(subtotal * (1 - discount / 100));
-  const months = plan && plan.installmentMonths >= 2 ? plan.installmentMonths : 1;
+  const months = payMonths >= 2 ? payMonths : 1;
   const perMonth = Math.round(total / months);
+  const schedule = paymentSchedule(total, months);
   const animated = useCount(total);
   const defaultPhaseId = () => {
     const open = phases.find((phase) => phase.items.some((line) => line.status !== 'DONE' && line.status !== 'ACCEPTED'));
@@ -111,20 +123,28 @@ export function PlanJourney({
     setPicker(null);
   };
 
-  if (!plan) {
-    return (
-      <div className="jn-empty">
-        <span />
-        <h2>Плана ещё нет</h2>
-        <p>Отметьте кариес на формуле — соберём три варианта с этапами и ценами.</p>
-        <button className="sd-btn" type="button" disabled={building} onClick={onBuild}>{building ? 'Собираем…' : 'Собрать эконом, оптимум и премиум'}</button>
-      </div>
-    );
-  }
-
   return (
     <div className="jn">
-      <div className="jn-tabs">
+      <AiPlan
+        patientId={patientId}
+        services={catalog.services}
+        enabled={aiOn}
+        owner={owner}
+        tooth={tooth}
+        surfaces={surfaces}
+        planId={plan?.id ?? null}
+        onBind={(handler) => { marker.current = handler; }}
+        onDone={async (nextId) => { if (nextId) onPick(nextId); await onAdded(); }}
+      />
+      {!plan && (
+        <div className="jn-empty">
+          <span />
+          <h2>Плана ещё нет</h2>
+          <p>Отметьте находки и соберите план за минуту. Или возьмите три варианта по уже отмеченной формуле.</p>
+          <button className="sd-btn-ghost" type="button" disabled={building} onClick={onBuild}>{building ? 'Собираем…' : 'Собрать по формуле'}</button>
+        </div>
+      )}
+      {plan && <div className="jn-tabs">
         {plans.map((item) => {
           const delta = economy ? item.total - economy.total : 0;
           return (
@@ -137,12 +157,12 @@ export function PlanJourney({
             </button>
           );
         })}
-      </div>
+      </div>}
       <div className="jn-stage">
         <section className="jn-chart">
           <div className="jn-addbar">
-            <p>Нажмите зуб, чтобы добавить услугу</p>
-            <button className="sd-btn" type="button" data-plan-add="global" onClick={() => setPicker({ phaseId: defaultPhaseId(), tooth })}>+ Услуга</button>
+            <p>{plan ? 'Нажмите зуб, чтобы добавить услугу' : 'Выберите диагноз и нажмите зуб'}</p>
+            {plan && <button className="sd-btn-ghost" type="button" data-plan-add="global" onClick={() => setPicker({ phaseId: defaultPhaseId(), tooth })}>+ Услуга</button>}
           </div>
           <ToothChart
             surfaces={surfaces}
@@ -156,12 +176,13 @@ export function PlanJourney({
             quiet
             onSelect={(next) => {
               setTooth(next);
+              if (marker.current?.(next)) return;
               setPicker({ phaseId: picker?.phaseId ?? defaultPhaseId(), tooth: next });
             }}
           />
           {tooth && <button className="sd-btn-ghost" type="button" onClick={() => setTooth(null)}>Показать все зубы</button>}
         </section>
-        <section className="jn-road">
+        {plan && <section className="jn-road">
           {phases.map((phase, index) => {
             const current = phases.findIndex((item) => item.items.some((line) => line.status !== 'DONE' && line.status !== 'ACCEPTED'));
             const done = phase.items.filter((item) => item.status === 'DONE' || item.status === 'ACCEPTED').length;
@@ -187,7 +208,7 @@ export function PlanJourney({
                   {phase.dependsOnTitle && <p className="jn-wait">После «{phase.dependsOnTitle}» пауза {phase.waitDays} дн.</p>}
                   <ul>
                     {phase.items.map((item) => (
-                      <ServiceLine key={item.id} item={item} tooth={tooth} catalog={catalog} show={disclosure && priced} owner={owner} />
+                      <ServiceLine key={item.id} planId={plan.id} item={item} tooth={tooth} catalog={catalog} show={disclosure && priced} owner={owner} onSaved={onAdded} />
                     ))}
                   </ul>
                   <button className="sd-btn-ghost jn-add" type="button" data-plan-add="stage" onClick={() => setPicker({ phaseId: phase.id, tooth })}>+ Услуга</button>
@@ -195,9 +216,9 @@ export function PlanJourney({
               </article>
             );
           })}
-        </section>
+        </section>}
       </div>
-      <div className="jn-dock">
+      {plan && <div className="jn-dock">
         <div>
           <span>Итого</span>
           <strong>{formatMoney(animated)}</strong>
@@ -221,9 +242,24 @@ export function PlanJourney({
             Показывать расшифровку
           </label>
         )}
+        <label>Оплата
+          <select aria-label="Рассрочка" value={months} onChange={(event) => {
+            const next = Number(event.target.value);
+            setPayMonths(next);
+            void api(`/workspace/plans/${plan.id}/installment`, { method: 'POST', body: JSON.stringify({ months: next }) })
+              .then(() => onAdded())
+              .catch((err: Error) => setSaved(err.message));
+          }}>
+            <option value={1}>Сразу</option>
+            <option value={3}>3 месяца</option>
+            <option value={6}>6 месяцев</option>
+            <option value={12}>12 месяцев</option>
+          </select>
+        </label>
         <div>
           <span>{months > 1 ? `Рассрочка ${months} мес.` : 'Одним платежом'}</span>
           <strong>{formatMoney(perMonth)}{months > 1 ? '/мес' : ''}</strong>
+          {months > 1 && <small className="jn-pay">{schedule.map((part) => `${part.index}. ${formatMoney(part.amount)}`).join(' · ')}</small>}
         </div>
         <div className="jn-actions">
           <details className="jn-more">
@@ -247,8 +283,8 @@ export function PlanJourney({
             ))}
           </div>
         )}
-      </div>
-      {picker && (
+      </div>}
+      {picker && plan && (
         <PricePicker
           tooth={picker.tooth}
           phaseId={picker.phaseId}
@@ -262,18 +298,39 @@ export function PlanJourney({
 }
 
 function ServiceLine({
+  planId,
   item,
   tooth,
   catalog,
   show,
   owner,
+  onSaved,
 }: {
+  planId: string;
   item: PlanItem;
   tooth: number | null;
   catalog: { services: CatalogService[]; stock: CatalogStock[] };
   show: boolean;
   owner: boolean;
+  onSaved: () => Promise<unknown>;
 }) {
+  const [qty, setQty] = useState(item.qty ?? 1);
+  const [unit, setUnit] = useState(item.unitPrice ?? item.price);
+  const [lineDiscount, setLineDiscount] = useState(item.discountPercent ?? 0);
+  const [kit, setKit] = useState(item.kit || kitOf(item.title));
+  const timer = useRef<number | null>(null);
+  useEffect(() => {
+    setQty(item.qty ?? 1);
+    setUnit(item.unitPrice ?? item.price);
+    setLineDiscount(item.discountPercent ?? 0);
+    setKit(item.kit || kitOf(item.title));
+  }, [item.id, item.price, item.qty, item.unitPrice, item.discountPercent, item.kit, item.title]);
+  const commit = (next: { qty: number; unitPrice: number; discountPercent: number; kit: string }) => {
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      void api(`/workspace/plans/${planId}/items/${item.id}`, { method: 'POST', body: JSON.stringify(next) }).then(() => onSaved()).catch(() => undefined);
+    }, 350);
+  };
   const dim = tooth != null && item.toothNum !== tooth;
   const parts = consumablesFor(item.title, catalog.services, catalog.stock);
   const explanation = explainPrice(item.price, parts);
@@ -283,7 +340,12 @@ function ServiceLine({
       <Mini surfaces={item.surfaces} />
       <div>
         <b>{item.title}</b>
-        <span className="jn-kit">Расходники: {item.kit || kitOf(item.title)}</span>
+        <span className="jn-edit">
+          <label>Кол-во<input aria-label={`Количество ${item.title}`} type="number" min={1} value={qty} onChange={(event) => { const next = Math.max(1, Number(event.target.value) || 1); setQty(next); commit({ qty: next, unitPrice: unit, discountPercent: lineDiscount, kit }); }} /></label>
+          <label>Цена<input aria-label={`Цена ${item.title}`} type="number" min={0} value={unit} onChange={(event) => { const next = Math.max(0, Number(event.target.value) || 0); setUnit(next); commit({ qty, unitPrice: next, discountPercent: lineDiscount, kit }); }} /></label>
+          <label>Скидка %<input aria-label={`Скидка ${item.title}`} type="number" min={0} max={100} value={lineDiscount} onChange={(event) => { const next = Math.min(100, Math.max(0, Number(event.target.value) || 0)); setLineDiscount(next); commit({ qty, unitPrice: unit, discountPercent: next, kit }); }} /></label>
+          <label>Расходники<input aria-label={`Расходники ${item.title}`} value={kit} onChange={(event) => { setKit(event.target.value); commit({ qty, unitPrice: unit, discountPercent: lineDiscount, kit: event.target.value }); }} /></label>
+        </span>
       </div>
       <em>{formatMoney(item.price)}</em>
       {show && (

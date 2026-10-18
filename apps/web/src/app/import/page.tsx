@@ -1,141 +1,250 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Protected } from '@/components/protected';
 import { api } from '@/lib/api';
-import { parseDelimited, readTable, type Sheet } from '@/lib/sheet';
+import { samplePatients, sampleVisits } from '@/lib/migrate-fixture';
+import {
+  PATIENT_FIELDS,
+  SOURCE_LABEL,
+  VISIT_FIELDS,
+  detectSource,
+  guessPatientMap,
+  guessVisitMap,
+  readPatients,
+  readVisits,
+  sheetKind,
+  type Issue,
+  type PatientDraft,
+  type Sheet,
+  type SourceKind,
+  type VisitDraft,
+} from '@/lib/migrate';
+import { readWorkbook } from '@/lib/sheet';
 
-const FIELDS = [
-  ['firstName', 'Имя'],
-  ['lastName', 'Фамилия'],
-  ['middleName', 'Отчество'],
-  ['phone', 'Телефон'],
-  ['email', 'Почта'],
-  ['birthDate', 'Дата рождения'],
-] as const;
-
-const PRESETS: Record<string, { label: string; csv: string; guess: Record<string, string> }> = {
-  IDENT: {
-    label: 'IDENT',
-    csv: 'Фамилия;Имя;Отчество;Телефон;Email;ДатаРождения\nКовалёв;Илья;Сергеевич;+7 900 111-22-33;ilya@example.com;1990-04-02\nОрлова;Марина;Игоревна;+7 900 222-33-44;marina@example.com;1985-11-19',
-    guess: { Фамилия: 'lastName', Имя: 'firstName', Отчество: 'middleName', Телефон: 'phone', Email: 'email', ДатаРождения: 'birthDate' },
-  },
-  DENTAL4WINDOWS: {
-    label: 'Dental4Windows',
-    csv: 'LastName,FirstName,MiddleName,Phone,Email,BirthDate\nСоколова,Ева,Петровна,+7 900 333-44-55,eva@example.com,1996-07-08',
-    guess: { LastName: 'lastName', FirstName: 'firstName', MiddleName: 'middleName', Phone: 'phone', Email: 'email', BirthDate: 'birthDate' },
-  },
+type Recall = {
+  checkups: { id: string; patient: string; phone: string | null; lastVisit: string; days: number }[];
+  plans: { planId: string; patientId: string; patient: string; phone: string | null; title: string; total: number }[];
 };
 
-type Row = Record<(typeof FIELDS)[number][0], string>;
+type Report = { created: number; skipped: number; appointments: number; appointmentSkipped: number; reasons: Record<string, number> };
 
 export default function ImportPage() {
   return <Protected><Wizard /></Protected>;
 }
 
 function Wizard() {
-  const [source, setSource] = useState<'IDENT' | 'DENTAL4WINDOWS'>('IDENT');
-  const [sheet, setSheet] = useState<Sheet | null>(null);
-  const [map, setMap] = useState<Record<string, string>>({});
-  const [result, setResult] = useState('');
+  const [source, setSource] = useState<SourceKind>('GENERIC');
+  const [patientsSheet, setPatientsSheet] = useState<Sheet | null>(null);
+  const [visitsSheet, setVisitsSheet] = useState<Sheet | null>(null);
+  const [patientMap, setPatientMap] = useState<Record<string, string>>({});
+  const [visitMap, setVisitMap] = useState<Record<string, string>>({});
+  const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
+  const [progress, setProgress] = useState<number | null>(null);
+  const [report, setReport] = useState<Report | null>(null);
+  const [recall, setRecall] = useState<Recall | null>(null);
 
-  const apply = (next: Sheet, preset?: Record<string, string>) => {
-    setSheet(next);
-    const guess = preset ?? guessMap(next.headers);
-    setMap(guess);
+  const loadRecall = () => api<Recall>('/workspace/recall').then(setRecall).catch(() => undefined);
+  useEffect(() => { void loadRecall(); }, []);
+
+  const parsed = useMemo(() => {
+    const people = patientsSheet ? readPatients(patientsSheet, patientMap) : { rows: [] as PatientDraft[], issues: [] as Issue[] };
+    const visits = visitsSheet ? readVisits(visitsSheet, visitMap) : { rows: [] as VisitDraft[], issues: [] as Issue[] };
+    return { people, visits };
+  }, [patientsSheet, visitsSheet, patientMap, visitMap]);
+
+  const applyBook = (sheets: { name: string; sheet: Sheet }[], label: string) => {
+    const people = sheets.find((item) => sheetKind(item.sheet.headers) === 'patients');
+    const visits = sheets.find((item) => sheetKind(item.sheet.headers) === 'visits');
+    const patientHeaders = people?.sheet.headers ?? [];
+    setPatientsSheet(people?.sheet ?? null);
+    setVisitsSheet(visits?.sheet ?? null);
+    setPatientMap(people ? guessPatientMap(patientHeaders) : {});
+    setVisitMap(visits ? guessVisitMap(visits.sheet.headers) : {});
+    setSource(detectSource(patientHeaders.length ? patientHeaders : visits?.sheet.headers ?? []));
+    setFileName(label);
+    setReport(null);
+    setError('');
   };
 
-  const rows = useMemo(() => {
-    if (!sheet) return [];
-    return sheet.rows.map((cells) => {
-      const row = { firstName: '', lastName: '', middleName: '', phone: '', email: '', birthDate: '' };
-      sheet.headers.forEach((header, index) => {
-        const field = map[header];
-        if (field && field in row) row[field as keyof Row] = cells[index] ?? '';
-      });
-      return row;
-    }).filter((row) => row.firstName || row.lastName);
-  }, [sheet, map]);
-
-  const commit = async () => {
+  const onFile = async (file: File) => {
     setError('');
     try {
-      const response = await api<{ created: number; skipped: number }>('/showcase/import', {
-        method: 'POST',
-        body: JSON.stringify({ source, rows }),
-      });
-      setResult(`Создано ${response.created}, пропущено ${response.skipped}. Пациенты уже в базе клиники.`);
+      applyBook(await readWorkbook(file), file.name);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Импорт не прошёл');
+      setError(err instanceof Error ? err.message : 'Файл не разобрался');
     }
   };
 
+  const commit = async () => {
+    setError('');
+    const people = parsed.people.rows;
+    const visits = parsed.visits.rows;
+    if (!people.length && !visits.length) {
+      setError('Нет строк, которые можно перенести');
+      return;
+    }
+    const chunk = 40;
+    const total = Math.max(1, Math.ceil(people.length / chunk) + (visits.length ? 1 : 0));
+    let step = 0;
+    const summary: Report = { created: 0, skipped: 0, appointments: 0, appointmentSkipped: 0, reasons: {} };
+    setProgress(4);
+    try {
+      for (let index = 0; index < people.length; index += chunk) {
+        const response = await api<Report>('/workspace/import', {
+          method: 'POST',
+          body: JSON.stringify({ source, patients: people.slice(index, index + chunk) }),
+        });
+        mergeReport(summary, response);
+        step += 1;
+        setProgress(Math.round((step / total) * 100));
+      }
+      if (visits.length) {
+        const response = await api<Report>('/workspace/import', {
+          method: 'POST',
+          body: JSON.stringify({ source, appointments: visits }),
+        });
+        mergeReport(summary, response);
+        setProgress(100);
+      }
+      setReport(summary);
+      await loadRecall();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Перенос остановился');
+    } finally {
+      setProgress(null);
+    }
+  };
+
+  const skips = parsed.people.issues.filter((issue) => issue.level === 'skip').length + parsed.visits.issues.filter((issue) => issue.level === 'skip').length;
+  const warns = parsed.people.issues.filter((issue) => issue.level === 'warn').length + parsed.visits.issues.filter((issue) => issue.level === 'warn').length;
+
   return (
-    <div className="wow">
-      <header className="wow-head">
+    <div className="mv">
+      <header className="sd-h">
         <div>
-          <h1>Переезд из другой программы</h1>
-          <p>Сопоставьте колонки IDENT или Dental4Windows. В базу попадут только новые фамилии и телефоны.</p>
+          <h1>Переезд</h1>
+          <p>Пациенты и расписание из SQNS, IDENT или АдминДенты. Колонки можно поправить до записи.</p>
         </div>
       </header>
-      <div className="wow-sources">
-        {(Object.keys(PRESETS) as ('IDENT' | 'DENTAL4WINDOWS')[]).map((key) => (
-          <button key={key} className={source === key ? 'on' : ''} type="button" onClick={() => { setSource(key); apply(parseDelimited(PRESETS[key].csv, key === 'IDENT' ? ';' : ','), PRESETS[key].guess); }}>
-            <strong>{PRESETS[key].label}</strong>
-            <span>Открыть пример колонок</span>
-          </button>
-        ))}
-        <label className={sheet && !PRESETS[source] ? 'on' : ''}>
-          <strong>Свой файл</strong>
-          <span>CSV или Excel .xlsx</span>
-          <input type="file" accept=".csv,.txt,.tsv,.xlsx" hidden onChange={(event) => {
+      <div className="mv-drop">
+        <label className={patientsSheet || visitsSheet ? 'sd-btn-ghost' : 'sd-btn'}>
+          Загрузить xls, xlsx или csv
+          <input type="file" accept=".xls,.xlsx,.csv,.txt,.tsv" hidden onChange={(event) => {
             const file = event.target.files?.[0];
-            if (!file) return;
-            void readTable(file).then((next) => apply(next)).catch(() => setError('Файл не разобрался'));
+            if (file) void onFile(file);
           }} />
         </label>
+        <button className="sd-btn-ghost" type="button" onClick={() => applyBook([{ name: 'Пациенты', sheet: samplePatients() }, { name: 'Расписание', sheet: sampleVisits() }], 'Пример SQNS')}>Пример SQNS</button>
+        {fileName && <span>{fileName} · {SOURCE_LABEL[source]}</span>}
       </div>
       {error && <p className="sd-chip danger">{error}</p>}
-      {sheet && (
-        <section className="wow-map">
-          <div className="wow-map-grid">
-            {sheet.headers.map((header) => (
-              <label key={header}>
-                {header}
-                <select value={map[header] ?? ''} onChange={(event) => setMap({ ...map, [header]: event.target.value })}>
-                  <option value="">Не брать</option>
-                  {FIELDS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </label>
-            ))}
+      {(patientsSheet || visitsSheet) && (
+        <section className="sd-card sd-stack">
+          <div className="mv-stats">
+            <b>{parsed.people.rows.length} пациентов</b>
+            <b>{parsed.visits.rows.length} записей</b>
+            <span>{skips} пропусков</span>
+            <span>{warns} предупреждений</span>
           </div>
-          <table>
-            <thead><tr><th>Фамилия</th><th>Имя</th><th>Телефон</th><th>Почта</th></tr></thead>
+          {patientsSheet && <MapGrid title="Пациенты" headers={patientsSheet.headers} map={patientMap} fields={PATIENT_FIELDS} onChange={setPatientMap} />}
+          {visitsSheet && <MapGrid title="Расписание" headers={visitsSheet.headers} map={visitMap} fields={VISIT_FIELDS} onChange={setVisitMap} />}
+          <table className="sd-table">
+            <thead><tr><th>Строка</th><th>Кого</th><th>Что не так</th></tr></thead>
             <tbody>
-              {rows.slice(0, 6).map((row) => (
-                <tr key={`${row.lastName}-${row.phone}`}><td>{row.lastName}</td><td>{row.firstName}</td><td>{row.phone}</td><td>{row.email}</td></tr>
+              {[...parsed.people.issues, ...parsed.visits.issues].slice(0, 8).map((issue) => (
+                <tr key={`${issue.row}-${issue.reason}`}><td>{issue.row}</td><td>{issue.name || '—'}</td><td>{issue.reason}</td></tr>
               ))}
             </tbody>
           </table>
-          <button className="sd-btn" type="button" onClick={() => void commit()}>Импортировать {rows.length}</button>
-          {result && <p className="wow-note">{result}</p>}
+          {parsed.people.rows.slice(0, 4).map((row) => (
+            <p key={`${row.lastName}-${row.phone}`} className="sd-muted">{row.lastName} {row.firstName} · {row.phone || 'без телефона'}{row.lastVisit ? ` · визит ${row.lastVisit}` : ''}</p>
+          ))}
+          <button className="sd-btn" type="button" disabled={progress != null} onClick={() => void commit()}>Перенести в клинику</button>
+          {progress != null && <div className="mv-bar" aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></div>}
         </section>
       )}
+      {report && (
+        <section className="sd-card sd-stack">
+          <h2>Отчёт</h2>
+          <p>Создано карт: {report.created}. Пропущено: {report.skipped}. Записей в расписании: {report.appointments}. Записей без пациента: {report.appointmentSkipped}.</p>
+          <ul>{Object.entries(report.reasons).map(([reason, count]) => <li key={reason}>{reason}: {count}</li>)}</ul>
+          <Link className="sd-btn-ghost" href="/patients">Открыть пациентов</Link>
+        </section>
+      )}
+      <RecallList data={recall} />
     </div>
   );
 }
 
-function guessMap(headers: string[]) {
-  const map: Record<string, string> = {};
-  for (const header of headers) {
-    const key = header.toLowerCase();
-    if (key.includes('фамил') || key.includes('last')) map[header] = 'lastName';
-    else if (key.includes('имя') || key.includes('first')) map[header] = 'firstName';
-    else if (key.includes('отч') || key.includes('middle')) map[header] = 'middleName';
-    else if (key.includes('тел') || key.includes('phone')) map[header] = 'phone';
-    else if (key.includes('mail') || key.includes('почт')) map[header] = 'email';
-    else if (key.includes('рожд') || key.includes('birth') || key.includes('дата')) map[header] = 'birthDate';
-  }
-  return map;
+function MapGrid({
+  title,
+  headers,
+  map,
+  fields,
+  onChange,
+}: {
+  title: string;
+  headers: string[];
+  map: Record<string, string>;
+  fields: { field: string; label: string }[];
+  onChange: (next: Record<string, string>) => void;
+}) {
+  return (
+    <div>
+      <h2>{title}</h2>
+      <div className="mv-map">
+        {headers.filter(Boolean).map((header) => (
+          <label key={header}>{header}
+            <select value={map[header] ?? ''} onChange={(event) => onChange({ ...map, [header]: event.target.value })}>
+              <option value="">Не брать</option>
+              {fields.map((field) => <option key={field.field} value={field.field}>{field.label}</option>)}
+            </select>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RecallList({ data }: { data: Recall | null }) {
+  return (
+    <section className="sd-card sd-stack">
+      <h2>Отзыв / контроль через 6 мес</h2>
+      <p className="sd-muted">Кто не был больше полугода, и планы, которые ещё не подписаны.</p>
+      {!data && <p>Собираем список…</p>}
+      {data && (
+        <table className="sd-table">
+          <thead><tr><th>Пациент</th><th>Повод</th><th></th></tr></thead>
+          <tbody>
+            {data.checkups.map((row) => (
+              <tr key={row.id}>
+                <td>{row.patient}<div className="sd-muted">{row.phone}</div></td>
+                <td>Не был {row.days} дн.</td>
+                <td>{row.phone ? <a className="sd-btn" href={`tel:${row.phone}`}>Позвонить</a> : <Link className="sd-btn" href={`/patients/${row.id}`}>Открыть</Link>}</td>
+              </tr>
+            ))}
+            {data.plans.map((row) => (
+              <tr key={row.planId}>
+                <td>{row.patient}<div className="sd-muted">{row.phone}</div></td>
+                <td>План «{row.title}» не подписан</td>
+                <td><Link className="sd-btn-ghost" href={`/patients/${row.patientId}`}>Открыть</Link></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {data && data.checkups.length === 0 && data.plans.length === 0 && <p>Пока никого звать не нужно.</p>}
+    </section>
+  );
+}
+
+function mergeReport(summary: Report, part: Report) {
+  summary.created += part.created || 0;
+  summary.skipped += part.skipped || 0;
+  summary.appointments += part.appointments || 0;
+  summary.appointmentSkipped += part.appointmentSkipped || 0;
+  for (const [reason, count] of Object.entries(part.reasons ?? {})) summary.reasons[reason] = (summary.reasons[reason] ?? 0) + count;
 }

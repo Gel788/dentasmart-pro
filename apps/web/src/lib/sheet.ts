@@ -1,10 +1,44 @@
 export type Sheet = { headers: string[]; rows: string[][] };
 
 export async function readTable(file: File): Promise<Sheet> {
+  const book = await readWorkbook(file);
+  return book[0]?.sheet ?? { headers: [], rows: [] };
+}
+
+export async function readWorkbook(file: File): Promise<{ name: string; sheet: Sheet }[]> {
+  const buf = await file.arrayBuffer();
+  const head = new Uint8Array(buf.slice(0, 4));
   const name = file.name.toLowerCase();
-  if (name.endsWith('.xlsx')) return readXlsx(await file.arrayBuffer());
-  const text = await file.text();
-  return parseDelimited(text, text.includes('\t') && !text.includes(',') ? '\t' : detectComma(text));
+  const ole = head[0] === 0xd0 && head[1] === 0xcf && head[2] === 0x11 && head[3] === 0xe0;
+  const zip = head[0] === 0x50 && head[1] === 0x4b;
+  if (ole || zip || name.endsWith('.xls') || name.endsWith('.xlsx')) {
+    try {
+      return await readExcel(buf);
+    } catch {
+      if (zip || name.endsWith('.xlsx')) {
+        try {
+          return [{ name: 'Лист', sheet: await readXlsx(buf) }];
+        } catch { /* the message below */ }
+      }
+      throw new Error('Файл не разобрался. Сохраните его как .xlsx или .csv и загрузите снова.');
+    }
+  }
+  const text = new TextDecoder().decode(buf);
+  const delimiter = text.includes('\t') && !text.includes(',') ? '\t' : detectComma(text);
+  return [{ name: 'Таблица', sheet: parseDelimited(text, delimiter) }];
+}
+
+async function readExcel(buf: ArrayBuffer) {
+  const XLSX = await import('xlsx');
+  const book = XLSX.read(buf, { type: 'array' });
+  return book.SheetNames.map((name) => {
+    const grid = XLSX.utils.sheet_to_json<(string | number | null)[]>(book.Sheets[name], { header: 1, raw: false, defval: '' });
+    const headers = (grid[0] ?? []).map((cell) => String(cell ?? '').trim());
+    const rows = grid.slice(1)
+      .filter((row) => row.some((cell) => String(cell ?? '').trim()))
+      .map((row) => headers.map((_, index) => String(row[index] ?? '').trim()));
+    return { name, sheet: { headers, rows } };
+  }).filter((item) => item.sheet.headers.some(Boolean));
 }
 
 export function parseDelimited(text: string, delimiter: string): Sheet {

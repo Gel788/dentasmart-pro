@@ -52,8 +52,9 @@ function CardScreen() {
 
   const load = () => api<Card>(`/workspace/patients/${params.id}/card`).then((data) => {
     setCard(data);
+    const all = data.families.flatMap((family) => family.plans);
     const best = [...data.families].sort((a, b) => b.plans.length - a.plans.length)[0];
-    setActivePlan((current) => current ?? best?.plans.find((plan) => plan.tier === 'OPTIMUM')?.id ?? best?.plans[0]?.id ?? null);
+    setActivePlan((current) => (current && all.some((plan) => plan.id === current) ? current : best?.plans.find((plan) => plan.tier === 'OPTIMUM')?.id ?? best?.plans[0]?.id ?? null));
   }).catch((err: Error) => setError(err.message));
 
   const [modeReady, setModeReady] = useState(false);
@@ -129,6 +130,7 @@ function CardScreen() {
       )}
       {mode === 'plan' ? (
         <PlanJourney
+          patientId={params.id}
           patientName={`${card.patient.lastName} ${card.patient.firstName}`}
           familyKey={(card.families.find((family) => family.plans.some((plan) => plan.id === picked?.id)) ?? [...card.families].sort((a, b) => b.plans.length - a.plans.length)[0])?.key ?? null}
           surfaces={card.chart.surfaces}

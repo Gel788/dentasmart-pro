@@ -10,6 +10,10 @@ type Payload = {
   rows: { familyKey: string; planId: string; title: string; patientId: string; patient: string; phone: string | null; days: number; total: number }[];
   funnel: { accepted: number; abandoned: number; open: number; lost: number; rate: number };
 };
+type Recall = {
+  checkups: { id: string; patient: string; phone: string | null; days: number }[];
+  plans: { planId: string; patientId: string; patient: string; title: string }[];
+};
 
 export default function ReturnPage() {
   return <Protected><Body /></Protected>;
@@ -17,9 +21,11 @@ export default function ReturnPage() {
 
 function Body() {
   const [data, setData] = useState<Payload | null>(null);
+  const [recall, setRecall] = useState<Recall | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
     api<Payload>('/workspace/plans/abandoned').then(setData).catch((err: Error) => setError(err.message));
+    api<Recall>('/workspace/recall').then(setRecall).catch(() => undefined);
   }, []);
   if (error) return <p>{error}</p>;
   if (!data) return <p className="sd-muted">Считаем воронку…</p>;
@@ -53,6 +59,29 @@ function Body() {
           </tbody>
         </table>
         {data.rows.length === 0 && <p className="sd-muted" style={{ padding: 12 }}>Брошенных планов нет.</p>}
+      </div>
+      <div className="sd-card">
+        <h2>Отзыв / контроль через 6 мес</h2>
+        <table className="sd-table">
+          <thead><tr><th>Пациент</th><th>Повод</th><th></th></tr></thead>
+          <tbody>
+            {(recall?.checkups ?? []).map((row) => (
+              <tr key={row.id}>
+                <td>{row.patient}<div className="sd-muted">{row.phone}</div></td>
+                <td>Не был {row.days} дн.</td>
+                <td>{row.phone ? <a className="sd-btn" href={`tel:${row.phone}`}>Позвонить</a> : <Link className="sd-btn" href={`/patients/${row.id}`}>Открыть</Link>}</td>
+              </tr>
+            ))}
+            {(recall?.plans ?? []).slice(0, 8).map((row) => (
+              <tr key={row.planId}>
+                <td>{row.patient}</td>
+                <td>План «{row.title}» не подписан</td>
+                <td><Link className="sd-btn-ghost" href={`/patients/${row.patientId}`}>Открыть</Link></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {recall && recall.checkups.length === 0 && recall.plans.length === 0 && <p className="sd-muted" style={{ padding: 12 }}>Пока никого звать не нужно.</p>}
       </div>
     </div>
   );

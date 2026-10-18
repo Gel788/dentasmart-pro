@@ -1,4 +1,5 @@
 import { phoneDigits } from '../phone';
+import { PLAN_TEMPLATES, composeFamily, lineTotal, type Mark } from '../plan-engine';
 import { resultFor, serviceKit, surfacesFor } from '../service-kit';
 import snapshot from './snapshot.json';
 
@@ -197,6 +198,11 @@ function read(path: string, token: string): unknown {
 
   const sheetPath = pathname.match(/^\/workspace\/plans\/([^/]+)\/sheet$/);
   if (sheetPath) return buildSheet(bag, sheetPath[1]);
+  if (pathname === '/config') {
+    seedTemplates(bag);
+    return config(bag);
+  }
+  if (pathname === '/workspace/recall') return recallList(bag);
 
   const anchored = anchorPath(pathname, query);
   if (anchored in bag.gets) return bag.gets[anchored];
@@ -387,7 +393,21 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
     Object.assign(current, data);
     return current;
   }
-  if (pathname === '/showcase/import') return importRows(bag, data.rows ?? []);
+  if (pathname === '/showcase/import' || pathname === '/workspace/import') return importMigration(bag, data);
+  if (pathname === '/config/ai' && method === 'POST') {
+    seedTemplates(bag);
+    config(bag).aiPlans = data.enabled !== false;
+    return { enabled: config(bag).aiPlans !== false };
+  }
+  if (pathname === '/workspace/plans/compose' && method === 'POST') return saveComposed(bag, data);
+  const applyTemplatePath = pathname.match(/^\/workspace\/plans\/([^/]+)\/apply-template$/);
+  if (applyTemplatePath && method === 'POST') return applyPlanTemplate(bag, applyTemplatePath[1], data);
+  const templateSave = pathname.match(/^\/workspace\/plans\/([^/]+)\/template$/);
+  if (templateSave && method === 'POST') return savePlanTemplate(bag, templateSave[1], String(data.name ?? '').trim());
+  const installment = pathname.match(/^\/workspace\/plans\/([^/]+)\/installment$/);
+  if (installment && method === 'POST') return setInstallment(bag, installment[1], Number(data.months) || 0);
+  const itemPatch = pathname.match(/^\/workspace\/plans\/([^/]+)\/items\/([^/]+)$/);
+  if (itemPatch && method === 'POST') return patchPlanItem(bag, itemPatch[1], itemPatch[2], data);
   if (pathname === '/showcase/check-in') return checkIn(bag, data.code);
   if (pathname === '/showcase/retention/send') return sendRetention(bag, data.ids ?? []);
   if (pathname === '/market/copilot/apply') return applyCopilot(bag, data.patientId);
@@ -1198,18 +1218,348 @@ function editLab(bag: Bag, id: string, data: AnyRec) {
 }
 
 function importRows(bag: Bag, rows: AnyRec[]) {
+  return importMigration(bag, { patients: rows });
+}
+
+function seedTemplates(bag: Bag) {
+  const host = config(bag);
+  const list = (host.planTemplates ?? []) as AnyRec[];
+  host.planTemplates = list;
+  if (host.aiPlans == null) host.aiPlans = true;
+  for (const template of PLAN_TEMPLATES) {
+    if (list.some((row) => row.name === template.name)) continue;
+    list.push({ id: `tpl-${template.name}`, name: template.name, note: template.note, isArchived: false, marks: template.marks });
+  }
+}
+
+function materializePlan(plan: AnyRec) {
+  const phases = ((plan.phases ?? []) as AnyRec[]).map((phase) => ({
+    id: uid(),
+    title: phase.title,
+    specialty: phase.specialty ?? null,
+    healingDays: Number(phase.healingDays) || 0,
+    dependsOnTitle: phase.dependsOnTitle ?? null,
+    waitDays: Number(phase.waitDays) || 0,
+    items: ((phase.items ?? []) as AnyRec[]).map((item) => {
+      const money = lineTotal(item.unitPrice ?? item.price, item.qty ?? 1, item.discountPercent ?? 0);
+      const title = String(item.title || 'Услуга');
+      return {
+        id: uid(),
+        title,
+        toothNum: item.toothNum ?? null,
+        surfaces: surfacesFor(title, item.code),
+        ...money,
+        listPrice: money.unitPrice,
+        status: 'PROPOSED',
+        durationMin: Number(item.durationMin) || 30,
+        kit: item.kit || '',
+        result: resultFor(title, item.code),
+      };
+    }),
+  }));
+  const total = phases.reduce((sum, phase) => sum + phase.items.reduce((inner, item) => inner + item.price, 0), 0);
+  return {
+    id: uid(),
+    tier: plan.tier ?? null,
+    tierLabel: plan.tierLabel ?? 'План',
+    title: plan.tierLabel ?? plan.title ?? 'План',
+    status: 'PROPOSED',
+    total,
+    discountPercent: 0,
+    guaranteeMonths: Number(plan.guaranteeMonths) || 12,
+    durationWeeks: Number(plan.durationWeeks) || 4,
+    installmentMonths: Number(plan.installmentMonths) || 0,
+    signedAt: null,
+    signedName: null,
+    abandonedAt: null,
+    looseItems: [],
+    explanation: '',
+    showBreakdown: true,
+    phases,
+  };
+}
+
+function saveComposed(bag: Bag, data: AnyRec) {
+  const patientId = String(data.patientId ?? '');
+  const card = bag.gets[`/workspace/patients/${patientId}/card`] as AnyRec | undefined;
+  if (!card) throw new Error('Пациент не найден');
+  const plans = ((data.plans ?? []) as AnyRec[]).map(materializePlan);
+  if (!plans.length) throw new Error('План пустой');
+  const existing = ((card.families ?? []) as AnyRec[])[0];
+  const family = existing ?? { key: uid(), title: 'План лечения', plans: [] };
+  family.title = data.title || family.title || 'План лечения';
+  family.plans = plans;
+  const others = ((card.families ?? []) as AnyRec[]).filter((row) => row !== family && row.key !== family.key);
+  card.families = [family, ...others];
+  publishFamily(bag, patientId, family);
+  const optimum = plans.find((plan) => plan.tier === 'OPTIMUM') ?? plans[0];
+  return { familyKey: family.key, planId: optimum.id, plans };
+}
+
+function patchPlanItem(bag: Bag, planId: string, itemId: string, data: AnyRec) {
+  const seen = new Set<AnyRec>();
+  let updated: AnyRec | null = null;
+  eachPlan(bag, (plan) => {
+    if (plan.id !== planId || seen.has(plan)) return;
+    seen.add(plan);
+    for (const item of planItems(plan)) {
+      if (item.id !== itemId) continue;
+      const money = lineTotal(data.unitPrice ?? item.unitPrice ?? item.price, data.qty ?? item.qty ?? 1, data.discountPercent ?? item.discountPercent ?? 0);
+      Object.assign(item, money, { kit: data.kit ?? item.kit ?? '', title: data.title ?? item.title });
+      updated = item;
+    }
+    plan.total = planItems(plan).reduce((sum, line) => sum + (Number(line.price) || 0), 0);
+  });
+  if (!updated) throw new Error('Строка не найдена');
+  return updated;
+}
+
+function setInstallment(bag: Bag, planId: string, months: number) {
+  const count = months >= 2 ? Math.min(24, Math.round(months)) : 0;
+  const seen = new Set<AnyRec>();
+  let total = 0;
+  let found = false;
+  eachPlan(bag, (plan) => {
+    if (plan.id !== planId || seen.has(plan)) return;
+    seen.add(plan);
+    plan.installmentMonths = count;
+    total = Number(plan.total) || 0;
+    found = true;
+  });
+  if (!found) throw new Error('План не найден');
+  return { installmentMonths: count, parts: count ? installments(total, count) : [] };
+}
+
+function applyPlanTemplate(bag: Bag, planId: string, data: AnyRec) {
+  seedTemplates(bag);
+  const template = ((config(bag).planTemplates ?? []) as AnyRec[]).find((row) => row.id === data.templateId || row.name === data.name);
+  if (!template) throw new Error('Шаблон не найден');
+  const tooth = data.toothNum == null || data.toothNum === '' ? null : Number(data.toothNum);
+  let phases = (template.phases ?? []) as AnyRec[];
+  if (!phases.length && template.marks) {
+    const marks = (template.marks as Mark[]).map((mark) => ({ ...mark, tooth: mark.tooth ?? tooth }));
+    const draft = composeFamily(marks, (config(bag).services ?? []) as { name: string; code?: string | null; price?: number; durationMin?: number }[]);
+    const picked = draft?.plans.find((plan) => plan.tier === (data.tier || 'OPTIMUM')) ?? draft?.plans[0];
+    phases = (picked?.phases ?? []) as unknown as AnyRec[];
+  }
+  if (!phases.length) throw new Error('В шаблоне нет этапов');
+  mergePhases(bag, planId, phases.map((phase) => ({
+    ...phase,
+    items: (phase.items ?? []).map((item: AnyRec) => ({ ...item, toothNum: item.toothNum ?? tooth })),
+  })));
+  return { ok: true };
+}
+
+function mergePhases(bag: Bag, planId: string, phases: AnyRec[]) {
+  const seen = new Set<AnyRec>();
+  let found = false;
+  eachPlan(bag, (plan) => {
+    if (plan.id !== planId || seen.has(plan)) return;
+    seen.add(plan);
+    found = true;
+    const hostPhases = (plan.phases ?? []) as AnyRec[];
+    plan.phases = hostPhases;
+    for (const phase of phases) {
+      let host = hostPhases.find((row) => row.title === phase.title);
+      if (!host) {
+        host = { id: uid(), title: phase.title, specialty: phase.specialty ?? null, healingDays: Number(phase.healingDays) || 0, dependsOnTitle: phase.dependsOnTitle ?? null, waitDays: Number(phase.waitDays) || 0, items: [] };
+        hostPhases.push(host);
+      }
+      for (const item of (phase.items ?? []) as AnyRec[]) {
+        const money = lineTotal(item.unitPrice ?? item.price, item.qty ?? 1, item.discountPercent ?? 0);
+        const title = String(item.title || 'Услуга');
+        host.items.push({
+          id: uid(),
+          title,
+          toothNum: item.toothNum ?? null,
+          surfaces: surfacesFor(title, item.code),
+          ...money,
+          listPrice: money.unitPrice,
+          status: 'PROPOSED',
+          durationMin: Number(item.durationMin) || 30,
+          kit: item.kit || '',
+          result: resultFor(title, item.code),
+        });
+      }
+    }
+    plan.total = planItems(plan).reduce((sum, line) => sum + (Number(line.price) || 0), 0);
+  });
+  if (!found) throw new Error('План не найден');
+}
+
+function savePlanTemplate(bag: Bag, planId: string, name: string) {
+  if (!name) throw new Error('Назовите шаблон');
+  seedTemplates(bag);
+  let source: AnyRec | null = null;
+  eachPlan(bag, (plan) => {
+    if (plan.id === planId && !source) source = plan;
+  });
+  if (!source) throw new Error('План не найден');
+  const plan = source as AnyRec;
+  const row = {
+    id: uid(),
+    name,
+    note: 'Свой шаблон',
+    isArchived: false,
+    phases: ((plan.phases ?? []) as AnyRec[]).map((phase) => ({
+      title: phase.title,
+      specialty: phase.specialty,
+      healingDays: phase.healingDays,
+      dependsOnTitle: phase.dependsOnTitle,
+      waitDays: phase.waitDays,
+      items: ((phase.items ?? []) as AnyRec[]).map((item) => ({
+        title: item.title,
+        toothNum: item.toothNum,
+        qty: item.qty ?? 1,
+        unitPrice: item.unitPrice ?? item.price,
+        discountPercent: item.discountPercent ?? 0,
+        price: item.price,
+        kit: item.kit ?? '',
+        durationMin: item.durationMin ?? 30,
+        code: item.code,
+      })),
+    })),
+  };
+  (config(bag).planTemplates as AnyRec[]).unshift(row);
+  return row;
+}
+
+function importMigration(bag: Bag, data: AnyRec) {
+  const incoming = (data.patients ?? data.rows ?? []) as AnyRec[];
+  const visits = (data.appointments ?? []) as AnyRec[];
+  const reasons: Record<string, number> = {};
   let created = 0;
   let skipped = 0;
-  for (const row of rows) {
-    const exists = patients(bag).some((item) => item.phone && row.phone && item.phone === row.phone);
-    if (exists || (!row.firstName && !row.lastName)) {
+  let appointments = 0;
+  let appointmentSkipped = 0;
+  const bump = (reason: string) => { reasons[reason] = (reasons[reason] ?? 0) + 1; };
+  for (const row of incoming) {
+    if (created >= 400) {
       skipped += 1;
+      bump('В демо помещается 400 новых карт');
       continue;
     }
-    addPatient(bag, row);
-    created += 1;
+    if (!row.firstName && !row.lastName) {
+      skipped += 1;
+      bump('Пустая строка');
+      continue;
+    }
+    const digits = phoneDigits(row.phone);
+    if (digits.length >= 10) {
+      const hit = patients(bag).find((item) => item.isActive !== false && phoneDigits(item.phone).slice(-10) === digits.slice(-10));
+      if (hit) {
+        skipped += 1;
+        bump('Уже есть в базе');
+        continue;
+      }
+    }
+    try {
+      const patient = addPatient(bag, {
+        ...row,
+        phone: digits.length >= 10 ? row.phone : null,
+        source: data.source || 'IMPORT',
+        notes: [row.comment, row.cardNumber ? `Медкарта ${row.cardNumber}` : '', row.balance ? `Баланс при переезде ${row.balance}` : ''].filter(Boolean).join(' · ') || null,
+        consentPd: true,
+      });
+      if (row.lastVisit) (patient as AnyRec).lastVisit = String(row.lastVisit).slice(0, 10);
+      created += 1;
+    } catch (err) {
+      skipped += 1;
+      bump(err instanceof Error ? err.message : 'Не записался');
+    }
   }
-  return { created, skipped };
+  const schedule = bag.gets[`/workspace/schedule?date=${ANCHOR}`] as AnyRec;
+  const doctors = (schedule?.doctors ?? []) as AnyRec[];
+  const cabinet = (schedule?.branches as AnyRec[] | undefined)?.flatMap((branch) => branch.cabinets ?? [])[0];
+  for (const visit of visits) {
+    const patient = matchImported(bag, String(visit.phone ?? ''), String(visit.patient ?? visit.name ?? ''));
+    if (!patient || !visit.date) {
+      appointmentSkipped += 1;
+      bump('Запись без пациента');
+      continue;
+    }
+    const doctorName = String(visit.doctor ?? '');
+    const doctor = doctors.find((row) => doctorName && String(row.name).toLowerCase().includes(doctorName.split(/\s+/)[0].toLowerCase())) ?? doctors[0];
+    const time = String(visit.time || '09:00');
+    const starts = new Date(`${String(visit.date).slice(0, 10)}T${time.length === 5 ? time : '09:00'}:00.000Z`);
+    if (Number.isNaN(starts.getTime())) {
+      appointmentSkipped += 1;
+      bump('Кривая дата записи');
+      continue;
+    }
+    const row: Appointment = {
+      id: uid(),
+      startsAt: starts.toISOString(),
+      endsAt: new Date(starts.getTime() + 30 * 60000).toISOString(),
+      status: String(visit.status || 'CONFIRMED'),
+      cabinetId: cabinet?.id ?? null,
+      doctorId: doctor?.id ?? null,
+      patientId: patient.id,
+      patient: personName(patient),
+      doctor: doctor?.name ?? (doctorName || 'Врач'),
+      cabinet: cabinet?.name ?? 'Кресло',
+      service: String(visit.service || 'Приём'),
+      serviceId: null,
+    };
+    bag.appointments.push(row);
+    bag.gets[`/flow/visits/${row.id}`] = visitFrom(row, patient);
+    appointments += 1;
+  }
+  return { created, skipped, appointments, appointmentSkipped, reasons, source: data.source ?? 'GENERIC' };
+}
+
+function matchImported(bag: Bag, phone: string, name: string) {
+  const digits = phoneDigits(phone);
+  if (digits.length >= 10) {
+    const hit = patients(bag).find((row) => phoneDigits(row.phone).slice(-10) === digits.slice(-10));
+    if (hit) return hit;
+  }
+  const parts = name.toLowerCase().split(/\s+/).filter((part) => part.length > 1);
+  if (parts.length < 2) return undefined;
+  return patients(bag).find((row) => parts.every((part) => `${row.lastName} ${row.firstName} ${row.middleName ?? ''}`.toLowerCase().includes(part)));
+}
+
+function recallList(bag: Bag) {
+  const today = Date.parse(`${ANCHOR}T00:00:00.000Z`);
+  const horizon = today - 183 * 86400000;
+  const checkups: AnyRec[] = [];
+  for (const patient of patients(bag)) {
+    if (patient.isActive === false) continue;
+    let last = patient.lastVisit ? Date.parse(`${String(patient.lastVisit).slice(0, 10)}T00:00:00.000Z`) : NaN;
+    for (const visit of bag.appointments) {
+      if (visit.patientId !== patient.id || visit.status === 'CANCELLED') continue;
+      const time = Date.parse(visit.startsAt);
+      if (!Number.isNaN(time) && time <= today && (Number.isNaN(last) || time > last)) last = time;
+    }
+    if (Number.isNaN(last) || last > horizon) continue;
+    checkups.push({
+      id: patient.id,
+      patient: personName(patient),
+      phone: patient.phone ?? null,
+      lastVisit: new Date(last).toISOString(),
+      days: Math.round((today - last) / 86400000),
+    });
+  }
+  checkups.sort((a, b) => b.days - a.days);
+  const plans: AnyRec[] = [];
+  const seen = new Set<string>();
+  eachPlan(bag, (plan, _family, card) => {
+    if (seen.has(plan.id)) return;
+    seen.add(plan.id);
+    if (plan.signedAt || plan.status === 'ACCEPTED' || plan.status === 'COMPLETED' || plan.status === 'REJECTED') return;
+    const patient = card?.patient;
+    if (!patient) return;
+    plans.push({
+      planId: plan.id,
+      patientId: patient.id,
+      patient: personName(patient),
+      phone: patient.phone ?? null,
+      title: plan.tierLabel || plan.title,
+      total: plan.total,
+      status: plan.status,
+    });
+  });
+  return { checkups: checkups.slice(0, 50), plans: plans.slice(0, 50) };
 }
 
 function checkIn(bag: Bag, code: string) {

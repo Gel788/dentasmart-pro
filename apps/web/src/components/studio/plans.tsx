@@ -9,6 +9,8 @@ export type PlanItem = {
   toothNum: number | null;
   surfaces: string[];
   price: number;
+  qty?: number;
+  unitPrice?: number;
   discountPercent: number;
   status: string;
   result: string;

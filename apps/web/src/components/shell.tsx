@@ -31,7 +31,7 @@ const MORE = [
   { href: '/return', label: 'Возврат', icon: RotateCcw, perm: 'medical.read' },
   { href: '/portal', label: 'Кабинет пациента', icon: Smartphone, perm: 'patient.read' },
   { href: '/check-in', label: 'QR стойки', icon: QrCode, perm: 'schedule.read' },
-  { href: '/import', label: 'Импорт', icon: Upload, perm: 'patient.write' },
+  { href: '/import', label: 'Переезд', icon: Upload, perm: 'patient.write' },
   { href: '/onboarding', label: 'Запуск', icon: Sparkles, perm: 'patient.read' },
 ];
 
