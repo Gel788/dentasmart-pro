@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
+import { memo, useCallback, useEffect, useId, useRef, useState } from 'react';
+import { ToothDefs, ToothGlyph, faceAnchors, toothProfile, visualsFor, type Visual } from '@/components/studio/tooth-art';
 
 const UPPER = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
 const LOWER = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
@@ -16,10 +17,6 @@ export const CONDITIONS = [
   { id: 'MISSING', label: 'Нет зуба', key: '6', color: '#a1a1aa' },
   { id: 'TO_EXTRACT', label: 'К удалению', key: '7', color: '#9f1239' },
 ] as const;
-
-const COLOR: Record<string, string> = Object.fromEntries(CONDITIONS.map((c) => [c.id, c.color]));
-COLOR.HEALTHY = 'transparent';
-COLOR.PLANNED = '#99f6e4';
 
 export type ChartSurface = { toothNum: number; formula: string; surface: string; condition: string; layer: string };
 export type ChartItem = { toothNum: number | null; surfaces: string[]; result: string; status: string; title: string };
@@ -49,6 +46,18 @@ export function ToothChart({
   quiet?: boolean;
   pulse?: number[];
 }) {
+  const gid = useId().replace(/:/g, '');
+  const [aspect, setAspect] = useState<'buccal' | 'occlusal'>('buccal');
+  const [zoom, setZoom] = useState(1);
+  const [band, setBand] = useState<number[]>([]);
+  const drag = useRef({ on: false, moved: false, painted: new Set<number>() });
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<number | null>(null);
+  const paintRef = useRef(onPaint);
+  const selectRef = useRef(onSelect);
+  paintRef.current = onPaint;
+  selectRef.current = onSelect;
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -66,120 +75,289 @@ export function ToothChart({
       ? [UPPER, CHILD_UPPER, CHILD_LOWER, LOWER]
       : [UPPER, LOWER];
 
+  const onSurface = useCallback((tooth: number, surface: string) => {
+    if (drag.current.moved) return;
+    selectRef.current(tooth);
+    paintRef.current(tooth, surface);
+  }, []);
+
+  const toothAt = (x: number, y: number) => {
+    const node = document.elementFromPoint(x, y)?.closest('[data-tooth]');
+    const value = Number(node?.getAttribute('data-tooth'));
+    return Number.isFinite(value) ? value : null;
+  };
+
   return (
-    <div className="sd-stack">
+    <div className="fx">
+      <div className="fx-tools">
+        <div className="sd-seg">
+          <button type="button" className={aspect === 'buccal' ? 'on' : ''} onClick={() => setAspect('buccal')}>Сбоку</button>
+          <button type="button" className={aspect === 'occlusal' ? 'on' : ''} onClick={() => setAspect('occlusal')}>Жевательная</button>
+        </div>
+        {aspect === 'occlusal' && <span className="fx-faces">M мезиальная · D дистальная · O жевательная · B щёчная · L язычная</span>}
+        <div className="fx-zoombar">
+          <button type="button" onClick={() => setZoom((value) => Math.max(0.85, +(value - 0.15).toFixed(2)))} aria-label="Мельче">−</button>
+          <span>{Math.round(zoom * 100)}%</span>
+          <button type="button" onClick={() => setZoom((value) => Math.min(1.8, +(value + 0.15).toFixed(2)))} aria-label="Крупнее">+</button>
+        </div>
+      </div>
       {!quiet && (
-      <div className="sd-chips">
-        {CONDITIONS.map((item) => (
-          <button key={item.id} type="button" className={`sd-chip ${condition === item.id ? 'info' : ''}`} onClick={() => onCondition(item.id)}>
-            {item.key} {item.label}
-          </button>
-        ))}
-      </div>
+        <div className="fx-legend">
+          {CONDITIONS.map((item) => (
+            <button key={item.id} type="button" className={`sd-chip ${condition === item.id ? 'info' : ''}`} onClick={() => onCondition(item.id)}>
+              <i style={{ background: item.color }} />
+              {item.key} {item.label}
+            </button>
+          ))}
+        </div>
       )}
-      <div className="sd-toothgrid">
-        {arches.map((arch) => (
-          <div className="sd-arch" key={arch[0]}>
-            {arch.map((tooth, index) => (
-              <span key={tooth} style={{ display: 'contents' }}>
-                {index === arch.length / 2 && <span className="gap" />}
-                <Tooth
-                  tooth={tooth}
-                  selected={selected === tooth}
-                  hot={pulse?.includes(tooth)}
-                  quiet={quiet}
-                  paint={(surface) => onPaint(tooth, surface)}
-                  onSelect={() => onSelect(tooth)}
-                  face={(surface) => face(tooth, surface, surfaces, items, view)}
-                />
-              </span>
-            ))}
-          </div>
-        ))}
+      <div
+        className="fx-scroll"
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+          if (pointers.current.size === 2) {
+            const [a, b] = [...pointers.current.values()];
+            pinch.current = Math.hypot(a.x - b.x, a.y - b.y);
+            return;
+          }
+          drag.current = { on: true, moved: false, painted: new Set() };
+        }}
+        onPointerMove={(event) => {
+          const prev = pointers.current.get(event.pointerId);
+          if (prev) pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+          if (pointers.current.size === 2 && pinch.current) {
+            const [a, b] = [...pointers.current.values()];
+            const dist = Math.hypot(a.x - b.x, a.y - b.y);
+            const ratio = dist / pinch.current;
+            pinch.current = dist;
+            setZoom((value) => Math.min(1.8, Math.max(0.85, +(value * ratio).toFixed(2))));
+            return;
+          }
+          if (!drag.current.on || !prev) return;
+          if (Math.hypot(event.clientX - prev.x, event.clientY - prev.y) > 6) drag.current.moved = true;
+          if (!drag.current.moved) return;
+          const tooth = toothAt(event.clientX, event.clientY);
+          if (tooth == null) return;
+          setBand((current) => current.includes(tooth) ? current : [...current, tooth]);
+          if (!quiet && !drag.current.painted.has(tooth)) {
+            drag.current.painted.add(tooth);
+            selectRef.current(tooth);
+            paintRef.current(tooth, aspect === 'occlusal' ? 'O' : 'TOOTH');
+          }
+        }}
+        onPointerUp={(event) => {
+          pointers.current.delete(event.pointerId);
+          if (pointers.current.size < 2) pinch.current = null;
+          if (!drag.current.on) return;
+          const moved = drag.current.moved;
+          drag.current.on = false;
+          if (moved && quiet) {
+            const tooth = toothAt(event.clientX, event.clientY);
+            if (tooth != null) selectRef.current(tooth);
+          }
+          setBand([]);
+        }}
+        onPointerCancel={() => { drag.current.on = false; pointers.current.clear(); setBand([]); }}
+      >
+        <div className="fx-board" style={{ transform: `scale(${zoom})` }}>
+          {arches.map((arch) => (
+            <Arch
+              key={`${aspect}-${arch[0]}`}
+              teeth={arch}
+              aspect={aspect}
+              gid={gid}
+              surfaces={surfaces}
+              items={items}
+              view={view}
+              selected={selected}
+              pulse={pulse}
+              band={band}
+              onSurface={onSurface}
+            />
+          ))}
+        </div>
       </div>
-      {!quiet && <p className="sd-muted">Клик по поверхности ставит выбранный статус. Клавиши 1–7 меняют инструмент. Вид «стало» показывает рот после выбранного варианта плана.</p>}
+      {!quiet && <p className="sd-muted">Сбоку отмечается весь зуб, на жевательной поверхности — стороны M, D, O, B и L. Клавиши 1–7 меняют инструмент. Проведите по дуге, чтобы отметить несколько зубов. На планшете сожмите двумя пальцами.</p>}
     </div>
   );
 }
 
-const FACETS: Record<string, string> = {
-  B: 'M16 8 C16 4 36 4 36 8 L34 18 L18 18 Z',
-  O: 'M20 20 H32 L30 32 H22 Z',
-  L: 'M18 34 H34 L36 46 C36 52 16 52 16 46 Z',
-  M: 'M14 16 L20 20 L22 32 L16 46 C10 40 10 22 14 16 Z',
-  D: 'M38 16 C42 22 42 40 36 46 L30 32 L32 20 Z',
+type Slot = {
+  tooth: number;
+  x: number;
+  y: number;
+  rot: number;
+  lx: number;
+  ly: number;
+  sx: number;
+  sy: number;
+  bridgeY: number;
 };
 
-function Tooth({
-  tooth,
+const Arch = memo(function Arch({
+  teeth,
+  aspect,
+  gid,
+  surfaces,
+  items,
+  view,
   selected,
-  hot,
-  quiet,
-  face,
-  paint,
-  onSelect,
+  pulse,
+  band,
+  onSurface,
 }: {
-  tooth: number;
-  selected: boolean;
-  hot?: boolean;
-  quiet?: boolean;
-  face: (surface: string) => { color: string; planned: boolean };
-  paint: (surface: string) => void;
-  onSelect: () => void;
+  teeth: number[];
+  aspect: 'buccal' | 'occlusal';
+  gid: string;
+  surfaces: ChartSurface[];
+  items: ChartItem[];
+  view: 'before' | 'plan' | 'after';
+  selected: number | null;
+  pulse?: number[];
+  band: number[];
+  onSurface: (tooth: number, surface: string) => void;
 }) {
-  const upper = isUpper(tooth);
-  const gid = `enamel-${tooth}`;
-  const body = face('O');
+  const upper = toothProfile(teeth[0]).jaw === 'upper';
+  const slots = aspect === 'buccal' ? buccalSlots(teeth, upper) : occlusalSlots(teeth, upper);
+  const box = aspect === 'buccal'
+    ? { w: 1000, h: upper ? 186 : 196 }
+    : { w: 800, h: upper ? 480 : 520 };
+  const visuals = new Map<number, Visual>();
+  for (const slot of slots) visuals.set(slot.tooth, visualsFor(slot.tooth, surfaces, items, view));
+  const defsId = `${gid}-${teeth[0]}`;
   return (
-    <div className={`sd-tooth${hot ? ' hot' : ''}`}>
-      {upper && <div className="num">{tooth}</div>}
-      <svg viewBox="0 0 52 64" className={`sd-tooth-svg ${selected ? 'on' : ''}`} role="img" aria-label={`Зуб ${tooth}`} onClick={onSelect}>
-        <defs>
-          <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#fffefb" />
-            <stop offset="48%" stopColor="#f3eee6" />
-            <stop offset="100%" stopColor="#cfc6b8" />
-          </linearGradient>
-        </defs>
-        <path d="M16 10 C16 2 36 2 36 10 L40 34 C40 50 34 58 26 58 C18 58 12 50 12 34 Z" fill={`url(#${gid})`} />
-        <ellipse cx="22" cy="16" rx="7" ry="5" fill="white" opacity="0.55" />
-        {(['B', 'M', 'O', 'D', 'L'] as const).map((surface) => {
-          const paintFace = face(surface);
-          const fill = paintFace.color === 'transparent' ? 'transparent' : paintFace.color;
-          return (
-            <path
-              key={surface}
-              className="hit"
-              d={FACETS[surface]}
-              fill={fill}
-              fillOpacity={fill === 'transparent' ? 0 : 0.88}
-              stroke={paintFace.planned ? '#0f766e' : 'rgba(16,33,28,0.18)'}
-              strokeDasharray={paintFace.planned ? '2 2' : undefined}
-              strokeWidth="1"
-              onClick={(event) => { event.stopPropagation(); onSelect(); paint(surface); }}
-            >
-              <title>{`Зуб ${tooth}, ${surface}`}</title>
-            </path>
-          );
-        })}
-        {body.color !== 'transparent' && <path d="M16 10 C16 2 36 2 36 10 L40 34 C40 50 34 58 26 58 C18 58 12 50 12 34 Z" fill={body.color} opacity="0.18" pointerEvents="none" />}
-      </svg>
-      {!upper && <div className="num">{tooth}</div>}
-      {!quiet && <button type="button" className="sd-btn-ghost" style={{ height: 22, marginTop: 4, padding: '0 4px', fontSize: 10 }} onClick={() => { onSelect(); paint('TOOTH'); }}>весь</button>}
-    </div>
+    <svg className={`fx-arch ${aspect}`} viewBox={`0 0 ${box.w} ${box.h}`} role="img" aria-label={upper ? 'Верхняя челюсть' : 'Нижняя челюсть'}>
+      <ToothDefs id={defsId} />
+      {slots.slice(0, -1).map((slot, index) => {
+        const next = slots[index + 1];
+        const left = visuals.get(slot.tooth);
+        const right = visuals.get(next.tooth);
+        if (!left?.crown || !right?.crown) return null;
+        const x1 = slot.x + slot.sx * 28;
+        const x2 = next.x - next.sx * 28;
+        const gold = left.gold && right.gold;
+        return (
+          <path
+            key={`${slot.tooth}-${next.tooth}`}
+            d={`M ${x1} ${slot.bridgeY} C ${(x1 + x2) / 2} ${slot.bridgeY - 4}, ${(x1 + x2) / 2} ${next.bridgeY - 4}, ${x2} ${next.bridgeY}`}
+            stroke={gold ? `url(#${defsId}-gold)` : `url(#${defsId}-bridge)`}
+            strokeWidth={aspect === 'buccal' ? 8 : 6}
+            fill="none"
+            strokeLinecap="round"
+          />
+        );
+      })}
+      {slots.map((slot) => {
+        const profile = toothProfile(slot.tooth);
+        const visual = visuals.get(slot.tooth)!;
+        const on = selected === slot.tooth || band.includes(slot.tooth);
+        const place = aspect === 'buccal'
+          ? `translate(${slot.x} ${slot.y}) rotate(${slot.rot}) translate(${-50 * slot.sx} 0) scale(${slot.sx} ${slot.sy})`
+          : `translate(${slot.x} ${slot.y}) rotate(${slot.rot}) translate(${-50 * slot.sx} ${-50 * slot.sy}) scale(${slot.sx} ${slot.sy})`;
+        return (
+          <g key={slot.tooth} data-tooth={slot.tooth} className={`fx-slot${on ? ' on' : ''}${pulse?.includes(slot.tooth) ? ' hot' : ''}${visual.planned ? ' plan' : ''}`}>
+            <g className="fx-lift" filter={on ? `url(#${defsId}-glow)` : undefined}>
+              <g transform={place}>
+                <ToothGlyph profile={profile} mode={aspect} visual={visual} gid={defsId} onSurface={(surface) => onSurface(slot.tooth, surface)} />
+              </g>
+            </g>
+            {aspect === 'occlusal' && slot.sx >= 0.46 && faceAnchors(profile.mirror).map((label) => {
+              const [x, y] = project(slot, label.x, label.y);
+              return (
+                <text key={label.id} className="fx-face" x={x} y={y} textAnchor="middle">{label.id}</text>
+              );
+            })}
+            <text className="fx-num" x={slot.lx} y={slot.ly} textAnchor="middle">{slot.tooth}</text>
+          </g>
+        );
+      })}
+    </svg>
   );
+});
+
+function project(slot: Slot, x: number, y: number) {
+  const dx = (x - 50) * slot.sx;
+  const dy = (y - 50) * slot.sy;
+  const theta = (slot.rot * Math.PI) / 180;
+  const rx = dx * Math.cos(theta) - dy * Math.sin(theta);
+  const ry = dx * Math.sin(theta) + dy * Math.cos(theta);
+  return [slot.x + rx, slot.y + ry];
 }
 
-function isUpper(tooth: number) {
-  const quadrant = Math.floor(tooth / 10);
-  return quadrant === 1 || quadrant === 2 || quadrant === 5 || quadrant === 6;
+function buccalSlots(teeth: number[], upper: boolean): Slot[] {
+  const scale = 0.6;
+  const widths = teeth.map((tooth) => toothProfile(tooth).width * 100 * scale);
+  const gap = teeth.length > 12 ? 5 : 16;
+  const total = widths.reduce((sum, width) => sum + width, 0) + gap * (teeth.length - 1);
+  let cursor = (1000 - total) / 2;
+  return teeth.map((tooth, index) => {
+    const width = widths[index];
+    const t = teeth.length === 1 ? 0.5 : index / (teeth.length - 1);
+    const mid = t - 0.5;
+    const smile = (0.25 - mid * mid) * 64;
+    const x = cursor + width / 2;
+    cursor += width + gap;
+    const y = upper ? 34 + smile : 20 + (16 - smile * 0.7);
+    const sx = width / 100;
+    return {
+      tooth,
+      x,
+      y,
+      rot: mid * (upper ? 11 : -10),
+      lx: x,
+      ly: upper ? y - 8 : y + 180 * scale + 16,
+      sx,
+      sy: scale,
+      bridgeY: upper ? y + 148 * scale : y + 34 * scale,
+    };
+  });
 }
 
-function face(tooth: number, surface: string, surfaces: ChartSurface[], items: ChartItem[], view: 'before' | 'plan' | 'after') {
-  const current = surfaces.find((row) => row.toothNum === tooth && (row.surface === surface || (surface !== 'TOOTH' && row.surface === 'TOOTH' && (row.condition === 'MISSING' || row.condition === 'IMPLANT' || row.condition === 'TO_EXTRACT'))));
-  const planned = items.find((item) => item.status !== 'REJECTED' && item.status !== 'DONE' && item.toothNum === tooth && (item.surfaces.length === 0 || item.surfaces.includes(surface) || item.surfaces.includes('TOOTH')));
-  if (view === 'plan' && planned) return { color: COLOR.PLANNED, planned: true };
-  if (view === 'after' && planned) return { color: COLOR[planned.result] ?? COLOR.FILLED, planned: false };
-  const condition = current?.condition ?? 'HEALTHY';
-  return { color: COLOR[condition] ?? 'transparent', planned: false };
+function occlusalSlots(teeth: number[], upper: boolean): Slot[] {
+  const cx = 400;
+  const rx = 348;
+  const ry = 292;
+  const cy = upper ? 64 : 430;
+  const samples: { x: number; y: number; angle: number; dist: number }[] = [];
+  let dist = 0;
+  let prev: { x: number; y: number } | null = null;
+  for (let step = 0; step <= 400; step += 1) {
+    const angle = Math.PI * (1 - step / 400);
+    const x = cx + Math.cos(angle) * rx;
+    const y = upper ? cy + Math.sin(angle) * ry : cy - Math.sin(angle) * ry;
+    if (prev) dist += Math.hypot(x - prev.x, y - prev.y);
+    samples.push({ x, y, angle, dist });
+    prev = { x, y };
+  }
+  let sizes = teeth.map((tooth) => toothProfile(tooth).width * 62);
+  const sum = sizes.reduce((total, size) => total + size, 0);
+  const gaps = Math.max(1, teeth.length - 1);
+  const fit = sum + gaps * 3 > dist ? (dist - gaps * 3) / sum : 1;
+  sizes = sizes.map((size) => size * fit);
+  const gap = (dist - sizes.reduce((total, size) => total + size, 0)) / gaps;
+  let cursor = 0;
+  return teeth.map((tooth, index) => {
+    const size = sizes[index];
+    const target = cursor + size / 2;
+    cursor += size + gap;
+    let slot = samples[0];
+    for (const sample of samples) if (Math.abs(sample.dist - target) < Math.abs(slot.dist - target)) slot = sample;
+    const angleDeg = (slot.angle * 180) / Math.PI;
+    const rot = upper ? 90 - angleDeg : angleDeg + 90;
+    const outX = Math.cos(slot.angle);
+    const outY = upper ? Math.sin(slot.angle) : -Math.sin(slot.angle);
+    const label = size / 2 + 16;
+    return {
+      tooth,
+      x: slot.x,
+      y: slot.y,
+      rot,
+      lx: slot.x + outX * label,
+      ly: slot.y + outY * label + 4,
+      sx: size / 100,
+      sy: size / 100,
+      bridgeY: slot.y,
+    };
+  });
 }

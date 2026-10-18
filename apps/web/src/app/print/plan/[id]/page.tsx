@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Protected } from '@/components/protected';
 import { BreakdownTable } from '@/components/studio/breakdown-table';
+import { ToothChart, type ChartItem } from '@/components/studio/chart';
 import { api } from '@/lib/api';
 import { consumablesFor, patientLines, type CatalogService, type CatalogStock } from '@/lib/breakdown';
 import { formatMoney } from '@/lib/format';
@@ -61,6 +62,19 @@ function SheetBody() {
           </div>
         </header>
         <p>Гарантия {data.plan.guaranteeMonths} мес. · срок около {data.plan.durationWeeks} нед. · цена действительна 14 дней.</p>
+        <h2>Зубная формула</h2>
+        <ToothChart
+          surfaces={[]}
+          items={planTeeth(data.plan)}
+          view="plan"
+          formula="ADULT"
+          condition="CARIES"
+          selected={null}
+          quiet
+          onCondition={() => undefined}
+          onPaint={() => undefined}
+          onSelect={() => undefined}
+        />
         <h2>Этапы</h2>
         <PlanStages plan={data.plan} catalog={catalog} />
         <p className="pr-grand">Итого {formatMoney(data.plan.total)}</p>
@@ -90,6 +104,19 @@ function SheetBody() {
       </article>
     </div>
   );
+}
+
+function planTeeth(plan: PlanCard): ChartItem[] {
+  const stages: Phase[] = plan.phases.length
+    ? plan.phases
+    : [{ id: 'loose', title: 'Позиции', specialty: null, healingDays: 0, dependsOnTitle: null, waitDays: 0, items: plan.looseItems }];
+  return stages.flatMap((phase) => phase.items.map((item) => ({
+    toothNum: item.toothNum,
+    surfaces: item.surfaces,
+    result: item.result,
+    status: item.status,
+    title: item.title,
+  })));
 }
 
 function PlanStages({ plan, catalog }: { plan: PlanCard; catalog: { services: CatalogService[]; stock: CatalogStock[] } }) {

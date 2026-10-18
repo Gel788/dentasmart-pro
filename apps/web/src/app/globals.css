@@ -405,6 +405,37 @@ html.dark .sd-seg button.on { background: var(--accent-soft); }
 }
 html.dark .sd-alertbar { background: linear-gradient(180deg, rgba(251, 113, 133, 0.12), var(--surface)); }
 
+.fx { display: grid; gap: 8px; width: 100%; min-width: 0; user-select: none; }
+.fx-tools, .fx-zoombar, .fx-legend { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fx-zoombar { margin-left: auto; }
+.fx-zoombar button { width: 28px; height: 28px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); }
+.fx-faces { color: var(--muted); font-size: 12px; letter-spacing: 0.01em; }
+.fx-legend .sd-chip { display: inline-flex; align-items: center; gap: 6px; }
+.fx-legend i { width: 8px; height: 8px; border-radius: 99px; display: inline-block; }
+.fx-scroll { overflow: auto; max-width: 100%; padding: 6px 0 10px; touch-action: none; }
+.fx-board { transform-origin: top center; transition: transform 180ms ease; }
+.fx-arch { display: block; width: 100%; height: auto; overflow: visible; font-family: inherit; }
+.fx-arch + .fx-arch { margin-top: 2px; }
+.fx-slot { cursor: pointer; }
+.fx-lift { transform-box: fill-box; transform-origin: center; transition: transform 180ms cubic-bezier(.2,.8,.2,1), filter 180ms ease; }
+.fx-surf { cursor: pointer; }
+.fx-num { font-size: 13px; fill: var(--muted, #78716c); font-variant-numeric: tabular-nums; }
+.fx-face { font-size: 10px; fill: #8a7260; font-weight: 600; pointer-events: none; }
+.fx-slot.on .fx-lift, .fx-slot.hot .fx-lift { animation: fx-pulse 1.25s ease-in-out infinite; }
+.fx-spot { transition: opacity 280ms ease; }
+@keyframes fx-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+@media (hover: hover) {
+  .fx-slot:hover .fx-lift { transform: translateY(-4px); filter: drop-shadow(0 8px 6px rgba(15, 118, 110, 0.28)); }
+  .fx-surf:hover { fill: rgba(45, 212, 191, 0.28); }
+}
+@media print {
+  .fx-tools, .fx-legend, .fx-zoombar { display: none !important; }
+  .fx-board { transform: none !important; }
+  .pr-page .fx-arch { break-inside: avoid; }
+}
 .sd-toothgrid { display: flex; flex-direction: column; gap: 10px; padding: 8px 0 4px; width: 100%; min-width: 0; overflow: hidden; }
 .sd-arch { display: flex; justify-content: center; align-items: flex-start; gap: 2px; width: 100%; min-width: 0; flex-wrap: nowrap; }
 .sd-arch .gap { flex: 0 0 10px; width: 10px; }
