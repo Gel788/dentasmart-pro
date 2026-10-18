@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ToothChart, type ChartItem, type ChartSurface } from '@/components/studio/chart';
+import { ToothFocus } from '@/components/studio/tooth-focus';
 import { PricePicker, type PriceService } from '@/components/studio/price-picker';
 import { BreakdownTable } from '@/components/studio/breakdown-table';
 import { api } from '@/lib/api';
@@ -49,6 +50,7 @@ export function PlanJourney({
   const plan = plans.find((item) => item.id === activeId) ?? plans[0];
   const economy = plans.find((item) => item.tier === 'ECONOM');
   const [tooth, setTooth] = useState<number | null>(null);
+  const [face, setFace] = useState('TOOTH');
   const [picker, setPicker] = useState<{ phaseId: string; tooth: number | null } | null>(null);
   const [discount, setDiscount] = useState(plan?.discountPercent ?? 0);
   const [disclosure, setDisclosure] = useState(plan?.showBreakdown !== false);
@@ -63,6 +65,10 @@ export function PlanJourney({
   useEffect(() => { setPayMonths(plan && plan.installmentMonths >= 2 ? plan.installmentMonths : 1); }, [plan?.id, plan?.installmentMonths]);
   useEffect(() => { setDisclosure(plan?.showBreakdown !== false); }, [plan?.id, plan?.showBreakdown]);
   useEffect(() => { setPicker(null); setTooth(null); }, [plan?.id]);
+  useEffect(() => {
+    if (tooth == null) return;
+    document.querySelector('.jn-road li.hot')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [tooth, plan?.id]);
   useEffect(() => {
     api<{ services: CatalogService[]; stock: CatalogStock[]; aiPlans?: boolean }>('/config')
       .then((data) => {
@@ -174,12 +180,27 @@ export function PlanJourney({
             onCondition={() => undefined}
             onPaint={() => undefined}
             quiet
-            onSelect={(next) => {
+            onSelect={(next, surface) => {
               setTooth(next);
-              if (marker.current?.(next)) return;
-              setPicker({ phaseId: picker?.phaseId ?? defaultPhaseId(), tooth: next });
+              setFace(surface || 'TOOTH');
+              marker.current?.(next);
             }}
           />
+          {tooth != null && (
+            <ToothFocus
+              tooth={tooth}
+              surface={face}
+              surfaces={surfaces}
+              services={visibleItems.filter((item) => item.toothNum === tooth).map((item) => ({ id: item.id, title: item.title, status: item.status }))}
+              onStatus={(condition, surface) => {
+                void api(`/workspace/patients/${patientId}/chart`, {
+                  method: 'POST',
+                  body: JSON.stringify({ toothNum: tooth, surface, condition, diagnosis: 'Осмотр' }),
+                }).then(() => onAdded()).catch((err: Error) => setSaved(err.message));
+              }}
+              onAdd={plan ? () => setPicker({ phaseId: defaultPhaseId(), tooth }) : undefined}
+            />
+          )}
           {tooth && <button className="sd-btn-ghost" type="button" onClick={() => setTooth(null)}>Показать все зубы</button>}
         </section>
         {plan && <section className="jn-road">

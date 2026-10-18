@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, useCallback, useEffect, useId, useRef, useState } from 'react';
-import { ToothDefs, ToothGlyph, faceAnchors, toothProfile, visualsFor, type Visual } from '@/components/studio/tooth-art';
+import { ToothDefs, ToothGlyph, faceAnchors, toothDraw, toothProfile, visualsFor, type Visual } from '@/components/studio/tooth-art';
 
 const UPPER = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
 const LOWER = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
@@ -42,7 +42,7 @@ export function ToothChart({
   selected: number | null;
   onCondition: (id: string) => void;
   onPaint: (tooth: number, surface: string) => void;
-  onSelect: (tooth: number) => void;
+  onSelect: (tooth: number, surface: string) => void;
   quiet?: boolean;
   pulse?: number[];
 }) {
@@ -77,14 +77,23 @@ export function ToothChart({
 
   const onSurface = useCallback((tooth: number, surface: string) => {
     if (drag.current.moved) return;
-    selectRef.current(tooth);
+    selectRef.current(tooth, surface);
     paintRef.current(tooth, surface);
   }, []);
 
-  const toothAt = (x: number, y: number) => {
-    const node = document.elementFromPoint(x, y)?.closest('[data-tooth]');
-    const value = Number(node?.getAttribute('data-tooth'));
-    return Number.isFinite(value) ? value : null;
+  const hitAt = (x: number, y: number) => {
+    const stack = document.elementsFromPoint(x, y);
+    for (const node of stack) {
+      if (!(node instanceof Element)) continue;
+      const slot = node.closest('[data-tooth]');
+      if (!slot) continue;
+      const tooth = Number(slot.getAttribute('data-tooth'));
+      if (!Number.isFinite(tooth)) continue;
+      const surface = node.closest('[data-surface]')?.getAttribute('data-surface')
+        ?? (aspect === 'occlusal' ? 'O' : 'TOOTH');
+      return { tooth, surface };
+    }
+    return null;
   };
 
   return (
@@ -137,12 +146,12 @@ export function ToothChart({
           if (!drag.current.on || !prev) return;
           if (Math.hypot(event.clientX - prev.x, event.clientY - prev.y) > 6) drag.current.moved = true;
           if (!drag.current.moved) return;
-          const tooth = toothAt(event.clientX, event.clientY);
+          const tooth = hitAt(event.clientX, event.clientY)?.tooth ?? null;
           if (tooth == null) return;
           setBand((current) => current.includes(tooth) ? current : [...current, tooth]);
           if (!quiet && !drag.current.painted.has(tooth)) {
             drag.current.painted.add(tooth);
-            selectRef.current(tooth);
+            selectRef.current(tooth, aspect === 'occlusal' ? 'O' : 'TOOTH');
             paintRef.current(tooth, aspect === 'occlusal' ? 'O' : 'TOOTH');
           }
         }}
@@ -152,9 +161,15 @@ export function ToothChart({
           if (!drag.current.on) return;
           const moved = drag.current.moved;
           drag.current.on = false;
-          if (moved && quiet) {
-            const tooth = toothAt(event.clientX, event.clientY);
-            if (tooth != null) selectRef.current(tooth);
+          const hit = hitAt(event.clientX, event.clientY);
+          if (hit && !moved) {
+            // Pointer capture retargets the click onto the scroll box, so the
+            // glyph's own click never arrives. Select and paint here instead.
+            drag.current.moved = true;
+            selectRef.current(hit.tooth, hit.surface);
+            paintRef.current(hit.tooth, hit.surface);
+          } else if (hit && moved && quiet) {
+            selectRef.current(hit.tooth, hit.surface);
           }
           setBand([]);
         }}
@@ -221,13 +236,13 @@ const Arch = memo(function Arch({
   const upper = toothProfile(teeth[0]).jaw === 'upper';
   const slots = aspect === 'buccal' ? buccalSlots(teeth, upper) : occlusalSlots(teeth, upper);
   const box = aspect === 'buccal'
-    ? { w: 1000, h: upper ? 186 : 196 }
-    : { w: 800, h: upper ? 480 : 520 };
+    ? { x: 0, y: upper ? 0 : -30, w: 1000, h: upper ? 250 : 240 }
+    : { x: 0, y: 0, w: 800, h: upper ? 480 : 520 };
   const visuals = new Map<number, Visual>();
   for (const slot of slots) visuals.set(slot.tooth, visualsFor(slot.tooth, surfaces, items, view));
   const defsId = `${gid}-${teeth[0]}`;
   return (
-    <svg className={`fx-arch ${aspect}`} viewBox={`0 0 ${box.w} ${box.h}`} role="img" aria-label={upper ? 'Верхняя челюсть' : 'Нижняя челюсть'}>
+    <svg className={`fx-arch ${aspect}`} viewBox={`${box.x} ${box.y} ${box.w} ${box.h}`} role="img" aria-label={upper ? 'Верхняя челюсть' : 'Нижняя челюсть'}>
       <ToothDefs id={defsId} />
       {slots.slice(0, -1).map((slot, index) => {
         const next = slots[index + 1];
@@ -248,22 +263,27 @@ const Arch = memo(function Arch({
           />
         );
       })}
-      {slots.map((slot) => {
+      {slots.map((slot, index) => {
         const profile = toothProfile(slot.tooth);
         const visual = visuals.get(slot.tooth)!;
+        const draw = toothDraw(slot.tooth);
+        const gh = aspect === 'buccal' ? draw.glyphH : draw.occH;
+        const prev = index > 0 ? visuals.get(slots[index - 1].tooth) : undefined;
+        const next = index < slots.length - 1 ? visuals.get(slots[index + 1].tooth) : undefined;
+        const pontic = visual.missing && !!prev?.crown && !!next?.crown;
         const on = selected === slot.tooth || band.includes(slot.tooth);
         const place = aspect === 'buccal'
           ? `translate(${slot.x} ${slot.y}) rotate(${slot.rot}) translate(${-50 * slot.sx} 0) scale(${slot.sx} ${slot.sy})`
-          : `translate(${slot.x} ${slot.y}) rotate(${slot.rot}) translate(${-50 * slot.sx} ${-50 * slot.sy}) scale(${slot.sx} ${slot.sy})`;
+          : `translate(${slot.x} ${slot.y}) rotate(${slot.rot}) translate(${-50 * slot.sx} ${-(gh / 2) * slot.sy}) scale(${slot.sx} ${slot.sy})`;
         return (
           <g key={slot.tooth} data-tooth={slot.tooth} className={`fx-slot${on ? ' on' : ''}${pulse?.includes(slot.tooth) ? ' hot' : ''}${visual.planned ? ' plan' : ''}`}>
             <g className="fx-lift" filter={on ? `url(#${defsId}-glow)` : undefined}>
               <g transform={place}>
-                <ToothGlyph profile={profile} mode={aspect} visual={visual} gid={defsId} onSurface={(surface) => onSurface(slot.tooth, surface)} />
+                <ToothGlyph tooth={slot.tooth} profile={profile} mode={aspect} visual={visual} gid={defsId} pontic={pontic} onSurface={(surface) => onSurface(slot.tooth, surface)} />
               </g>
             </g>
-            {aspect === 'occlusal' && slot.sx >= 0.46 && faceAnchors(profile.mirror).map((label) => {
-              const [x, y] = project(slot, label.x, label.y);
+            {aspect === 'occlusal' && slot.sx >= 0.34 && faceAnchors(slot.tooth).map((label) => {
+              const [x, y] = project(slot, label.x, label.y, gh);
               return (
                 <text key={label.id} className="fx-face" x={x} y={y} textAnchor="middle">{label.id}</text>
               );
@@ -276,9 +296,9 @@ const Arch = memo(function Arch({
   );
 });
 
-function project(slot: Slot, x: number, y: number) {
+function project(slot: Slot, x: number, y: number, gh: number) {
   const dx = (x - 50) * slot.sx;
-  const dy = (y - 50) * slot.sy;
+  const dy = (y - gh / 2) * slot.sy;
   const theta = (slot.rot * Math.PI) / 180;
   const rx = dx * Math.cos(theta) - dy * Math.sin(theta);
   const ry = dx * Math.sin(theta) + dy * Math.cos(theta);
@@ -286,30 +306,38 @@ function project(slot: Slot, x: number, y: number) {
 }
 
 function buccalSlots(teeth: number[], upper: boolean): Slot[] {
-  const scale = 0.6;
-  const widths = teeth.map((tooth) => toothProfile(tooth).width * 100 * scale);
-  const gap = teeth.length > 12 ? 5 : 16;
+  const height = 118;
+  const widths = teeth.map((tooth) => {
+    const baby = toothProfile(tooth).deciduous ? 0.78 : 1;
+    return height * toothDraw(tooth).aspect * baby;
+  });
+  const gap = teeth.length > 12 ? 3 : 12;
   const total = widths.reduce((sum, width) => sum + width, 0) + gap * (teeth.length - 1);
   let cursor = (1000 - total) / 2;
   return teeth.map((tooth, index) => {
+    const profile = toothProfile(tooth);
+    const baby = profile.deciduous ? 0.78 : 1;
+    const draw = toothDraw(tooth);
     const width = widths[index];
+    const thisH = height * baby;
     const t = teeth.length === 1 ? 0.5 : index / (teeth.length - 1);
     const mid = t - 0.5;
-    const smile = (0.25 - mid * mid) * 64;
+    const smile = (0.25 - mid * mid) * 56;
     const x = cursor + width / 2;
     cursor += width + gap;
-    const y = upper ? 34 + smile : 20 + (16 - smile * 0.7);
+    const y = upper ? 30 + smile + (height - thisH) : 8 + (18 - smile * 0.45);
     const sx = width / 100;
+    const sy = thisH / draw.glyphH;
     return {
       tooth,
       x,
       y,
-      rot: mid * (upper ? 11 : -10),
+      rot: mid * (upper ? 8 : -7),
       lx: x,
-      ly: upper ? y - 8 : y + 180 * scale + 16,
+      ly: upper ? y - 8 : y + thisH + 14,
       sx,
-      sy: scale,
-      bridgeY: upper ? y + 148 * scale : y + 34 * scale,
+      sy,
+      bridgeY: upper ? y + thisH - 16 : y + 14,
     };
   });
 }
@@ -330,7 +358,12 @@ function occlusalSlots(teeth: number[], upper: boolean): Slot[] {
     samples.push({ x, y, angle, dist });
     prev = { x, y };
   }
-  let sizes = teeth.map((tooth) => toothProfile(tooth).width * 62);
+  let sizes = teeth.map((tooth) => {
+    const draw = toothDraw(tooth);
+    const baby = toothProfile(tooth).deciduous ? 0.8 : 1;
+    const designed = toothProfile(tooth).width * 52 * baby;
+    return designed * Math.max(1, draw.occH / 100);
+  });
   const sum = sizes.reduce((total, size) => total + size, 0);
   const gaps = Math.max(1, teeth.length - 1);
   const fit = sum + gaps * 3 > dist ? (dist - gaps * 3) / sum : 1;
@@ -347,7 +380,8 @@ function occlusalSlots(teeth: number[], upper: boolean): Slot[] {
     const rot = upper ? 90 - angleDeg : angleDeg + 90;
     const outX = Math.cos(slot.angle);
     const outY = upper ? Math.sin(slot.angle) : -Math.sin(slot.angle);
-    const label = size / 2 + 16;
+    const label = size / 2 + 14;
+    const scale = size / Math.max(100, toothDraw(tooth).occH);
     return {
       tooth,
       x: slot.x,
@@ -355,8 +389,8 @@ function occlusalSlots(teeth: number[], upper: boolean): Slot[] {
       rot,
       lx: slot.x + outX * label,
       ly: slot.y + outY * label + 4,
-      sx: size / 100,
-      sy: size / 100,
+      sx: scale,
+      sy: scale,
       bridgeY: slot.y,
     };
   });

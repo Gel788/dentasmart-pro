@@ -962,6 +962,14 @@ function visitAction(bag: Bag, id: string, action: string, data: AnyRec) {
 
 function paint(bag: Bag, patientId: string, data: AnyRec) {
   const card = bag.gets[`/workspace/patients/${patientId}/card`] as AnyRec;
+  const whole = new Set(['CROWN', 'IMPLANT', 'MISSING', 'TO_EXTRACT', 'ROOT_CANAL']);
+  card.chart.surfaces = (card.chart.surfaces as AnyRec[]).filter((row) => {
+    if (row.toothNum !== data.toothNum) return true;
+    if (row.surface === data.surface) return false;
+    if (data.condition === 'MISSING') return false;
+    if (whole.has(String(data.condition)) && whole.has(String(row.condition))) return false;
+    return true;
+  });
   card.chart.surfaces.push({ toothNum: data.toothNum, formula: 'ADULT', surface: data.surface, condition: data.condition, layer: 'CURRENT' });
   card.chart.events.unshift({ id: uid(), toothNum: data.toothNum, note: data.diagnosis ?? null, condition: data.condition, at: anchorNow() });
   return { ok: true };

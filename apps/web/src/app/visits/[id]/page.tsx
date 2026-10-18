@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Protected } from '@/components/protected';
 import { ToothChart, type ChartSurface } from '@/components/studio/chart';
+import { ToothFocus } from '@/components/studio/tooth-focus';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { formatMoney } from '@/lib/format';
@@ -26,7 +27,7 @@ type Visit = {
   patient: { id: string; firstName: string; lastName: string; phone: string | null; allergies: string[]; anxiety: string; pregnant: boolean; anticoagulant: boolean; contraindications: string | null };
   note: { complaints: string; anamnesis: string; objective: string; diagnosis: string; treatment: string; recommendations: string } | null;
 };
-type PlanItem = { id: string; title: string; toothNum: number | null; price: number; status: string };
+type PlanItem = { id: string; title: string; toothNum: number | null; price: number; status: string; surfaces?: string[]; result?: string };
 type KitLine = { name: string; qty: number; cost: number };
 
 const TEMPLATES = [
@@ -59,6 +60,8 @@ function Cockpit() {
   const [library, setLibrary] = useState<{ id: string; label: string; note: typeof TEMPLATES[number]['note'] }[]>([]);
   const [spoken, setSpoken] = useState<ChartSurface[]>([]);
   const [hot, setHot] = useState<number[]>([]);
+  const [tooth, setTooth] = useState<number | null>(null);
+  const [face, setFace] = useState('TOOTH');
 
   const load = () => api<Visit>(`/flow/visits/${params.id}`).then((data) => {
     setVisit(data);
@@ -66,7 +69,8 @@ function Cockpit() {
     setKit(kitFor(data.service));
     api<{ chart: { surfaces: ChartSurface[] }; families: { plans: { tier: string | null; phases: { items: PlanItem[] }[]; looseItems: PlanItem[] }[] }[] }>(`/workspace/patients/${data.patient.id}/card`).then((card) => {
       setSurfaces(card.chart.surfaces);
-      const plan = card.families[0]?.plans.find((item) => item.tier === 'OPTIMUM') ?? card.families[0]?.plans[0];
+      const family = [...card.families].sort((a, b) => b.plans.length - a.plans.length)[0];
+      const plan = family?.plans.find((item) => item.tier === 'OPTIMUM') ?? family?.plans[0];
       const lines = plan ? [...plan.phases.flatMap((phase) => phase.items), ...plan.looseItems] : [];
       setItems(lines);
     }).catch(() => undefined);
@@ -168,12 +172,40 @@ function Cockpit() {
             </div>
           )}
           {items.slice(0, 6).map((item) => (
-            <label key={item.id} className={`ck-item ${done[item.id] ? 'on' : ''}`}>
+            <label key={item.id} className={`ck-item ${done[item.id] ? 'on' : ''} ${tooth != null && tooth === item.toothNum ? 'hot' : ''}`}>
               <input type="checkbox" checked={!!done[item.id]} onChange={(event) => setDone({ ...done, [item.id]: event.target.checked })} />
               <span><b>{item.toothNum ? `Зуб ${item.toothNum}` : item.title}</b><div className="sd-muted">{item.title} · {formatMoney(item.price)}</div></span>
             </label>
           ))}
-          <ToothChart surfaces={[...surfaces, ...spoken]} items={[]} view="before" formula="ADULT" condition="CARIES" selected={null} quiet pulse={hot} onCondition={() => undefined} onPaint={() => undefined} onSelect={() => undefined} />
+          <ToothChart
+            surfaces={[...surfaces, ...spoken]}
+            items={items.map((item) => ({ toothNum: item.toothNum, surfaces: item.surfaces ?? [], result: item.result ?? 'FILLED', status: item.status, title: item.title }))}
+            view="plan"
+            formula="ADULT"
+            condition="CARIES"
+            selected={tooth}
+            quiet
+            pulse={hot}
+            onCondition={() => undefined}
+            onPaint={() => undefined}
+            onSelect={(next, surface) => { setTooth(next); setFace(surface || 'TOOTH'); }}
+          />
+          {tooth != null && (
+            <ToothFocus
+              tooth={tooth}
+              surface={face}
+              surfaces={[...surfaces, ...spoken]}
+              services={items.filter((item) => item.toothNum === tooth).map((item) => ({ id: item.id, title: item.title, status: item.status }))}
+              onStatus={medical ? (condition, surface) => {
+                void api(`/workspace/patients/${visit.patient.id}/chart`, {
+                  method: 'POST',
+                  body: JSON.stringify({ toothNum: tooth, surface, condition, diagnosis: 'Приём' }),
+                }).then(() => api<{ chart: { surfaces: ChartSurface[] } }>(`/workspace/patients/${visit.patient.id}/card`))
+                  .then((card) => setSurfaces(card.chart.surfaces))
+                  .catch((err: Error) => setError(err.message));
+              } : undefined}
+            />
+          )}
           <details className="xr-fold">
             <summary>Снимок</summary>
             <XrayAssistant patientId={visit.patient.id} primary={false} />

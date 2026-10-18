@@ -47,6 +47,7 @@ function CardScreen() {
   const [formula, setFormula] = useState<'ADULT' | 'CHILD' | 'MIXED'>('ADULT');
   const [tool, setTool] = useState('CARIES');
   const [tooth, setTooth] = useState<number | null>(16);
+  const [face, setFace] = useState('TOOTH');
   const [activePlan, setActivePlan] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
 
@@ -176,7 +177,7 @@ function CardScreen() {
               selected={tooth}
               onCondition={setTool}
               onPaint={paint}
-              onSelect={setTooth}
+              onSelect={(next, surface) => { setTooth(next); setFace(surface || 'TOOTH'); }}
             />
           ) : (
             <PerioChart
@@ -189,7 +190,7 @@ function CardScreen() {
           )}
           {tooth && (
             <div>
-              <strong>Зуб {tooth}</strong>
+              <strong>Зуб {tooth}{face !== 'TOOTH' ? ` · ${face}` : ''}</strong>
               {history.length === 0 && <p className="sd-muted">Истории пока нет.</p>}
               {history.map((event) => <div key={event.id} className="sd-muted">{new Date(event.at).toLocaleDateString('ru-RU')} · {event.condition}{event.note ? ` · ${event.note}` : ''}</div>)}
             </div>
