@@ -176,19 +176,15 @@ export function readPatients(sheet: Sheet, map: Record<string, string>): { rows:
     } else if (digits.length >= 10) {
       const key = digits.slice(-10);
       const prev = seenPhones.get(key);
-      if (prev) issues.push({ level: 'skip', reason: `Дубль телефона (${prev})`, row: rowNumber, name });
+      if (prev) issues.push({ level: 'warn', reason: `Дубль телефона (${prev})`, row: rowNumber, name });
       else seenPhones.set(key, name);
-      if (prev) return;
       draft.phone = `+${digits}`;
     }
     const nameKey = norm(`${draft.lastName} ${draft.firstName} ${draft.middleName}`);
     if (!draft.phone && nameKey) {
       const prev = seenNames.get(nameKey);
-      if (prev) {
-        issues.push({ level: 'skip', reason: 'Дубль ФИО', row: rowNumber, name });
-        return;
-      }
-      seenNames.set(nameKey, rowNumber);
+      if (prev) issues.push({ level: 'warn', reason: 'Дубль ФИО', row: rowNumber, name });
+      else seenNames.set(nameKey, rowNumber);
     }
     const birth = parseDate(draft.birthDate);
     if (draft.birthDate && !birth) issues.push({ level: 'warn', reason: 'Дата рождения не читается', row: rowNumber, name });
@@ -198,10 +194,7 @@ export function readPatients(sheet: Sheet, map: Record<string, string>): { rows:
     draft.lastVisit = last ?? '';
     const visits = Number(String(draft.visits).replace(/\s/g, '').replace(',', '.'));
     const emptyCard = !draft.phone && !draft.lastVisit && !(visits > 0) && !draft.email;
-    if (emptyCard) {
-      issues.push({ level: 'skip', reason: 'Нет телефона и визитов', row: rowNumber, name });
-      return;
-    }
+    if (emptyCard) issues.push({ level: 'warn', reason: 'Нет телефона и визитов', row: rowNumber, name });
     draft.gender = genderOf(draft.gender);
     rows.push(draft);
   });

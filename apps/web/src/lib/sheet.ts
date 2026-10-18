@@ -1,3 +1,5 @@
+import { readBiffSheets } from './ole-biff';
+
 export type Sheet = { headers: string[]; rows: string[][] };
 
 export async function readTable(file: File): Promise<Sheet> {
@@ -29,8 +31,36 @@ export async function readWorkbook(file: File): Promise<{ name: string; sheet: S
 }
 
 async function readExcel(buf: ArrayBuffer) {
+  const head = new Uint8Array(buf.slice(0, 4));
+  const ole = head[0] === 0xd0 && head[1] === 0xcf && head[2] === 0x11 && head[3] === 0xe0;
+  const tolerant = ole ? biffSheets(buf) : [];
+  let parsed: { name: string; sheet: Sheet }[] = [];
+  try {
+    parsed = await readWithSheetJs(buf);
+  } catch { /* a short OLE chain still leaves the tolerant grid */ }
+  const chosen = rowCount(tolerant) >= rowCount(parsed) ? tolerant : parsed;
+  if (!chosen.some((item) => item.sheet.headers.some(Boolean))) throw new Error('Пустой лист');
+  return chosen;
+}
+
+function biffSheets(buf: ArrayBuffer) {
+  try {
+    return readBiffSheets(new Uint8Array(buf)).map((item) => ({
+      name: item.name,
+      sheet: { headers: item.headers, rows: item.rows },
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function rowCount(book: { sheet: Sheet }[]) {
+  return book.reduce((sum, item) => sum + item.sheet.rows.length, 0);
+}
+
+async function readWithSheetJs(buf: ArrayBuffer) {
   const XLSX = await import('xlsx');
-  const book = XLSX.read(buf, { type: 'array' });
+  const book = XLSX.read(buf, { type: 'array', WTF: true, cellNF: true });
   return book.SheetNames.map((name) => {
     const grid = XLSX.utils.sheet_to_json<(string | number | null)[]>(book.Sheets[name], { header: 1, raw: false, defval: '' });
     const headers = (grid[0] ?? []).map((cell) => String(cell ?? '').trim());
