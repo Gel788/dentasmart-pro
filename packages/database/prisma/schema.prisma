@@ -754,6 +754,8 @@ model TreatmentPlan {
   signedName        String?
   signedAt          DateTime?
   installmentMonths Int                 @default(0)
+  /// Whether the patient's copy shows what each price is made of.
+  showBreakdown     Boolean             @default(true)
   abandonedAt       DateTime?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt

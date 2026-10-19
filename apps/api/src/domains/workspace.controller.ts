@@ -9,7 +9,7 @@ import { OrgId } from '../common/org.decorator';
 import { ClinicalService } from './clinical.service';
 import { ImportPatientsDto } from './dto/import-patients.dto';
 import { PatientImportService } from './patient-import.service';
-import { WorkspaceService } from './workspace.service';
+import { WorkspaceService, type ComposeBody } from './workspace.service';
 
 @ApiTags('workspace')
 @ApiBearerAuth()
@@ -60,6 +60,13 @@ export class WorkspaceController {
       ...(price != null ? { price } : { discountPercent: discount }),
       ...(body.toothNum !== undefined ? { toothNum: body.toothNum } : {}),
     });
+  }
+
+  /** Whether the patient sees what each price is made of (owner only). */
+  @Post('plans/:planId/disclosure')
+  @RequirePermissions('org.manage')
+  disclosure(@OrgId() orgId: string, @Param('planId') planId: string, @Body() body: { showBreakdown?: boolean }) {
+    return this.workspace.setDisclosure(orgId, planId, body.showBreakdown !== false);
   }
 
   @Post('plans/:planId/installment')
@@ -123,6 +130,12 @@ export class WorkspaceController {
   @RequirePermissions('medical.read')
   family(@OrgId() orgId: string, @Param('familyKey') familyKey: string) {
     return this.workspace.family(orgId, familyKey);
+  }
+
+  @Post('plans/compose')
+  @RequirePermissions('medical.write')
+  compose(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Body() body: ComposeBody) {
+    return this.workspace.compose(orgId, body.patientId, user.employee?.id, body);
   }
 
   @Post('plans/from-chart')

@@ -160,30 +160,11 @@ export function PlanJourney({
 
   return (
     <div className="jn">
-      <AiPlan
-        patientId={patientId}
-        services={catalog.services}
-        enabled={aiOn}
-        owner={owner}
-        tooth={tooth}
-        surfaces={surfaces}
-        planId={plan?.id ?? null}
-        onBind={(handler) => { marker.current = handler; }}
-        onDone={async (nextId) => { if (nextId) onPick(nextId); await onAdded(); }}
-      />
-      {!plan && (
-        <div className="jn-empty">
-          <span />
-          <h2>Плана ещё нет</h2>
-          <p>Отметьте находки и соберите план за минуту. Или возьмите три варианта по уже отмеченной формуле.</p>
-          <button className="sd-btn-ghost" type="button" disabled={building} onClick={onBuild}>{building ? 'Собираем…' : 'Собрать по формуле'}</button>
-        </div>
-      )}
-      {plan && <div className="jn-tabs">
+      {plan && <div className="jn-tabs" role="group" aria-label="Варианты плана">
         {plans.map((item) => {
           const delta = economy ? item.total - economy.total : 0;
           return (
-            <button key={item.id} type="button" className={`jn-tab ${item.id === plan.id ? 'on' : ''} ${item.tier === 'OPTIMUM' ? 'rec' : ''}`} onClick={() => onPick(item.id)}>
+            <button key={item.id} type="button" aria-pressed={item.id === plan.id} className={`jn-tab ${item.id === plan.id ? 'on' : ''} ${item.tier === 'OPTIMUM' ? 'rec' : ''}`} onClick={() => onPick(item.id)}>
               {item.tier === 'OPTIMUM' && <em>рекомендуем</em>}
               <span>{item.tierLabel}</span>
               <strong>{formatMoney(item.total)}</strong>
@@ -194,7 +175,19 @@ export function PlanJourney({
         })}
       </div>}
       <div className="jn-stage">
-        <section className="jn-chart">
+        <div className="jn-left">
+        <AiPlan
+          patientId={patientId}
+          services={catalog.services}
+          enabled={aiOn}
+          owner={owner}
+          tooth={tooth}
+          surfaces={surfaces}
+          planId={plan?.id ?? null}
+          onBind={(handler) => { marker.current = handler; }}
+          onDone={async (nextId) => { if (nextId) onPick(nextId); await onAdded(); }}
+        />
+        <section className="jn-chart" aria-label="Зубная формула">
           <div className="jn-addbar">
             <p>Нажмите зуб, чтобы добавить услугу на него, или добавьте услугу без зуба</p>
             <button className="sd-btn-ghost" type="button" data-plan-add="global" disabled={starting} onClick={() => void openPicker(tooth)}>{starting ? 'Создаём план…' : '+ Услуга'}</button>
@@ -233,7 +226,19 @@ export function PlanJourney({
           )}
           {tooth && <button className="sd-btn-ghost" type="button" onClick={() => setTooth(null)}>Показать все зубы</button>}
         </section>
-        {plan && <section className="jn-road">
+        </div>
+        <div className="jn-side">
+        {!plan && (
+          <div className="jn-empty">
+            <h2>Плана ещё нет</h2>
+            <p>Отметьте находки слева и нажмите «Собрать план» — получится три варианта с этапами и ценами из прайса. Или добавьте услугу вручную.</p>
+            <div>
+              <button className="sd-btn" type="button" disabled={starting} onClick={() => void openPicker(tooth)}>{starting ? 'Создаём план…' : '+ Услуга'}</button>
+              <button className="sd-btn-ghost" type="button" disabled={building} onClick={onBuild}>{building ? 'Собираем…' : 'По отмеченной формуле'}</button>
+            </div>
+          </div>
+        )}
+        {plan && <section className="jn-road" aria-label="Этапы плана">
           {phases.map((phase, index) => {
             const current = phases.findIndex((item) => item.items.some((line) => line.status !== 'DONE' && line.status !== 'ACCEPTED'));
             const done = phase.items.filter((item) => item.status === 'DONE' || item.status === 'ACCEPTED').length;
@@ -268,32 +273,13 @@ export function PlanJourney({
             );
           })}
         </section>}
-      </div>
       {plan && <div className="jn-dock">
-        <div>
+        <div className="jn-sum">
           <span>Итого</span>
           <strong>{formatMoney(animated)}</strong>
+          {months > 1 && <small>{formatMoney(perMonth)}/мес · {months} мес.</small>}
         </div>
-        <label>Скидка, %
-          <input aria-label="Скидка, %" type="number" min={0} max={40} value={discount} onChange={(event) => setDiscount(Number(event.target.value))} />
-        </label>
-        {owner && (
-          <label className="jn-toggle">
-            <input
-              type="checkbox"
-              checked={disclosure}
-              onChange={(event) => {
-                const show = event.target.checked;
-                setDisclosure(show);
-                void api(`/workspace/plans/${plan.id}/disclosure`, { method: 'POST', body: JSON.stringify({ showBreakdown: show }) })
-                  .then(() => onAdded())
-                  .catch((err: Error) => setSaved(err.message));
-              }}
-            />
-            Показывать расшифровку
-          </label>
-        )}
-        <label>Оплата
+        <label className="jn-months">Оплата
           <select aria-label="Рассрочка" value={months} onChange={(event) => {
             const next = Number(event.target.value);
             setPayMonths(next);
@@ -307,18 +293,35 @@ export function PlanJourney({
             <option value={12}>12 месяцев</option>
           </select>
         </label>
-        <div>
-          <span>{months > 1 ? `Рассрочка ${months} мес.` : 'Одним платежом'}</span>
-          <strong>{formatMoney(perMonth)}{months > 1 ? '/мес' : ''}</strong>
-          {months > 1 && <small className="jn-pay">{schedule.map((part) => `${part.index}. ${formatMoney(part.amount)}`).join(' · ')}</small>}
-        </div>
         <div className="jn-actions">
           <details className="jn-more">
             <summary>Ещё</summary>
-            <button className="sd-btn-ghost" type="button" onClick={() => void api<{ id: string; note: string | null; createdAt: string }[]>(`/workspace/plans/${plan.id}/versions`).then(setVersions).catch((err: Error) => setSaved(err.message))}>Версии</button>
-            <button className="sd-btn-ghost" type="button" onClick={() => window.open(`/print/plan/${plan.id}`, '_blank')}>Печать</button>
-            <button className="sd-btn-ghost" type="button" onClick={() => void send()}>Ссылка</button>
-            <button className="sd-btn-ghost" type="button" onClick={() => familyKey && router.push(`/smile/${familyKey}`)}>3D</button>
+            <div className="jn-menu">
+              <label className="jn-discount">Скидка на план, %
+                <input aria-label="Скидка, %" type="number" min={0} max={40} value={discount} onChange={(event) => setDiscount(Number(event.target.value))} />
+              </label>
+              {owner && (
+                <label className="jn-toggle">
+                  <input
+                    type="checkbox"
+                    checked={disclosure}
+                    onChange={(event) => {
+                      const show = event.target.checked;
+                      setDisclosure(show);
+                      void api(`/workspace/plans/${plan.id}/disclosure`, { method: 'POST', body: JSON.stringify({ showBreakdown: show }) })
+                        .then(() => onAdded())
+                        .catch((err: Error) => setSaved(err.message));
+                    }}
+                  />
+                  Показывать расшифровку пациенту
+                </label>
+              )}
+              {months > 1 && <small className="jn-pay">{schedule.map((part) => `${part.index}. ${formatMoney(part.amount)}`).join(' · ')}</small>}
+              <button className="sd-btn-ghost" type="button" onClick={() => void api<{ id: string; note: string | null; createdAt: string }[]>(`/workspace/plans/${plan.id}/versions`).then(setVersions).catch((err: Error) => setSaved(err.message))}>Версии</button>
+              <button className="sd-btn-ghost" type="button" onClick={() => window.open(`/print/plan/${plan.id}`, '_blank')}>Печать</button>
+              <button className="sd-btn-ghost" type="button" onClick={() => void send()}>Ссылка</button>
+              <button className="sd-btn-ghost" type="button" onClick={() => familyKey && router.push(`/smile/${familyKey}`)}>3D</button>
+            </div>
           </details>
           <button className="sd-btn-ghost" type="button" onClick={() => void save()}>Сохранить</button>
           <button className="sd-btn-ghost" type="button" onClick={() => familyKey && router.push(`/present/${familyKey}`)}>Показать</button>
@@ -335,6 +338,8 @@ export function PlanJourney({
           </div>
         )}
       </div>}
+        </div>
+      </div>
       {picker && plan && (
         <PricePicker
           tooth={picker.tooth}
@@ -389,14 +394,20 @@ function ServiceLine({
     <li className={dim ? 'dim' : tooth === item.toothNum ? 'hot' : ''}>
       <span className="jn-badge">{item.toothNum ?? '—'}</span>
       <Mini surfaces={item.surfaces} />
-      <div>
+      <div className="jn-line">
         <b>{item.title}</b>
-        <span className="jn-edit">
-          <label>Кол-во<input aria-label={`Количество ${item.title}`} type="number" min={1} value={qty} onChange={(event) => { const next = Math.max(1, Number(event.target.value) || 1); setQty(next); commit({ qty: next, unitPrice: unit, discountPercent: lineDiscount, kit }); }} /></label>
-          <label>Цена<input aria-label={`Цена ${item.title}`} type="number" min={0} value={unit} onChange={(event) => { const next = Math.max(0, Number(event.target.value) || 0); setUnit(next); commit({ qty, unitPrice: next, discountPercent: lineDiscount, kit }); }} /></label>
-          <label>Скидка %<input aria-label={`Скидка ${item.title}`} type="number" min={0} max={100} value={lineDiscount} onChange={(event) => { const next = Math.min(100, Math.max(0, Number(event.target.value) || 0)); setLineDiscount(next); commit({ qty, unitPrice: unit, discountPercent: next, kit }); }} /></label>
-          <label>Расходники<input aria-label={`Расходники ${item.title}`} value={kit} onChange={(event) => { setKit(event.target.value); commit({ qty, unitPrice: unit, discountPercent: lineDiscount, kit: event.target.value }); }} /></label>
-        </span>
+        {(qty > 1 || lineDiscount > 0) && (
+          <small>{qty > 1 ? `${qty} × ${formatMoney(unit)}` : formatMoney(unit)}{lineDiscount > 0 ? ` − ${lineDiscount}%` : ''}</small>
+        )}
+        <details className="jn-line-edit">
+          <summary>Изменить</summary>
+          <span className="jn-edit">
+            <label>Кол-во<input aria-label={`Количество ${item.title}`} type="number" min={1} value={qty} onChange={(event) => { const next = Math.max(1, Number(event.target.value) || 1); setQty(next); commit({ qty: next, unitPrice: unit, discountPercent: lineDiscount, kit }); }} /></label>
+            <label>Цена<input aria-label={`Цена ${item.title}`} type="number" min={0} value={unit} onChange={(event) => { const next = Math.max(0, Number(event.target.value) || 0); setUnit(next); commit({ qty, unitPrice: next, discountPercent: lineDiscount, kit }); }} /></label>
+            <label>Скидка %<input aria-label={`Скидка ${item.title}`} type="number" min={0} max={100} value={lineDiscount} onChange={(event) => { const next = Math.min(100, Math.max(0, Number(event.target.value) || 0)); setLineDiscount(next); commit({ qty, unitPrice: unit, discountPercent: next, kit }); }} /></label>
+            <label>Расходники<input aria-label={`Расходники ${item.title}`} value={kit} onChange={(event) => { setKit(event.target.value); commit({ qty, unitPrice: unit, discountPercent: lineDiscount, kit: event.target.value }); }} /></label>
+          </span>
+        </details>
       </div>
       <em>{formatMoney(item.price)}</em>
       {show && (

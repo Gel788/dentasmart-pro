@@ -36,6 +36,19 @@ const CONSENT_TYPE_RU: Record<string, string> = {
 };
 const CONSENT_STATUS_RU: Record<string, string> = { PENDING: 'ждёт подписи', SIGNED: 'подписано', REVOKED: 'отозвано' };
 
+type ComposeLine = { code?: string; title?: string; toothNum?: number | null; qty?: number; unitPrice?: number; discountPercent?: number; durationMin?: number };
+type ComposePhase = { title?: string; specialty?: string; healingDays?: number; dependsOnTitle?: string | null; items?: ComposeLine[] };
+export type ComposeBody = {
+  patientId: string;
+  title?: string;
+  plans?: { tier: 'ECONOM' | 'OPTIMUM' | 'PREMIUM'; guaranteeMonths?: number; durationWeeks?: number; installmentMonths?: number; phases?: ComposePhase[] }[];
+};
+const TIERS = new Set(['ECONOM', 'OPTIMUM', 'PREMIUM']);
+const CHART_TEETH_SET = new Set([
+  ...[11, 12, 13, 14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33, 34, 35, 36, 37, 38, 41, 42, 43, 44, 45, 46, 47, 48],
+  ...[51, 52, 53, 54, 55, 61, 62, 63, 64, 65, 71, 72, 73, 74, 75, 81, 82, 83, 84, 85],
+]);
+
 @Injectable()
 export class WorkspaceService {
   constructor(
@@ -110,6 +123,12 @@ export class WorkspaceService {
           }
         : null,
     };
+  }
+
+  async setDisclosure(orgId: string, planId: string, show: boolean) {
+    const saved = await this.prisma.treatmentPlan.updateMany({ where: { id: planId, organizationId: orgId }, data: { showBreakdown: show } });
+    if (!saved.count) throw new NotFoundException('План не найден');
+    return { showBreakdown: show };
   }
 
   async setInstallment(orgId: string, planId: string, months: number) {
@@ -537,6 +556,82 @@ export class WorkspaceService {
     });
 
     return this.card(orgId, patientId);
+  }
+
+  /**
+   * Saves the three variants the plan builder composed from the findings. Lines are matched to the
+   * clinic's price list by code (or exact name); a unit price may differ from the list only within
+   * half to double of it, so a tampered request cannot price a crown at one rouble.
+   */
+  async compose(orgId: string, patientId: string, doctorId: string | undefined, body: ComposeBody) {
+    const patient = await this.prisma.patient.findFirst({ where: { id: patientId, organizationId: orgId } });
+    if (!patient) throw new NotFoundException('Пациент не найден');
+    const drafts = (body.plans ?? []).filter((plan) => TIERS.has(plan.tier)).slice(0, 3);
+    if (!drafts.length) throw new BadRequestException('План пустой');
+    const catalog = await this.catalog(orgId);
+    const byCode = new Map(catalog.filter((s) => s.code).map((s) => [String(s.code).toUpperCase(), s]));
+    const byName = new Map(catalog.map((s) => [s.name.trim().toLowerCase(), s]));
+    const familyKey = `family-${patientId.slice(-6)}-${Date.now().toString(36)}`;
+    const title = (body.title ?? '').trim().slice(0, 120) || 'План лечения';
+
+    const ids = await this.prisma.$transaction(async (tx) => {
+      const out: { tier: string; id: string }[] = [];
+      for (const draft of drafts) {
+        const phases = (draft.phases ?? []).slice(0, 12).map((phase, index, all) => {
+          const sort = index + 1;
+          const dependsOn = phase.dependsOnTitle ? all.findIndex((other) => other.title === phase.dependsOnTitle) : -1;
+          const items = (phase.items ?? []).slice(0, 64).map((line, order) => {
+            const service = byCode.get(String(line.code ?? '').toUpperCase()) ?? byName.get(String(line.title ?? '').trim().toLowerCase());
+            if (!service) throw new BadRequestException(`В прайсе нет услуги «${line.title}»`);
+            const qty = Math.min(32, Math.max(1, Math.round(Number(line.qty) || 1)));
+            const asked = Number(line.unitPrice);
+            const unit = Number.isFinite(asked) && asked >= service.price * 0.5 && asked <= service.price * 2 ? asked : service.price;
+            const discount = Math.min(100, Math.max(0, Number(line.discountPercent) || 0));
+            const tooth = line.toothNum == null ? null : Number(line.toothNum);
+            if (tooth != null && !CHART_TEETH_SET.has(tooth)) throw new BadRequestException('Номер зуба должен быть в системе FDI');
+            return {
+              serviceId: service.id,
+              title: service.name,
+              toothNum: tooth,
+              surfaces: [] as string[],
+              phase: sort,
+              sortOrder: order,
+              price: round2(unit * qty * (1 - discount / 100)),
+              listPrice: round2(service.price * qty),
+              discountPercent: discount,
+              durationMin: Math.max(10, Number(line.durationMin) || service.durationMin),
+            };
+          });
+          return {
+            sort,
+            title: String(phase.title ?? `Этап ${sort}`).slice(0, 80),
+            specialty: String(phase.specialty ?? 'Терапия').slice(0, 60),
+            healingDays: Math.min(365, Math.max(0, Math.round(Number(phase.healingDays) || 0))),
+            dependsOnSort: dependsOn >= 0 && dependsOn < index ? dependsOn + 1 : undefined,
+            items,
+          };
+        }).filter((phase) => phase.items.length);
+        if (!phases.length) continue;
+        const id = await this.writeTier(tx, {
+          orgId,
+          patientId,
+          doctorId,
+          familyKey,
+          title: `${title} · ${TIER_LABEL[draft.tier]}`,
+          tier: draft.tier,
+          guaranteeMonths: Math.min(120, Math.max(0, Math.round(Number(draft.guaranteeMonths) || 12))),
+          durationWeeks: Math.min(104, Math.max(1, Math.round(Number(draft.durationWeeks) || 4))),
+          installmentMonths: Number(draft.installmentMonths) >= 2 ? Math.min(36, Math.round(Number(draft.installmentMonths))) : 0,
+          discountPercent: 0,
+          phases,
+        });
+        out.push({ tier: draft.tier, id });
+      }
+      return out;
+    });
+    if (!ids.length) throw new BadRequestException('План пустой');
+    const optimum = ids.find((row) => row.tier === 'OPTIMUM') ?? ids[0];
+    return { familyKey, planId: optimum.id };
   }
 
   async planSheet(orgId: string, planId: string) {
@@ -1494,6 +1589,7 @@ export class WorkspaceService {
       guaranteeMonths: number;
       durationWeeks: number;
       installmentMonths: number;
+      showBreakdown: boolean;
       signedAt: Date | null;
       signedName: string | null;
       abandonedAt: Date | null;
@@ -1528,6 +1624,7 @@ export class WorkspaceService {
             guaranteeMonths: p.guaranteeMonths,
             durationWeeks: p.durationWeeks,
             installmentMonths: p.installmentMonths,
+            showBreakdown: p.showBreakdown,
             signedAt: p.signedAt,
             signedName: p.signedName,
             abandonedAt: p.abandonedAt,
@@ -1544,7 +1641,8 @@ export class WorkspaceService {
                 .filter((i) => i.phaseId === ph.id)
                 .map((i) => this.itemDto(i)),
             })),
-            looseItems: p.phases.length ? [] : p.items.map((i) => this.itemDto(i)),
+            // Lines outside any phase still show, even in a phased plan.
+            looseItems: p.items.filter((i) => !i.phaseId || !p.phases.some((ph) => ph.id === i.phaseId)).map((i) => this.itemDto(i)),
             explanation: explain(p),
           };
         }),
@@ -1653,6 +1751,7 @@ export class WorkspaceService {
       }
     }
     await tx.treatmentPlan.update({ where: { id: plan.id }, data: { totalPrice: total } });
+    return plan.id;
   }
 
   private async findSlot(
