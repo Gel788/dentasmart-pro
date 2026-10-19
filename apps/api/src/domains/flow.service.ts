@@ -1,5 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { formatRub, fromKopecks, kopecks } from '@dentasmart/shared';
+import { inputKopecks, isUniqueViolation, paymentByKey, recordPayment } from './invoice-ledger';
 import { consumeForVisit } from '../route/route-chain';
 import { ClinicConfigService } from './clinic-config.service';
 
@@ -275,40 +277,47 @@ export class FlowService {
     return this.visit(orgId, id);
   }
 
-  async pay(orgId: string, id: string, body: { amount: number; method: string }) {
+  async pay(orgId: string, id: string, body: { amount: number | string; method: string }, actor: { userId?: string; idempotencyKey?: string } = {}) {
     const appointment = await this.must(orgId, id);
-    const amount = Number(body.amount);
-    if (!amount || amount <= 0) throw new BadRequestException('Укажите сумму');
+    const amount = inputKopecks(body.amount);
+    if (amount <= 0) throw new BadRequestException('Укажите сумму');
     const method = body.method === 'CASH' ? 'CASH' : 'CARD';
-    let invoice = await this.prisma.invoice.findFirst({
-      where: { organizationId: orgId, patientId: appointment.patientId, status: { in: ['ISSUED', 'PARTIAL', 'DRAFT'] } },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!invoice) {
-      invoice = await this.prisma.invoice.create({
-        data: {
-          organizationId: orgId,
-          patientId: appointment.patientId,
-          appointmentId: id,
-          number: `SD-${Date.now().toString().slice(-8)}`,
-          status: 'ISSUED',
-          totalAmount: amount,
-          items: { create: [{ title: appointment.serviceId ? 'Приём' : 'Оплата на стойке', price: amount }] },
-        },
-      });
+    if (!(await paymentByKey(this.prisma, orgId, actor.idempotencyKey))) {
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          let invoice = await tx.invoice.findFirst({
+            where: { organizationId: orgId, patientId: appointment.patientId, status: { in: ['ISSUED', 'PARTIAL', 'DRAFT'] } },
+            orderBy: { createdAt: 'desc' },
+          });
+          if (!invoice) {
+            invoice = await tx.invoice.create({
+              data: {
+                organizationId: orgId,
+                patientId: appointment.patientId,
+                appointmentId: id,
+                number: `SD-${Date.now().toString().slice(-8)}`,
+                status: 'ISSUED',
+                totalAmount: fromKopecks(amount),
+                items: { create: [{ title: appointment.serviceId ? 'Приём' : 'Оплата на стойке', price: fromKopecks(amount) }] },
+              },
+            });
+          }
+          const due = kopecks(invoice.totalAmount) - kopecks(invoice.discountAmount) - kopecks(invoice.paidAmount);
+          if (amount > Math.max(0, due)) throw new BadRequestException(`К оплате ${formatRub(Math.max(0, due))}`);
+          await recordPayment(tx, {
+            organizationId: orgId,
+            patientId: appointment.patientId,
+            invoiceId: invoice.id,
+            amountKopecks: amount,
+            method,
+            createdById: actor.userId,
+            idempotencyKey: actor.idempotencyKey,
+          });
+        });
+      } catch (error) {
+        if (!isUniqueViolation(error)) throw error;
+      }
     }
-    const due = Math.max(0, Number(invoice.totalAmount) - Number(invoice.paidAmount));
-    if (amount > due + 0.001) throw new BadRequestException(`К оплате ${Math.round(due)} ₽`);
-    await this.prisma.$transaction(async (tx) => {
-      await tx.payment.create({
-        data: { organizationId: orgId, patientId: appointment.patientId, invoiceId: invoice!.id, amount, method },
-      });
-      const paid = Number(invoice!.paidAmount) + amount;
-      await tx.invoice.update({
-        where: { id: invoice!.id },
-        data: { paidAmount: paid, status: paid >= Number(invoice!.totalAmount) ? 'PAID' : 'PARTIAL' },
-      });
-    });
     return this.visit(orgId, id);
   }
 

@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Input, Label, Select, Textarea } from '@/components/ui/input';
 import { ToothChart, type ToothRecord } from '@/components/tooth-chart';
 import { api } from '@/lib/api';
+import { useIdempotencyKey } from '@/lib/idempotency';
 import { APPOINTMENT_STATUS, INVOICE_STATUS, PAYMENT_METHOD, PLAN_STATUS, TOOTH_CONDITIONS, formatMoney, label } from '@/lib/format';
 
 type Workflow = {
@@ -59,6 +60,7 @@ export default function VisitPage() {
   const [selected, setSelected] = useState<number>();
   const [condition, setCondition] = useState('CARIES');
   const [error, setError] = useState('');
+  const payKey = useIdempotencyKey();
   const [busy, setBusy] = useState('');
   const [method, setMethod] = useState('CARD');
   const [payAmount, setPayAmount] = useState('');
@@ -442,12 +444,16 @@ export default function VisitPage() {
                         run('pay', () =>
                           api('/finance/payments', {
                             method: 'POST',
+                            headers: payKey.headers(),
                             body: JSON.stringify({
                               patientId,
                               invoiceId: invoice.id,
-                              amount: Number(payAmount),
+                              amount: payAmount,
                               method,
                             }),
+                          }).then((result) => {
+                            payKey.done();
+                            return result;
                           }),
                         )
                       }

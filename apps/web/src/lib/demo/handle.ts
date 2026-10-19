@@ -1,7 +1,7 @@
 import { phoneDigits } from '../phone';
 import { PLAN_TEMPLATES, composeFamily, lineTotal, type Mark } from '../plan-engine';
 import { resultFor, serviceKit, surfacesFor } from '../service-kit';
-import { labDueAt } from '@dentasmart/shared';
+import { fromKopecks, invoiceStatus, kopecks, labDueAt } from '@dentasmart/shared';
 import snapshot from './snapshot.json';
 import { demoLabWork, demoRoute, reserveDemoLines, type DemoReservation } from './route';
 
@@ -1805,10 +1805,9 @@ function applyPaid(bag: Bag, invoiceId: string | undefined, delta: number) {
   if (!invoiceId) return;
   const invoice = (bag.gets['/finance/invoices'] as AnyRec[]).find((item) => item.id === invoiceId);
   if (!invoice) return;
-  const paid = Math.max(0, Number(invoice.paidAmount ?? 0) + delta);
-  const due = Number(invoice.totalAmount) - Number(invoice.discountAmount ?? 0);
-  invoice.paidAmount = String(paid);
-  invoice.status = paid <= 0 ? 'ISSUED' : paid >= due ? 'PAID' : 'PARTIAL';
+  const paid = Math.max(0, kopecks(invoice.paidAmount) + kopecks(delta));
+  invoice.paidAmount = fromKopecks(paid);
+  invoice.status = invoiceStatus({ total: kopecks(invoice.totalAmount), discount: kopecks(invoice.discountAmount), paid, current: invoice.status });
 }
 
 function remember(bag: Bag, pathname: string, method: string, data: AnyRec, _token: string) {

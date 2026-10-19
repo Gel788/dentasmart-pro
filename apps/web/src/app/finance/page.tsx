@@ -16,6 +16,7 @@ import { api } from '@/lib/api';
 import { useBranch } from '@/lib/branch-context';
 import { TabBar } from '@/components/ui/tab-bar';
 import { formatMoney, INSTALLMENT_STATUS, INVOICE_STATUS, PAYMENT_METHOD, label } from '@/lib/format';
+import { useIdempotencyKey } from '@/lib/idempotency';
 
 type FinanceTab = 'main' | 'extra';
 
@@ -27,6 +28,13 @@ function FinancePageContent() {
   const [summary, setSummary] = useState<Record<string, number> | null>(null);
   const [invoices, setInvoices] = useState<unknown[]>([]);
   const [payments, setPayments] = useState<unknown[]>([]);
+  const payKey = useIdempotencyKey();
+  const refundKey = useIdempotencyKey();
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState('');
+  const [confirmRefund, setConfirmRefund] = useState<string | null>(null);
+  const [refunding, setRefunding] = useState<string | null>(null);
+  const [refundError, setRefundError] = useState('');
   const [patients, setPatients] = useState<{ id: string; firstName: string; lastName: string }[]>([]);
   const [invModal, setInvModal] = useState(false);
   const [payModal, setPayModal] = useState(false);
@@ -125,17 +133,48 @@ function FinancePageContent() {
 
   const createPayment = async (e: FormEvent) => {
     e.preventDefault();
-    await api('/finance/payments', {
-      method: 'POST',
-      body: JSON.stringify({
-        patientId: payForm.patientId,
-        amount: +payForm.amount,
-        method: payForm.method,
-        invoiceId: payForm.invoiceId || undefined,
-      }),
-    });
-    setPayModal(false);
-    load();
+    if (paying) return;
+    setPaying(true);
+    setPayError('');
+    try {
+      await api('/finance/payments', {
+        method: 'POST',
+        headers: payKey.headers(),
+        body: JSON.stringify({
+          patientId: payForm.patientId,
+          amount: payForm.amount,
+          method: payForm.method,
+          invoiceId: payForm.invoiceId || undefined,
+        }),
+      });
+      payKey.done();
+      setPayModal(false);
+      load();
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : 'Оплата не прошла. Проверьте сумму и попробуйте ещё раз.');
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const refund = async (paymentId: string, amount: string) => {
+    if (refunding) return;
+    setRefunding(paymentId);
+    setRefundError('');
+    try {
+      await api(`/finance/payments/${paymentId}/refund`, {
+        method: 'POST',
+        headers: refundKey.headers(),
+        body: JSON.stringify({ amount }),
+      });
+      refundKey.done();
+      setConfirmRefund(null);
+      load();
+    } catch (err) {
+      setRefundError(err instanceof Error ? err.message : 'Возврат не прошёл');
+    } finally {
+      setRefunding(null);
+    }
   };
 
   return (
@@ -288,25 +327,25 @@ function FinancePageContent() {
         </Card>
         <Card>
           <CardHeader title="Оплаты" />
+          {refundError && <p role="alert" className="mb-2 text-sm text-[var(--danger)]">{refundError}</p>}
           <div className="overflow-hidden rounded-xl border border-[var(--border)]">
             {(payments as { id: string; amount: string; method: string; paidAt: string }[]).map((p) => (
               <ListRow
                 key={p.id}
                 className="!rounded-none !border-x-0 !border-t-0 last:!border-b-0"
                 trailing={Number(p.amount) > 0 ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={async () => {
-                      await api(`/finance/payments/${p.id}/refund`, {
-                        method: 'POST',
-                        body: JSON.stringify({ amount: Number(p.amount) }),
-                      });
-                      load();
-                    }}
-                  >
-                    Вернуть
-                  </Button>
+                  confirmRefund === p.id ? (
+                    <span className="flex items-center gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => setConfirmRefund(null)} disabled={refunding === p.id}>Отмена</Button>
+                      <Button size="sm" onClick={() => void refund(p.id, p.amount)} disabled={refunding === p.id}>
+                        {refunding === p.id ? 'Возвращаем…' : `Вернуть ${formatMoney(Number(p.amount))}`}
+                      </Button>
+                    </span>
+                  ) : (
+                    <Button size="sm" variant="ghost" onClick={() => { refundKey.done(); setRefundError(''); setConfirmRefund(p.id); }}>
+                      Вернуть
+                    </Button>
+                  )
                 ) : undefined}
               >
                 <p className="font-medium">{Number(p.amount) < 0 ? 'Возврат ' : ''}{formatMoney(Math.abs(Number(p.amount)))}</p>
@@ -482,7 +521,8 @@ function FinancePageContent() {
                 ))}
             </Select>
           </div>
-          <Button type="submit" className="w-full">Провести</Button>
+          {payError && <p role="alert" className="text-sm text-[var(--danger)]">{payError}</p>}
+          <Button type="submit" className="w-full" disabled={paying}>{paying ? 'Проводим…' : 'Провести'}</Button>
         </form>
       </Modal>
 

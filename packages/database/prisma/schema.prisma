@@ -179,6 +179,7 @@ model User {
   userRoles     UserRole[]
   auditLogs     AuditLog[]     @relation("AuditActor")
   refreshTokens RefreshToken[]
+  paymentsTaken Payment[]      @relation("PaymentAuthor")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -1245,13 +1246,20 @@ model Payment {
   externalId     String?
   refundOfId     String?
   paidAt         DateTime      @default(now())
+  /// Sent by the client once per payment attempt; a repeat with the same key returns the first payment.
+  idempotencyKey String?
+  createdById    String?
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   invoice      Invoice?            @relation(fields: [invoiceId], references: [id])
   refundOf     Payment?            @relation("PaymentRefunds", fields: [refundOfId], references: [id], onDelete: SetNull)
   refunds      Payment[]           @relation("PaymentRefunds")
   allocations  PaymentAllocation[]
+  createdBy    User?               @relation("PaymentAuthor", fields: [createdById], references: [id], onDelete: SetNull)
 
+  @@unique([organizationId, idempotencyKey])
+  @@index([invoiceId])
+  @@index([organizationId, patientId])
   @@map("payments")
 }
 

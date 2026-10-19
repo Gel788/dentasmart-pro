@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { CurrentUser } from '../common/current-user.decorator';
+import { IdempotencyKey } from '../common/idempotency.decorator';
 import { OrgId } from '../common/org.decorator';
 import { FlowService } from './flow.service';
 
@@ -93,8 +94,14 @@ export class FlowController {
 
   @Post('visits/:id/pay')
   @RequirePermissions('finance.write')
-  pay(@OrgId() orgId: string, @Param('id') id: string, @Body() body: { amount: number; method: string }) {
-    return this.flow.pay(orgId, id, body);
+  pay(
+    @OrgId() orgId: string,
+    @CurrentUser() user: AuthUser,
+    @IdempotencyKey() idempotencyKey: string | undefined,
+    @Param('id') id: string,
+    @Body() body: { amount: number; method: string },
+  ) {
+    return this.flow.pay(orgId, id, body, { userId: user.id, idempotencyKey });
   }
 
   @Get('patients/:patientId/imaging')
