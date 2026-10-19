@@ -4,3 +4,4 @@ export * from './route';
 export * from './money';
 export * from './visit';
 export * from './schedule';
+export * from './patients';

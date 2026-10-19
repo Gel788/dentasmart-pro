@@ -22,13 +22,16 @@ export class PatientsController {
     @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
+    @Query('segment') segment?: string,
+    @Query('sort') sort?: string,
   ) {
-    return this.patients.findAll(
-      user.organizationId,
+    return this.patients.findAll(user.organizationId, {
       search,
-      page ? +page : 1,
-      pageSize ? +pageSize : 20,
-    );
+      page: Number(page) || 1,
+      pageSize: Number(pageSize) || 20,
+      segment,
+      sort,
+    });
   }
 
   @Get(':id')

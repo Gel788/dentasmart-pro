@@ -71,6 +71,7 @@ export class PatientImportService {
           birthDate: birth && !Number.isNaN(birth.getTime()) ? birth : null,
           gender: row.gender === 'MALE' || row.gender === 'FEMALE' ? row.gender : null,
           source,
+          clientType: row.segment?.trim() || null,
           notes: importNotes(row, source),
         },
       });

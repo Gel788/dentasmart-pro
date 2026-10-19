@@ -310,6 +310,8 @@ model Patient {
   tags              String[]       @default([])
   notes             String?
   source            String?
+  /// Client type carried over from the previous CRM, e.g. «отказавшиеся».
+  clientType        String?
   allergies         String[]       @default([])
   chronicConditions String?
   medications       String?

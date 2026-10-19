@@ -1,7 +1,7 @@
 import { phoneDigits } from '../phone';
 import { PLAN_TEMPLATES, composeFamily, lineTotal, type Mark } from '../plan-engine';
 import { resultFor, serviceKit, surfacesFor } from '../service-kit';
-import { canMoveVisit, dayLoad, fromKopecks, invoiceStatus, isVisitClosed, isVisitStatus, kopecks, labDueAt, parseWorkHours, visitMoveError, wallDate, type VisitStatus } from '@dentasmart/shared';
+import { canMoveVisit, dayLoad, fromKopecks, invoiceStatus, isVisitClosed, isVisitStatus, kopecks, labDueAt, parseWorkHours, patientSegments, phoneMatches, searchTerms, SEGMENTS, visitMoveError, wallDate, type PatientSegment, type VisitStatus } from '@dentasmart/shared';
 import snapshot from './snapshot.json';
 import { demoLabWork, demoRoute, reserveDemoLines, type DemoReservation } from './route';
 
@@ -242,19 +242,63 @@ function anchorPath(pathname: string, query: Record<string, string>) {
   return pathname + (search ? `?${search}` : '');
 }
 
+/** Mirrors PatientsService.findAll: same search, segments, counters, sorting and paging. */
 function patientPage(bag: Bag, query: Record<string, string>) {
-  const needle = (query.search || '').trim().toLowerCase();
-  const digits = needle.replace(/\D/g, '');
-  let items = patients(bag).filter((row) => row.isActive !== false);
-  if (needle) {
-    items = items.filter((row) => {
-      const text = `${row.lastName} ${row.firstName} ${row.middleName ?? ''} ${row.phone ?? ''}`.toLowerCase();
-      return text.includes(needle) || (digits.length >= 4 && phoneDigits(row.phone).includes(digits));
+  const { words, digits } = searchTerms(query.search ?? '');
+  const now = anchorNow();
+  const fold = (text: string) => text.toLowerCase().replace(/ё/g, 'е');
+  const invoices = (bag.gets['/finance/invoices'] ?? []) as AnyRec[];
+  const found = patients(bag)
+    .filter((row) => row.isActive !== false)
+    .filter((row) => {
+      const name = fold(`${row.lastName} ${row.firstName} ${row.middleName ?? ''}`);
+      return words.every((word) => name.includes(word)) && phoneMatches(row.phone, digits);
+    })
+    .map((row) => {
+      const own = bag.appointments.filter((visit) => visit.patientId === row.id);
+      const lastVisit = own.filter((visit) => visit.status === 'COMPLETED').map((visit) => visit.startsAt).sort().at(-1) ?? null;
+      const nextVisit = own
+        .filter((visit) => visit.startsAt >= now && !['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(visit.status))
+        .map((visit) => visit.startsAt)
+        .sort()[0] ?? null;
+      const debtKopecks = invoices
+        .filter((invoice) => invoice.patientId === row.id && ['ISSUED', 'PARTIAL'].includes(invoice.status))
+        .reduce((sum, invoice) => sum + Math.max(0, kopecks(invoice.totalAmount) - kopecks(invoice.discountAmount) - kopecks(invoice.paidAmount)), 0);
+      const clientType = (row.clientType as string | null | undefined) ?? null;
+      return {
+        ...row,
+        clientType,
+        lastVisit,
+        nextVisit,
+        debt: fromKopecks(debtKopecks),
+        deposit: String(row.deposit ?? '0.00'),
+        segments: patientSegments({ phone: row.phone ?? null, lastVisit, nextVisit, debtKopecks, clientType }, new Date(now)),
+      };
     });
+
+  const segments = Object.fromEntries(SEGMENTS.map((item) => [item.id, 0])) as Record<string, number>;
+  for (const row of found) {
+    segments.all += 1;
+    for (const id of row.segments) segments[id] += 1;
   }
-  const pageSize = Number(query.pageSize || 40);
-  const page = Number(query.page || 1);
-  return { items: items.slice((page - 1) * pageSize, page * pageSize), total: items.length, page, pageSize };
+  const segment = SEGMENTS.some((item) => item.id === query.segment) ? query.segment : 'all';
+  const sort = ['name', 'lastVisit', 'nextVisit', 'debt', 'recent'].includes(query.sort) ? query.sort : 'name';
+  const latin = (row: AnyRec) => (/^[A-Za-z]/.test(String(row.lastName)) ? 1 : 0);
+  const byName = (a: AnyRec, b: AnyRec) => latin(a) - latin(b) || fold(`${a.lastName} ${a.firstName}`).localeCompare(fold(`${b.lastName} ${b.firstName}`), 'ru');
+  const late = (value: string | null, empty: string) => value ?? empty;
+  const order: Record<string, (a: AnyRec, b: AnyRec) => number> = {
+    name: byName,
+    lastVisit: (a, b) => late(b.lastVisit, '').localeCompare(late(a.lastVisit, '')),
+    nextVisit: (a, b) => late(a.nextVisit, '9999').localeCompare(late(b.nextVisit, '9999')),
+    debt: (a, b) => kopecks(b.debt) - kopecks(a.debt),
+    recent: (a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')),
+  };
+  const items = found
+    .filter((row) => segment === 'all' || row.segments.includes(segment as PatientSegment))
+    .sort((a, b) => order[sort](a, b) || byName(a, b));
+  const pageSize = Math.min(500, Math.max(1, Number(query.pageSize) || 20));
+  const page = Math.max(1, Number(query.page) || 1);
+  return { items: items.slice((page - 1) * pageSize, page * pageSize), total: items.length, page, pageSize, segment, sort, segments };
 }
 
 function searchPeople(bag: Bag, raw: string) {
@@ -1583,6 +1627,7 @@ function importMigration(bag: Bag, data: AnyRec) {
         ...row,
         phone: digits.length >= 10 ? row.phone : null,
         source: data.source || 'IMPORT',
+        clientType: row.segment?.trim() || null,
         notes: [row.comment, row.cardNumber ? `Медкарта ${row.cardNumber}` : '', row.balance ? `Баланс при переезде ${row.balance}` : ''].filter(Boolean).join(' · ') || null,
         consentPd: true,
       });

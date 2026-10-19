@@ -1,8 +1,69 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { AuthUser } from '@dentasmart/shared';
+import { Prisma } from '@dentasmart/database';
+import {
+  AuthUser,
+  DORMANT_DAYS,
+  fromKopecks,
+  kopecks,
+  patientSegments,
+  phoneNeedle,
+  searchTerms,
+  SEGMENTS,
+  type PatientSegment,
+} from '@dentasmart/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/audit.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
+
+export type PatientSort = 'name' | 'lastVisit' | 'nextVisit' | 'debt' | 'recent';
+export type PatientListQuery = { search?: string; page?: number; pageSize?: number; segment?: string; sort?: string };
+
+type RegistryRow = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  middleName: string | null;
+  birthDate: Date | null;
+  gender: string | null;
+  phone: string | null;
+  email: string | null;
+  clientType: string | null;
+  allergies: string[];
+  anticoagulant: boolean;
+  pregnant: boolean;
+  anxiety: string;
+  tags: string[];
+  createdAt: Date;
+  lastVisit: Date | null;
+  nextVisit: Date | null;
+  debt: Prisma.Decimal;
+  deposit: Prisma.Decimal;
+};
+
+const UPPER = 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯABCDEFGHIJKLMNOPQRSTUVWXYZё';
+const LOWER = 'абвгдеежзийклмнопрстуфхцчшщъыьэюяabcdefghijklmnopqrstuvwxyzе';
+
+/** Lower case with ё → е, spelled out so it does not depend on the database locale. */
+const folded = (expr: Prisma.Sql) => Prisma.sql`translate(${expr}, ${UPPER}, ${LOWER})`;
+
+const SEGMENT_IDS = new Set<string>(SEGMENTS.map((item) => item.id).filter((id) => id !== 'all'));
+
+const SEGMENT_SQL: Record<PatientSegment, Prisma.Sql> = {
+  declined: Prisma.sql`declined`,
+  phone: Prisma.sql`NOT declined AND has_phone`,
+  debt: Prisma.sql`NOT declined AND debt > 0`,
+  upcoming: Prisma.sql`NOT declined AND "nextVisit" IS NOT NULL`,
+  dormant: Prisma.sql`NOT declined AND idle`,
+};
+
+const SORTS: Record<PatientSort, Prisma.Sql> = {
+  // Cyrillic names first, names typed in Latin letters after them.
+  name: Prisma.sql`("lastName" ~ '^[A-Za-z]'), ${folded(Prisma.sql`"lastName"`)}, ${folded(Prisma.sql`"firstName"`)}`,
+  lastVisit: Prisma.sql`"lastVisit" DESC NULLS LAST`,
+  nextVisit: Prisma.sql`"nextVisit" ASC NULLS LAST`,
+  debt: Prisma.sql`debt DESC`,
+  recent: Prisma.sql`"createdAt" DESC`,
+};
 
 @Injectable()
 export class PatientsService {
@@ -11,32 +72,107 @@ export class PatientsService {
     private readonly audit: AuditService,
   ) {}
 
-  async findAll(orgId: string, search?: string, page = 1, pageSize = 20) {
-    const where = {
-      organizationId: orgId,
-      isActive: true,
-      ...(search
-        ? {
-            OR: [
-              { firstName: { contains: search, mode: 'insensitive' as const } },
-              { lastName: { contains: search, mode: 'insensitive' as const } },
-              { phone: { contains: search } },
-            ],
-          }
-        : {}),
-    };
+  /**
+   * The registry: search by any part of the name or by phone digits, segment counters that follow the search,
+   * one segment as a filter, sorting and paging. Segment rules mirror `patientSegments` in shared.
+   */
+  async findAll(orgId: string, query: PatientListQuery = {}) {
+    const page = Math.max(1, Math.floor(query.page ?? 1));
+    const pageSize = Math.min(500, Math.max(1, Math.floor(query.pageSize ?? 20)));
+    const segment = query.segment && query.segment !== 'all' && SEGMENT_IDS.has(query.segment) ? query.segment : null;
+    const sort = query.sort && SORTS[query.sort] ? query.sort : 'name';
+    const { words, digits } = searchTerms(query.search ?? '');
+    const phone = phoneNeedle(digits);
+    const storedDigits = Prisma.sql`regexp_replace(coalesce(p.phone, ''), '\\D', '', 'g')`;
 
-    const [items, total] = await Promise.all([
-      this.prisma.patient.findMany({
-        where,
-        orderBy: { updatedAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      this.prisma.patient.count({ where }),
+    const match = [
+      Prisma.sql`p."organizationId" = ${orgId}`,
+      Prisma.sql`p."isActive"`,
+      ...words.map(
+        (word) =>
+          Prisma.sql`${folded(Prisma.sql`p."lastName" || ' ' || p."firstName" || ' ' || coalesce(p."middleName", '')`)} LIKE ${`%${word}%`}`,
+      ),
+      ...(phone
+        ? [
+            phone.start
+              ? Prisma.sql`(${storedDigits} LIKE ${`%${phone.anywhere}%`} OR ${storedDigits} LIKE ${`${phone.start}%`})`
+              : Prisma.sql`${storedDigits} LIKE ${`%${phone.anywhere}%`}`,
+          ]
+        : []),
+    ];
+    const base = Prisma.sql`
+      WITH base AS (
+        SELECT p.id, p."firstName", p."lastName", p."middleName", p."birthDate", p.gender, p.phone, p.email,
+               p."clientType", p.allergies, p.anticoagulant, p.pregnant, p.anxiety, p.tags, p."createdAt",
+               (SELECT max(a."startsAt") FROM appointments a
+                 WHERE a."patientId" = p.id AND a.status = 'COMPLETED') AS "lastVisit",
+               (SELECT min(a."startsAt") FROM appointments a
+                 WHERE a."patientId" = p.id AND a."startsAt" >= now()
+                   AND a.status NOT IN ('COMPLETED', 'CANCELLED', 'NO_SHOW')) AS "nextVisit",
+               coalesce((SELECT sum(greatest(i."totalAmount" - i."discountAmount" - i."paidAmount", 0)) FROM invoices i
+                 WHERE i."patientId" = p.id AND i.status IN ('ISSUED', 'PARTIAL')), 0) AS debt,
+               coalesce(d.balance, 0) AS deposit
+        FROM patients p
+        LEFT JOIN patient_deposits d ON d."patientId" = p.id
+        WHERE ${Prisma.join(match, ' AND ')}
+      ), seg AS (
+        SELECT base.*,
+               ltrim(${folded(Prisma.sql`coalesce("clientType", '')`)}) LIKE 'отказ%' AS declined,
+               length(regexp_replace(coalesce(phone, ''), '\\D', '', 'g')) >= 10 AS has_phone,
+               "nextVisit" IS NULL AND ("lastVisit" IS NULL OR "lastVisit" < now() - interval '${Prisma.raw(String(DORMANT_DAYS))} days') AS idle
+        FROM base
+      )`;
+    const where = segment ? SEGMENT_SQL[segment] : Prisma.sql`TRUE`;
+
+    const [rows, counts] = await Promise.all([
+      this.prisma.$queryRaw<RegistryRow[]>`${base}
+        SELECT * FROM seg WHERE ${where}
+        ORDER BY ${SORTS[sort]}, "lastName", "firstName", id
+        LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
+      this.prisma.$queryRaw<Record<string, bigint>[]>`${base}
+        SELECT count(*) AS "all",
+               count(*) FILTER (WHERE ${SEGMENT_SQL.phone}) AS phone,
+               count(*) FILTER (WHERE ${SEGMENT_SQL.debt}) AS debt,
+               count(*) FILTER (WHERE ${SEGMENT_SQL.upcoming}) AS upcoming,
+               count(*) FILTER (WHERE ${SEGMENT_SQL.dormant}) AS dormant,
+               count(*) FILTER (WHERE ${SEGMENT_SQL.declined}) AS declined
+        FROM seg`,
     ]);
 
-    return { items, total, page, pageSize };
+    const segments = Object.fromEntries(Object.entries(counts[0] ?? {}).map(([key, value]) => [key, Number(value)])) as Record<
+      PatientSegment | 'all',
+      number
+    >;
+    const now = new Date();
+    const items = rows.map((row) => {
+      const debtKopecks = kopecks(row.debt);
+      const lastVisit = row.lastVisit?.toISOString() ?? null;
+      const nextVisit = row.nextVisit?.toISOString() ?? null;
+      return {
+        id: row.id,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        middleName: row.middleName,
+        birthDate: row.birthDate,
+        gender: row.gender,
+        phone: row.phone,
+        email: row.email,
+        clientType: row.clientType,
+        allergies: row.allergies,
+        anticoagulant: row.anticoagulant,
+        pregnant: row.pregnant,
+        anxiety: row.anxiety,
+        tags: row.tags,
+        createdAt: row.createdAt,
+        lastVisit,
+        nextVisit,
+        debt: fromKopecks(debtKopecks),
+        deposit: fromKopecks(kopecks(row.deposit)),
+        segments: patientSegments({ phone: row.phone, lastVisit, nextVisit, debtKopecks, clientType: row.clientType }, now),
+      };
+    });
+    const total = segment ? segments[segment] : segments.all;
+    return { items, total, page, pageSize, segment: segment ?? 'all', sort, segments };
   }
 
   async findOne(orgId: string, id: string) {

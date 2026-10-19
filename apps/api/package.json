@@ -9,7 +9,7 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test:int": "tsx test/route-chain.int.ts && tsx test/ledger.int.ts && tsx test/schedule.int.ts"
+    "test:int": "tsx test/route-chain.int.ts && tsx test/ledger.int.ts && tsx test/schedule.int.ts && tsx test/patients.int.ts"
   },
   "dependencies": {
     "@dentasmart/database": "workspace:*",
