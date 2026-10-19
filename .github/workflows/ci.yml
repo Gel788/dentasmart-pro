@@ -1,0 +1,29 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @dentasmart/shared build
+      - run: pnpm --filter @dentasmart/database db:generate
+      - run: pnpm --filter @dentasmart/shared test
+      - run: pnpm --filter @dentasmart/web test:import
+      - run: pnpm --filter @dentasmart/api exec tsc --noEmit -p .
+      - run: pnpm --filter @dentasmart/web exec tsc --noEmit -p .
+      - run: pnpm --filter @dentasmart/api build
+      - run: pnpm --filter @dentasmart/web build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
