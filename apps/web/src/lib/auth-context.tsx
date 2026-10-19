@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api, clearToken, getToken, setToken } from './api';
+import { api, clearToken, ensureAssetToken, getToken, setAssetToken, setToken } from './api';
 
 interface AuthState {
   id: string;
@@ -39,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     try {
       const me = await api<AuthState>('/auth/me');
+      await ensureAssetToken();
       setUser(me);
     } catch {
       clearToken();
@@ -53,12 +54,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadMe]);
 
   const login = async (email: string, password: string) => {
-    const res = await api<{ accessToken: string; refreshToken?: string; user: AuthState }>('/auth/login', {
+    const res = await api<{ accessToken: string; refreshToken?: string; assetToken?: string; user: AuthState }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
     setToken(res.accessToken);
     if (res.refreshToken) localStorage.setItem('dsp_refresh', res.refreshToken);
+    setAssetToken(res.assetToken);
     setUser(res.user);
   };
 

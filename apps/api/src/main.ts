@@ -8,7 +8,6 @@ config({ path: resolve(__dirname, '../../../.env') });
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { join } from 'path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -19,7 +18,8 @@ async function bootstrap() {
     }
   }
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
+  // Render and Vercel sit behind one proxy hop; rate limits need the client address, not the proxy's.
+  app.set('trust proxy', 1);
 
   app.enableCors({
     origin: process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:3000'],

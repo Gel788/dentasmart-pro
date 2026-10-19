@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Inject, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthUser } from '@dentasmart/shared';
 import { CurrentUser } from '../common/current-user.decorator';
 import { AuthService } from './auth.service';
@@ -13,6 +14,7 @@ export class AuthController {
   constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
   @Post('login')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
@@ -25,6 +27,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   refresh(@Body() body: RefreshDto) {
     return this.authService.refresh(body.refreshToken);
   }
@@ -37,6 +40,7 @@ export class AuthController {
   }
 
   @Post('2fa/enable')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   enable2fa(@CurrentUser() user: AuthUser, @Body() body: { code: string }) {
@@ -44,6 +48,7 @@ export class AuthController {
   }
 
   @Post('2fa/disable')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   disable2fa(@CurrentUser() user: AuthUser, @Body() body: { code: string }) {

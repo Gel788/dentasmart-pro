@@ -14,6 +14,24 @@ export function setToken(token: string) {
 
 export function clearToken() {
   localStorage.removeItem('dsp_token');
+  localStorage.removeItem('dsp_asset');
+}
+
+/** Read-only key the API checks on clinic files, since <img src> cannot send the bearer token. */
+export function setAssetToken(token?: string) {
+  if (token) localStorage.setItem('dsp_asset', token);
+}
+
+function assetExpired(token: string | null) {
+  const expires = Number(token?.split('.')[1]);
+  return !(expires > Date.now() + 60 * 60 * 1000);
+}
+
+/** Sessions that predate file keys, or whose key is close to expiry, fetch a fresh one. */
+export async function ensureAssetToken() {
+  if (isDemo() || !assetExpired(localStorage.getItem('dsp_asset'))) return;
+  const data = await api<{ assetToken: string }>('/uploads/token').catch(() => null);
+  setAssetToken(data?.assetToken);
 }
 
 export function assetUrl(path: string) {
@@ -21,6 +39,10 @@ export function assetUrl(path: string) {
   if (isDemo()) {
     if (path.startsWith('/uploads/imaging/')) return `/demo/${path.slice('/uploads/imaging/'.length)}`;
     return path;
+  }
+  if (path.startsWith('/uploads/')) {
+    const key = typeof window === 'undefined' ? null : localStorage.getItem('dsp_asset');
+    return `${API_URL}${path}${key ? `?k=${encodeURIComponent(key)}` : ''}`;
   }
   return `${API_ORIGIN}${path}`;
 }
@@ -38,9 +60,10 @@ function refreshAccess(): Promise<boolean> {
       body: JSON.stringify({ refreshToken }),
     });
     if (!res.ok) return false;
-    const data = (await res.json()) as { accessToken?: string; refreshToken?: string };
+    const data = (await res.json()) as { accessToken?: string; refreshToken?: string; assetToken?: string };
     if (!data.accessToken) return false;
     setToken(data.accessToken);
+    setAssetToken(data.assetToken);
     if (data.refreshToken) localStorage.setItem('dsp_refresh', data.refreshToken);
     return true;
   })().finally(() => {

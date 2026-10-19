@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/audit.service';
+import { issueAssetToken } from '../common/asset-token.util';
 import { generateOpaqueToken, hashToken } from '../common/token.util';
 import { generateTotpSecret, verifyTotp } from '../common/totp.util';
 import { LoginDto } from './dto/login.dto';
@@ -70,6 +71,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
+      assetToken: issueAssetToken(user.organizationId),
       user: {
         id: user.id,
         email: user.email,
@@ -149,7 +151,7 @@ export class AuthService {
       email: row.user.email,
     });
     const newRefresh = await this.issueRefreshToken(row.user.id);
-    return { accessToken, refreshToken: newRefresh };
+    return { accessToken, refreshToken: newRefresh, assetToken: issueAssetToken(row.user.organizationId) };
   }
 
   async setup2fa(userId: string) {

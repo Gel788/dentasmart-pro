@@ -1,6 +1,12 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import { WidgetBookDto, WidgetLookupDto, WidgetRescheduleDto } from './dto/widget.dto';
 import { WidgetService } from './widget.service';
+
+/** Anonymous endpoints: reads stay generous for the booking form, writes and lookups are tight. */
+const WRITE_LIMIT = { default: { limit: 10, ttl: 10 * 60_000 } };
+const LOOKUP_LIMIT = { default: { limit: 10, ttl: 10 * 60_000 } };
 
 @ApiTags('widget')
 @Controller('public/widget')
@@ -29,32 +35,20 @@ export class WidgetController {
   }
 
   @Get(':orgSlug/visits')
-  visits(@Param('orgSlug') orgSlug: string, @Query('phone') phone: string) {
-    return this.svc.visitsByPhone(orgSlug, phone || '');
+  @Throttle(LOOKUP_LIMIT)
+  visits(@Param('orgSlug') orgSlug: string, @Query() query: WidgetLookupDto) {
+    return this.svc.visitsByPhone(orgSlug, query);
   }
 
   @Post(':orgSlug/reschedule')
-  reschedule(
-    @Param('orgSlug') orgSlug: string,
-    @Body() body: { appointmentId: string; phone: string; startsAt: string; endsAt: string },
-  ) {
+  @Throttle(WRITE_LIMIT)
+  reschedule(@Param('orgSlug') orgSlug: string, @Body() body: WidgetRescheduleDto) {
     return this.svc.reschedule(orgSlug, body);
   }
 
   @Post(':orgSlug/book')
-  book(
-    @Param('orgSlug') orgSlug: string,
-    @Body() body: {
-      branchId: string;
-      serviceId?: string;
-      startsAt: string;
-      endsAt: string;
-      firstName: string;
-      lastName: string;
-      phone: string;
-      email?: string;
-    },
-  ) {
+  @Throttle(WRITE_LIMIT)
+  book(@Param('orgSlug') orgSlug: string, @Body() body: WidgetBookDto) {
     return this.svc.book(orgSlug, body);
   }
 }

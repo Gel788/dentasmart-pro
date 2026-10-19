@@ -18,16 +18,17 @@ export default function WidgetPage() {
     ? `<script src="${origin}/widget/dentasmart-widget.js" data-clinic="${slug}" data-api="${apiBase}"></script>`
     : '';
   const [phone, setPhone] = useState('');
+  const [lastName, setLastName] = useState('');
   const [visits, setVisits] = useState<Visit[]>([]);
   const [appointmentId, setAppointmentId] = useState('');
   const [startsAt, setStartsAt] = useState('');
   const [note, setNote] = useState('');
 
   const findVisits = async () => {
-    const rows = await fetch(`${apiBase}/public/widget/${slug}/visits?phone=${encodeURIComponent(phone)}`).then((r) => r.json());
+    const rows = await fetch(`${apiBase}/public/widget/${slug}/visits?phone=${encodeURIComponent(phone)}&lastName=${encodeURIComponent(lastName)}`).then((r) => r.json());
     setVisits(Array.isArray(rows) ? rows : []);
     setAppointmentId(Array.isArray(rows) && rows[0] ? rows[0].id : '');
-    setNote(Array.isArray(rows) && rows.length ? '' : 'Будущих записей с этим телефоном нет');
+    setNote(Array.isArray(rows) && rows.length ? '' : 'Будущих записей с этим телефоном и фамилией нет');
   };
 
   const moveVisit = async (event: FormEvent) => {
@@ -37,7 +38,7 @@ export default function WidgetPage() {
     const response = await fetch(`${apiBase}/public/widget/${slug}/reschedule`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ appointmentId, phone, startsAt: start.toISOString(), endsAt: end.toISOString() }),
+      body: JSON.stringify({ appointmentId, phone, lastName, startsAt: start.toISOString(), endsAt: end.toISOString() }),
     });
     const body = await response.json();
     setNote(response.ok ? `Перенесено на ${new Date(body.startsAt).toLocaleString('ru-RU')}` : (body.message ?? 'Не перенеслось'));
@@ -73,6 +74,10 @@ export default function WidgetPage() {
             <div>
               <Label>Телефон</Label>
               <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 900 000-00-00" aria-label="Телефон для переноса" />
+            </div>
+            <div>
+              <Label>Фамилия</Label>
+              <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Как в карте" aria-label="Фамилия для переноса" />
             </div>
             <div className="flex items-end">
               <Button type="button" variant="ghost" onClick={findVisits}>Найти записи</Button>
