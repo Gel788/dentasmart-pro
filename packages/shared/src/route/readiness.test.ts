@@ -58,6 +58,14 @@ describe('readiness', () => {
     expect(readiness(late).lab).toEqual({ state: 'blocked', reason: 'Не успевает к визиту' });
   });
 
+  it('лаборатория: прошедший срок сдачи блокирует, если работа не готова', () => {
+    const now = new Date('2026-10-20T09:00:00.000Z');
+    const overdue = stage({ lab: { id: 'l1', status: 'WAITING_IMPRESSION', dueAt: '2026-10-19T07:00:00.000Z' } });
+    expect(readiness(overdue, now).lab).toEqual({ state: 'blocked', reason: 'Срок сдачи прошёл' });
+    const ready = stage({ lab: { id: 'l1', status: 'READY', dueAt: '2026-10-19T07:00:00.000Z' } });
+    expect(readiness(ready, now).lab.state).toBe('ready');
+  });
+
   it('лаборатория: готовый заказ готов, ожидающий слепка ждёт', () => {
     expect(readiness(stage({ lab: { id: 'l1', status: 'READY', dueAt: null } })).lab.state).toBe('ready');
     expect(readiness(stage({ lab: { id: 'l1', status: 'WAITING_IMPRESSION', dueAt: null } })).lab).toEqual({ state: 'waiting', reason: 'Ждёт слепок' });
@@ -80,6 +88,11 @@ describe('routeOf', () => {
     expect(route.currentIndex).toBe(1);
     expect(route.price).toBe(78200);
     expect(route.paid).toBe(11000);
+  });
+
+  it('передаёт текущую дату в готовность этапов', () => {
+    const route = routeOf([stage({ lab: { id: 'l1', status: 'IN_PROGRESS', dueAt: '2026-10-19T07:00:00.000Z' } })], new Date('2026-10-20T00:00:00.000Z'));
+    expect(route.stages[0].readiness.lab.reason).toBe('Срок сдачи прошёл');
   });
 
   it('когда всё проведено, текущего этапа нет', () => {

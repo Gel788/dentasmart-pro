@@ -10,6 +10,7 @@ import { PlanJourney } from '@/components/studio/journey';
 import { MarketStrip } from '@/components/studio/market-strip';
 import { type Family, type PlanCard } from '@/components/studio/plans';
 import { PatientForm } from '@/components/studio/patient-form';
+import { RouteView } from '@/components/route/route-view';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { useAuth } from '@/lib/auth-context';
@@ -42,7 +43,7 @@ function CardScreen() {
   const [card, setCard] = useState<Card | null>(null);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
-  const [mode, setMode] = useState<'plan' | 'formula' | 'perio' | 'imaging' | 'care'>('plan');
+  const [mode, setMode] = useState<'route' | 'plan' | 'formula' | 'perio' | 'imaging' | 'care'>('route');
   const [view, setView] = useState<'before' | 'plan' | 'after'>('before');
   const [formula, setFormula] = useState<'ADULT' | 'CHILD' | 'MIXED'>('ADULT');
   const [tool, setTool] = useState('CARIES');
@@ -63,7 +64,7 @@ function CardScreen() {
   useEffect(() => {
     setPanelOpen(false);
     const saved = sessionStorage.getItem(`sd.card.${params.id}.mode`);
-    if (saved === 'plan' || saved === 'formula' || saved === 'perio' || saved === 'imaging' || saved === 'care') setMode(saved);
+    if (saved === 'route' || saved === 'plan' || saved === 'formula' || saved === 'perio' || saved === 'imaging' || saved === 'care') setMode(saved);
     setModeReady(true);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -109,6 +110,7 @@ function CardScreen() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {canWrite && <button className="sd-btn-ghost" type="button" onClick={() => setEditing(true)}>Изменить</button>}
           <div className="sd-seg">
+            <button type="button" className={mode === 'route' ? 'on' : ''} onClick={() => setMode('route')}>Маршрут</button>
             <button type="button" className={mode === 'plan' ? 'on' : ''} onClick={() => setMode('plan')}>План</button>
             <button type="button" className={mode === 'formula' ? 'on' : ''} onClick={() => setMode('formula')}>Формула</button>
             <button type="button" className={mode === 'perio' ? 'on' : ''} onClick={() => setMode('perio')}>Пародонт</button>
@@ -129,6 +131,7 @@ function CardScreen() {
           {card.alerts.map((alert) => <span key={alert.text} className={`sd-chip ${alert.tone}`}>{alert.text}</span>)}
         </div>
       )}
+      {mode === 'route' ? <RouteView patientId={params.id} onOpenPlan={() => setMode('plan')} /> : null}
       {mode === 'plan' ? (
         <PlanJourney
           patientId={params.id}

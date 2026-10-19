@@ -26,13 +26,14 @@ function materialsAxis(stage: StageInput): Axis {
   return { state: 'ready', reason: 'В резерве' };
 }
 
-function labAxis(stage: StageInput): Axis {
+function labAxis(stage: StageInput, now: Date): Axis {
   const lab = stage.lab;
   if (!lab) return { state: 'none', reason: 'Не нужна' };
   if (lab.status === 'READY' || lab.status === 'DELIVERED') return { state: 'ready', reason: 'Готово' };
   if (lab.status === 'REJECTED') return { state: 'blocked', reason: 'Работа отклонена' };
   const visit = stage.appointment;
   if (lab.dueAt && visit && Date.parse(lab.dueAt) > Date.parse(visit.startsAt)) return { state: 'blocked', reason: 'Не успевает к визиту' };
+  if (lab.dueAt && Date.parse(lab.dueAt) < now.getTime()) return { state: 'blocked', reason: 'Срок сдачи прошёл' };
   if (lab.status === 'WAITING_IMPRESSION') return { state: 'waiting', reason: 'Ждёт слепок' };
   return { state: 'waiting', reason: lab.dueAt ? `В работе до ${dayMonth(lab.dueAt)}` : 'В работе' };
 }
@@ -44,17 +45,17 @@ function paymentAxis(stage: StageInput): Axis {
   return { state: 'waiting', reason: `${rub(left)} к визиту` };
 }
 
-export function readiness(stage: StageInput): Readiness {
-  return { visit: visitAxis(stage), materials: materialsAxis(stage), lab: labAxis(stage), payment: paymentAxis(stage) };
+export function readiness(stage: StageInput, now: Date = new Date()): Readiness {
+  return { visit: visitAxis(stage), materials: materialsAxis(stage), lab: labAxis(stage, now), payment: paymentAxis(stage) };
 }
 
-export function routeOf(stages: StageInput[]): Route {
+export function routeOf(stages: StageInput[], now: Date = new Date()): Route {
   const sorted = [...stages].sort((a, b) => a.sortOrder - b.sortOrder);
   const currentIndex = sorted.findIndex((stage) => stage.appointment?.status !== 'COMPLETED');
   const built: RouteStage[] = sorted.map((stage, index) => ({
     ...stage,
     status: stage.appointment?.status === 'COMPLETED' ? 'done' : index === currentIndex ? 'current' : 'upcoming',
-    readiness: readiness(stage),
+    readiness: readiness(stage, now),
   }));
   return {
     stages: built,
