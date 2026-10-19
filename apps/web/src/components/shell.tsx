@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Activity, Calendar, CalendarRange, ClipboardCheck, FlaskConical, Moon, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users } from 'lucide-react';
+import { Activity, Calendar, CalendarRange, ClipboardCheck, FlaskConical, Moon, Package, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users, Wallet } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
 import { useFocus } from '@/lib/focus';
@@ -14,28 +14,35 @@ const PRIMARY = [
   { href: '/', label: 'Сегодня', icon: Calendar, perm: 'patient.read' },
   { href: '/patients', label: 'Пациенты', icon: Users, perm: 'patient.read' },
   { href: '/schedule', label: 'Расписание', icon: CalendarRange, perm: 'schedule.read' },
-  { href: '/price', label: 'Прайс', icon: Tags, perm: 'patient.read' },
-  { href: '/leads', label: 'Лиды', icon: PhoneIncoming, perm: 'patient.read' },
-  { href: '/settings', label: 'Настройки', icon: Settings, perm: 'org.manage' },
+  { href: '/supply', label: 'Снабжение', icon: Package, perm: 'warehouse.read' },
+  { href: '/money', label: 'Деньги', icon: Wallet, perm: 'finance.read' },
 ];
 
 const MORE = [
+  { href: '/price', label: 'Прайс', icon: Tags, perm: 'patient.read' },
+  { href: '/leads', label: 'Заявки', icon: PhoneIncoming, perm: 'patient.read' },
+  { href: '/kpis', label: 'Врачи', icon: Trophy, perm: 'patient.read' },
+  { href: '/radar', label: 'Радар денег', icon: Radar, perm: 'finance.read' },
+  { href: '/return', label: 'Возврат пациентов', icon: RotateCcw, perm: 'medical.read' },
+  { href: '/check-in', label: 'QR стойки', icon: QrCode, perm: 'schedule.read' },
+  { href: '/import', label: 'Переезд', icon: Upload, perm: 'patient.write' },
+];
+
+const SETTINGS = { href: '/settings', label: 'Настройки', icon: Settings, perm: 'org.manage' };
+
+/** Still reachable by address and through ⌘K, but kept out of the menu. */
+const HIDDEN = [
   { href: '/briefing', label: 'Утро', icon: Sunrise, perm: 'patient.read' },
   { href: '/pulse', label: 'Пульс', icon: Activity, perm: 'patient.read' },
   { href: '/lab', label: 'Лаборатория', icon: FlaskConical, perm: 'medical.read' },
   { href: '/quality', label: 'Карты', icon: ClipboardCheck, perm: 'medical.read' },
   { href: '/insurance', label: 'ДМС', icon: Shield, perm: 'finance.read' },
-  { href: '/kpis', label: 'Врачи', icon: Trophy, perm: 'patient.read' },
   { href: '/autopilot', label: 'Автопилот', icon: Repeat, perm: 'patient.read' },
-  { href: '/radar', label: 'Радар', icon: Radar, perm: 'finance.read' },
-  { href: '/return', label: 'Возврат', icon: RotateCcw, perm: 'medical.read' },
   { href: '/portal', label: 'Кабинет пациента', icon: Smartphone, perm: 'patient.read' },
-  { href: '/check-in', label: 'QR стойки', icon: QrCode, perm: 'schedule.read' },
-  { href: '/import', label: 'Переезд', icon: Upload, perm: 'patient.write' },
   { href: '/onboarding', label: 'Запуск', icon: Sparkles, perm: 'patient.read' },
 ];
 
-const NAV = [...PRIMARY, ...MORE];
+const NAV = [...PRIMARY, ...MORE, SETTINGS, ...HIDDEN];
 
 type Hit = { id: string; firstName: string; lastName: string; phone: string | null };
 
@@ -55,7 +62,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const allowed = (item: (typeof NAV)[number]) => user?.permissions.includes(item.perm);
   const primary = PRIMARY.filter(allowed);
   const more = MORE.filter(allowed);
-  const links = [...primary, ...more];
+  const settings = allowed(SETTINGS) ? SETTINGS : null;
+  const links = [...primary, ...more, ...(settings ? [settings] : []), ...HIDDEN.filter(allowed)];
 
   useEffect(() => {
     const stored = localStorage.getItem('sd_density');
@@ -145,6 +153,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <button className="sd-more" type="button" onClick={() => setMoreOpen((open) => !open)}>
             {moreOpen ? 'Меньше' : `Ещё ${more.length}`}
           </button>
+        )}
+        {settings && (
+          <Link href={settings.href} className={`sd-link sd-link-settings ${pathname.startsWith(settings.href) ? 'active' : ''}`}>
+            <Settings />
+            <span className="sd-nav-label">{settings.label}</span>
+          </Link>
         )}
         <div className="sd-nav-foot">
           <button className="sd-icon-btn" type="button" onClick={toggle} aria-label="Тема">

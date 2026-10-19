@@ -147,6 +147,8 @@ html.dark .sd-mark { color: #042f2e; }
 }
 .sd-more:hover { color: var(--text); background: color-mix(in srgb, var(--surface-solid) 70%, transparent); }
 .sd-nav-foot { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding-top: 12px; }
+.sd-link-settings { margin-top: auto; }
+.sd-link-settings + .sd-nav-foot { margin-top: 0; border-top: 1px solid var(--border); }
 .sd-user { padding: 8px 10px; color: var(--muted); }
 .sd-user b { display: block; color: var(--text); font-weight: 600; }
 
