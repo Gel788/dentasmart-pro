@@ -5,10 +5,11 @@ import { ValidationPipe } from '@nestjs/common';
 
 config({ path: resolve(__dirname, '../.env') });
 config({ path: resolve(__dirname, '../../../.env') });
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { DbErrorFilter } from './common/db-error.filter';
 
 async function bootstrap() {
   if (process.env.NODE_ENV === 'production') {
@@ -27,6 +28,8 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('api/v1');
+  const { httpAdapter } = app.get(HttpAdapterHost);
+  app.useGlobalFilters(new DbErrorFilter(httpAdapter));
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

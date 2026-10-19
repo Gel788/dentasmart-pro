@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { AuthUser } from '@dentasmart/shared';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { AuthUser, canMoveVisit, isVisitClosed, isVisitStatus, visitMoveError, type VisitStatus } from '@dentasmart/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { consumeStock } from '../domains/stock-consume';
 import { consumeForVisit, moveLabDeadlines } from '../route/route-chain';
@@ -101,6 +101,7 @@ export class AppointmentsService {
   async update(orgId: string, id: string, dto: UpdateAppointmentDto, userId: string) {
     const appt = await this.prisma.appointment.findFirst({ where: { id, organizationId: orgId } });
     if (!appt) throw new NotFoundException();
+    if (isVisitClosed(appt.status as VisitStatus)) throw new BadRequestException('Закрытый визит не переносят. Создайте новую запись');
 
     const startsAt = dto.startsAt ? new Date(dto.startsAt) : appt.startsAt;
     const endsAt = dto.endsAt ? new Date(dto.endsAt) : appt.endsAt;
@@ -239,6 +240,11 @@ export class AppointmentsService {
   async updateStatus(orgId: string, id: string, status: string, userId: string, noShowReason?: string) {
     const appt = await this.prisma.appointment.findFirst({ where: { id, organizationId: orgId } });
     if (!appt) throw new NotFoundException();
+    if (!isVisitStatus(status)) throw new BadRequestException('Неизвестный статус визита');
+    if (!canMoveVisit(appt.status as VisitStatus, status)) throw new BadRequestException(visitMoveError(appt.status as VisitStatus, status));
+    // Only move if nobody changed the status in between; otherwise the second click reports the real state.
+    const moved = await this.prisma.appointment.updateMany({ where: { id, status: appt.status }, data: { status } });
+    if (!moved.count) throw new ConflictException('Статус визита только что изменили. Обновите страницу');
     const updated = await this.prisma.appointment.update({
       where: { id },
       data: {
