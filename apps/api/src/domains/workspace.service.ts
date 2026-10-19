@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ToothCondition, ToothFormulaType } from '@dentasmart/database';
 import { PrismaService } from '../prisma/prisma.service';
+import { openLabOrders, reserveForPlan } from '../route/route-chain';
 import { ClinicConfigService } from './clinic-config.service';
 
 type Role = 'owner' | 'doctor' | 'reception';
@@ -587,6 +588,7 @@ export class WorkspaceService {
     const discount = round2(subtotal * (Number(plan.discountPercent) / 100));
     const total = round2(subtotal - discount);
 
+    let chain = { reserved: 0, short: 0 };
     const createdAppointments: { id: string; startsAt: Date; title: string }[] = [];
 
     await this.prisma.$transaction(async (tx) => {
@@ -670,6 +672,8 @@ export class WorkspaceService {
         createdAppointments.push({ id: appt.id, startsAt: slot.startsAt, title: phase.title });
       }
 
+      chain = await reserveForPlan(tx, { organizationId: orgId, branchId: branch.id, planId: plan.id });
+      await openLabOrders(tx, { organizationId: orgId, planId: plan.id, patientId: plan.patientId, doctorId });
       const number = `SD-${Date.now().toString().slice(-8)}`;
       const invoice = await tx.invoice.create({
         data: {
@@ -724,6 +728,7 @@ export class WorkspaceService {
       planId: plan.id,
       status: 'ACCEPTED',
       appointments: createdAppointments,
+      materials: chain,
       invoice: invoice
         ? { id: invoice.id, number: invoice.number, total: Number(invoice.totalAmount) }
         : null,
@@ -818,6 +823,8 @@ export class WorkspaceService {
         cursor = addDays(slot.endsAt, 1);
         cursor.setHours(10, 0, 0, 0);
       }
+      await reserveForPlan(tx, { organizationId: orgId, branchId: branch.id, planId: plan.id });
+      await openLabOrders(tx, { organizationId: orgId, planId: plan.id, patientId: plan.patientId, doctorId });
       await tx.invoice.create({
         data: {
           organizationId: orgId,
