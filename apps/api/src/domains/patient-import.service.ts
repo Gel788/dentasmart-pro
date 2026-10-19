@@ -34,12 +34,14 @@ export class PatientImportService {
     let created = 0;
     let skipped = 0;
 
-    // Duplicates are matched on the phone only: two different people may share a name.
+    // A duplicate is the same phone and the same name: namesakes differ by phone, and a family often shares one number.
     const known = await this.prisma.patient.findMany({
       where: { organizationId: orgId, phone: { not: null } },
-      select: { phone: true },
+      select: { phone: true, lastName: true, firstName: true },
     });
-    const phones = new Set(known.map((row) => digits(row.phone).slice(-10)).filter((tail) => tail.length === 10));
+    const keyOf = (phone: string | null | undefined, lastName: string, firstName: string) =>
+      `${digits(phone).slice(-10)}|${lastName.trim().toLowerCase().replace(/ё/g, 'е')}|${firstName.trim().toLowerCase().replace(/ё/g, 'е')}`;
+    const seen = new Set(known.map((row) => keyOf(row.phone, row.lastName, row.firstName)));
 
     for (const row of body.patients ?? []) {
       const lastName = row.lastName?.trim() ?? '';
@@ -51,7 +53,8 @@ export class PatientImportService {
       }
       const tail = digits(row.phone).slice(-10);
       const phone = tail.length === 10 ? `+${digits(row.phone)}` : null;
-      if (phone && phones.has(tail)) {
+      const key = keyOf(phone, lastName, firstName);
+      if (phone && seen.has(key)) {
         skipped += 1;
         bump('Уже есть в базе');
         continue;
@@ -71,7 +74,7 @@ export class PatientImportService {
           notes: importNotes(row, source),
         },
       });
-      if (phone) phones.add(tail);
+      if (phone) seen.add(key);
       created += 1;
     }
 
