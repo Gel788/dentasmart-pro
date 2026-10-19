@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { routeOf, type RoutePayload, type StageInput } from '@dentasmart/shared';
+import { labWorkOf, routeOf, type RoutePayload, type StageInput } from '@dentasmart/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -46,7 +46,7 @@ export class RouteService {
           teeth: [...new Set(phase.items.map((item) => item.toothNum).filter((num): num is number => typeof num === 'number'))],
           price,
           paid,
-          labWork: phase.labWork,
+          labWork: labWorkOf(phase.labWork, phase.items.map((item) => item.title)),
           appointment: visit ? { id: visit.id, startsAt: visit.startsAt.toISOString(), status: visit.status } : null,
           reservations: phase.items.flatMap((item) =>
             item.reservations.map((row) => ({ itemName: row.item.name, quantity: Number(row.quantity), status: row.status, expectedAt: null })),

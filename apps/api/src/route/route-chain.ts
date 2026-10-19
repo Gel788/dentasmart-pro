@@ -1,5 +1,5 @@
 import { Prisma } from '@dentasmart/database';
-import { labDueAt, reservationsFor } from '@dentasmart/shared';
+import { labDueAt, labWorkOf, reservationsFor } from '@dentasmart/shared';
 
 type Tx = Prisma.TransactionClient;
 
@@ -60,28 +60,28 @@ export async function reserveForPlan(tx: Tx, input: { organizationId: string; br
   };
 }
 
-/** Opens a lab order for each booked stage that needs lab work, due two working days before its visit. */
+/** Opens a lab order for each booked stage that needs lab work (see labWorkOf), due two working days before its visit. */
 export async function openLabOrders(tx: Tx, input: { organizationId: string; planId: string; patientId: string; doctorId: string | null }) {
   const phases = await tx.planPhase.findMany({
-    where: { planId: input.planId, labWork: { not: null }, labOrders: { none: {} } },
+    where: { planId: input.planId, labOrders: { none: {} } },
     include: {
       items: {
-        where: { appointmentId: { not: null } },
-        select: { appointment: { select: { id: true, startsAt: true } } },
-        take: 1,
+        where: { status: 'ACCEPTED' },
+        select: { title: true, appointment: { select: { id: true, startsAt: true } } },
       },
     },
   });
   let opened = 0;
   for (const phase of phases) {
-    const visit = phase.items[0]?.appointment ?? null;
-    if (!visit) continue;
+    const work = labWorkOf(phase.labWork, phase.items.map((item) => item.title));
+    const visit = phase.items.find((item) => item.appointment)?.appointment ?? null;
+    if (!work || !visit) continue;
     await tx.labOrder.create({
       data: {
         organizationId: input.organizationId,
         patientId: input.patientId,
         doctorId: input.doctorId,
-        title: phase.labWork as string,
+        title: work,
         status: 'WAITING_IMPRESSION',
         planPhaseId: phase.id,
         appointmentId: visit.id,
