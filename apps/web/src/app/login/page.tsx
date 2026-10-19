@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { isDemo } from '@/lib/demo/mode';
 
@@ -20,6 +21,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState(demo ? 'demo12345' : '');
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
+  const [needCode, setNeedCode] = useState(false);
+  const [code, setCode] = useState('');
 
   const enter = async (nextEmail: string) => {
     setEmail(nextEmail);
@@ -50,8 +53,12 @@ export default function LoginPage() {
     setPending(true);
     setError('');
     try {
-      await login(email, password);
+      await login(email, password, needCode ? code : undefined);
     } catch (err) {
+      if (err instanceof ApiError && err.body.requires2fa) {
+        setNeedCode(true);
+        setCode('');
+      }
       setError(err instanceof Error ? err.message : 'Не удалось войти');
       setPending(false);
     }
@@ -85,7 +92,23 @@ export default function LoginPage() {
           ))}
           <label className="sd-field"><span>Почта</span><input className="sd-input" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
           <label className="sd-field"><span>Пароль</span><input className="sd-input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
-          {error && <p className="sd-chip danger">{error}</p>}
+          {needCode && (
+            <label className="sd-field">
+              <span>Код из приложения</span>
+              <input
+                className="sd-input"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="\d{6}"
+                maxLength={6}
+                required
+                autoFocus
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+              />
+            </label>
+          )}
+          {error && <p role="alert" className="sd-chip danger">{error}</p>}
           <button className="sd-btn" disabled={pending} type="submit">{pending ? 'Входим…' : 'Продолжить'}</button>
         </form>
       </section>

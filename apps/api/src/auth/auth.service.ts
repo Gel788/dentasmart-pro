@@ -37,6 +37,11 @@ export class AuthService {
     if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException('Неверный email или пароль');
     }
+    // The password alone is not enough once the user turned on the second factor.
+    if (user.totpEnabled && user.totpSecret) {
+      if (!dto.code) throw new UnauthorizedException({ message: 'Введите код из приложения', requires2fa: true });
+      if (!verifyTotp(user.totpSecret, dto.code)) throw new UnauthorizedException({ message: 'Код не подошёл. Введите новый из приложения', requires2fa: true });
+    }
 
     await this.prisma.user.update({
       where: { id: user.id },

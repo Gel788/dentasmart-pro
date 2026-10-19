@@ -21,7 +21,7 @@ interface AuthState {
 interface AuthContextValue {
   user: AuthState | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, code?: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -53,10 +53,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadMe();
   }, [loadMe]);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, code?: string) => {
     const res = await api<{ accessToken: string; refreshToken?: string; assetToken?: string; user: AuthState }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, ...(code ? { code } : {}) }),
     });
     setToken(res.accessToken);
     if (res.refreshToken) localStorage.setItem('dsp_refresh', res.refreshToken);
