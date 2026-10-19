@@ -44,6 +44,12 @@ export class WorkspaceController {
     return this.workspace.catalog(orgId);
   }
 
+  @Get('schedule/range')
+  @RequirePermissions('schedule.read')
+  scheduleRange(@OrgId() orgId: string, @Query('from') from: string, @Query('to') to: string) {
+    return this.workspace.scheduleRange(orgId, from, to);
+  }
+
   @Get('schedule')
   @RequirePermissions('schedule.read')
   schedule(@OrgId() orgId: string, @Query('date') date?: string) {

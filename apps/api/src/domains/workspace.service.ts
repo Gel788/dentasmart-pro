@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ToothCondition, ToothFormulaType } from '@dentasmart/database';
+import { dayLoad, parseWorkHours, tzOffsetMinutes, wallDate } from '@dentasmart/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { openLabOrders, reserveForPlan } from '../route/route-chain';
 import { ClinicConfigService } from './clinic-config.service';
@@ -1027,20 +1028,66 @@ export class WorkspaceService {
         cabinets: b.cabinets.map((c) => ({ id: c.id, name: c.name })),
       })),
       doctors: doctors.map((d) => ({ id: d.id, name: `${d.lastName} ${d.firstName}` })),
-      appointments: appointments.map((a) => ({
-        id: a.id,
-        startsAt: a.startsAt,
-        endsAt: a.endsAt,
-        status: a.status,
-        cabinetId: a.cabinetId,
-        doctorId: a.doctorId,
-        patientId: a.patientId,
-        patient: `${a.patient.lastName} ${a.patient.firstName}`,
-        doctor: a.doctor ? `${a.doctor.lastName} ${a.doctor.firstName[0]}.` : 'Без врача',
-        cabinet: a.cabinet?.name ?? 'Без кресла',
-        service: a.service?.name ?? 'Приём',
-        allergies: a.patient.allergies,
-      })),
+      appointments: appointments.map(boardVisit),
+    };
+  }
+
+  /** Visits and how full each clinic-local day is, for the week, month and agenda views. */
+  async scheduleRange(orgId: string, fromStr: string, toStr: string) {
+    const valid = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value ?? '') && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
+    if (!valid(fromStr) || !valid(toStr)) throw new BadRequestException('Укажите даты в виде ГГГГ-ММ-ДД');
+    const fromDay = Date.parse(`${fromStr}T00:00:00Z`);
+    const toDay = Date.parse(`${toStr}T00:00:00Z`);
+    const days = Math.round((toDay - fromDay) / 86400000) + 1;
+    if (days < 1 || days > 62) throw new BadRequestException('Период от 1 до 62 дней');
+
+    const [org, branches] = await Promise.all([
+      this.prisma.organization.findUniqueOrThrow({ where: { id: orgId }, select: { workHours: true } }),
+      this.prisma.branch.findMany({
+        where: { organizationId: orgId, isActive: true },
+        include: { cabinets: { where: { isActive: true }, select: { id: true } } },
+        orderBy: { name: 'asc' },
+      }),
+    ]);
+    const timezone = branches[0]?.timezone ?? 'Europe/Moscow';
+    const offset = tzOffsetMinutes(timezone, new Date(fromDay));
+    const hours = parseWorkHours(org.workHours);
+    const chairs = branches.reduce((sum, branch) => sum + branch.cabinets.length, 0);
+    const appointments = await this.prisma.appointment.findMany({
+      where: {
+        organizationId: orgId,
+        status: { not: 'CANCELLED' },
+        startsAt: { gte: new Date(fromDay - offset * 60000), lt: new Date(toDay + 86400000 - offset * 60000) },
+      },
+      include: { patient: true, doctor: true, service: true, cabinet: true },
+      orderBy: { startsAt: 'asc' },
+    });
+    const visits = appointments.map(boardVisit);
+    const byDay = new Map<string, typeof visits>();
+    for (const visit of visits) {
+      const key = wallDate(visit.startsAt.toISOString(), offset);
+      byDay.set(key, [...(byDay.get(key) ?? []), visit]);
+    }
+    return {
+      from: fromStr,
+      to: toStr,
+      timezone,
+      offsetMinutes: offset,
+      hours,
+      chairs,
+      days: Array.from({ length: days }, (_, index) => {
+        const date = new Date(fromDay + index * 86400000).toISOString().slice(0, 10);
+        const list = byDay.get(date) ?? [];
+        return {
+          date,
+          ...dayLoad(list.map((v) => ({ id: v.id, startsAt: v.startsAt.toISOString(), endsAt: v.endsAt.toISOString(), status: v.status })), {
+            chairs,
+            ...hours,
+            tzOffsetMinutes: offset,
+          }),
+        };
+      }),
+      appointments: visits,
     };
   }
 
@@ -1713,4 +1760,22 @@ function splitInstallment(total: number, months: number) {
     parts.push({ dueDate: due, amount });
   }
   return parts;
+}
+
+/** The shape every schedule view reads a visit in. */
+function boardVisit(a: Prisma.AppointmentGetPayload<{ include: { patient: true; doctor: true; service: true; cabinet: true } }>) {
+  return {
+    id: a.id,
+    startsAt: a.startsAt,
+    endsAt: a.endsAt,
+    status: a.status,
+    cabinetId: a.cabinetId,
+    doctorId: a.doctorId,
+    patientId: a.patientId,
+    patient: `${a.patient.lastName} ${a.patient.firstName}`,
+    doctor: a.doctor ? `${a.doctor.lastName} ${a.doctor.firstName[0]}.` : 'Без врача',
+    cabinet: a.cabinet?.name ?? 'Без кресла',
+    service: a.service?.name ?? 'Приём',
+    allergies: a.patient.allergies,
+  };
 }

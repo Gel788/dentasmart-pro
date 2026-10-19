@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Врачи по горизонтали</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+*{box-sizing:border-box;margin:0}
+body{width:1440px;height:900px;overflow:hidden;background:#EEF2F1;color:#10201F;font:14px/1.4 'Golos Text',sans-serif;display:grid;grid-template-columns:216px 1fr}
+nav{background:#fff;border-right:1px solid #DCE3E1;padding:18px 12px;display:flex;flex-direction:column;gap:4px}
+nav b{display:flex;gap:10px;align-items:center;padding:4px 10px 16px;font-weight:700}nav b i{width:30px;height:30px;border-radius:9px;background:#0B6E66;display:block}
+nav a{padding:9px 12px;border-radius:10px;color:#3B4A48}nav a.on{background:#E1EFEC;color:#08534D;font-weight:600}
+main{display:grid;grid-template-rows:auto auto 1fr;min-width:0}
+.top{display:flex;align-items:center;gap:12px;padding:16px 24px;border-bottom:1px solid #DCE3E1}
+h1{font:600 22px Unbounded,sans-serif;margin-right:auto}.seg{display:flex;background:#F6F9F8;border:1px solid #DCE3E1;border-radius:11px;padding:3px}.seg span{padding:6px 14px;border-radius:8px;color:#3B4A48}.seg .on{background:#fff;border:1px solid #DCE3E1;color:#10201F;font-weight:600}
+.btn{background:#0B6E66;color:#fff;border-radius:10px;padding:9px 16px;font-weight:600}
+.sum{display:flex;gap:28px;padding:12px 24px;font-variant-numeric:tabular-nums;color:#3B4A48}.sum b{font:600 18px Unbounded,sans-serif;color:#10201F;margin-right:6px}
+.body{display:grid;grid-template-columns:1fr 320px;min-height:0}
+.board{margin:0 0 16px 24px;background:#fff;border:1px solid #DCE3E1;border-radius:14px;overflow:hidden;position:relative}
+.scale{display:grid;grid-template-columns:200px repeat(12,1fr);border-bottom:1px solid #DCE3E1;font:500 11px 'IBM Plex Mono',monospace;color:#52625F}.scale span{padding:10px 6px;border-left:1px solid #EEF2F1}
+.r{display:grid;grid-template-columns:200px 1fr;border-bottom:1px solid #EEF2F1;height:96px}
+.who{padding:14px 16px;border-right:1px solid #DCE3E1}.who b{display:block}.who small{color:#52625F}.who em{font-style:normal;display:block;margin-top:6px;font-size:12px;color:#1B6B3E}
+.lane{position:relative;background:repeating-linear-gradient(90deg,#fff 0,#fff calc(100%/12 - 1px),#EEF2F1 calc(100%/12 - 1px),#EEF2F1 calc(100%/12))}
+.v{position:absolute;top:12px;bottom:12px;border-radius:9px;padding:8px 10px;font-size:12.5px;border-top:3px solid #0B6E66;background:#E1EFEC;overflow:hidden;white-space:nowrap}.v b{display:block}.v span{color:#3B4A48}
+.v.w{background:#FBE7CF;border-color:#B45309}.v.r2{background:#FDE8E6;border-color:#9B1C12}.v.g{background:#EEF2F1;border-color:#C5D0CD;color:#52625F}.v.br{background:repeating-linear-gradient(135deg,#F3F6F5 0 6px,#E6ECEA 6px 12px);border-color:#C5D0CD;color:#52625F}
+.now{position:absolute;top:0;bottom:0;left:calc(200px + (100% - 200px) * 0.2917);width:2px;background:#9B1C12}.now:before{content:'11:30';position:absolute;top:4px;left:6px;font:600 11px 'IBM Plex Mono',monospace;color:#9B1C12;background:#fff;padding:0 3px}
+aside{margin:0 24px 16px 14px;background:#fff;border:1px solid #DCE3E1;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.chip{display:inline-block;border-radius:7px;padding:3px 8px;font-size:12.5px;margin:2px 4px 2px 0}.ok{background:#E3F3EA;color:#1B6B3E}.wa{background:#FBE7CF;color:#8A3F06}.bad{background:#FDE8E6;color:#9B1C12}
+</style></head><body>
+<nav><b><i></i>DentaSmart</b><a>Сегодня</a><a>Пациенты</a><a class="on">Расписание</a><a>Снабжение</a><a>Деньги</a></nav>
+<main><div class="top"><h1>Вторник, 20 октября</h1><span>‹ Сегодня ›</span><div class="seg"><span class="on">День</span><span>Неделя</span><span>Месяц</span><span>Повестка</span></div><span class="btn">Записать</span></div>
+<div class="sum"><span><b>14</b>визитов</span><span><b>3</b>ждут подтверждения</span><span><b>2 ч 15 мин</b>свободно сегодня</span><span style="color:#9B1C12"><b style="color:#9B1C12">1</b>визит не готов</span></div>
+<div class="body"><div class="board">
+<div class="scale"><span>Врач · кресло</span><span>8</span><span>9</span><span>10</span><span>11</span><span>12</span><span>13</span><span>14</span><span>15</span><span>16</span><span>17</span><span>18</span><span>19</span></div>
+<div class="r"><div class="who"><b>Козлова О.</b><small>Хирург · кресло 1</small><em>занято 82%</em></div><div class="lane"><div class="v g" style="left:8.3%;width:12%"><b>Иванов М.</b><span>Каналы</span></div><div class="v" style="left:25%;width:12.5%"><b>Смирнова А.</b><span>Имплант 36</span></div><div class="v br" style="left:41.6%;width:8.3%"><b>Обед</b></div><div class="v w" style="left:58.3%;width:4.2%"><b>Новикова</b></div></div></div>
+<div class="r"><div class="who"><b>Петров А.</b><small>Терапевт · кресло 2</small><em>занято 64%</em></div><div class="lane"><div class="v g" style="left:12.5%;width:8.3%"><b>Попов О.</b><span>Гигиена</span></div><div class="v" style="left:29.2%;width:8.3%"><b>Морозова Е.</b><span>Кариес 16</span></div><div class="v r2" style="left:66.6%;width:4.2%"><b>Кузнецов</b><span>лаб.</span></div></div></div>
+<div class="r"><div class="who"><b>Сафарян К.</b><small>Ортопед · кресло 3</small><em>занято 58%</em></div><div class="lane"><div class="v" style="left:16.6%;width:12.5%"><b>Фёдоров А.</b><span>Мост 34–36</span></div><div class="v" style="left:70.8%;width:8.3%"><b>Лебедева С.</b><span>Ретейнер</span></div></div></div>
+<div class="r"><div class="who"><b>Алиева Р.</b><small>Гигиенист · кресло 2</small><em>с 14:00</em></div><div class="lane"><div class="v br" style="left:0;width:50%"><b>Не в смене</b></div><div class="v" style="left:54%;width:8.3%"><b>Ершова Д.</b><span>Гигиена</span></div></div></div>
+<div class="now"></div></div>
+<aside><b style="font-size:17px">Кузнецов Дмитрий · 16:00</b><span>Фиксация коронки 46 · кресло 2</span><div><span class="chip ok">Визит · подтверждён</span><span class="chip bad">Лаборатория · срок сегодня 18:00</span><span class="chip ok">Оплата · внесено</span></div><span class="btn" style="text-align:center">Написать в лабораторию</span><span style="text-align:center;color:#3B4A48">Перенести · Отменить</span></aside>
+</div></main></body></html>

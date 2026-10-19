@@ -13,3 +13,5 @@ coverage
 packages/database/src/generated/
 test-results
 playwright-report
+**/.impeccable/review/
+**/.impeccable/mocks/decision/payload.json

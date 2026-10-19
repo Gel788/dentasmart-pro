@@ -108,10 +108,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
     const tools = [
       { id: 'theme', label: theme === 'dark' ? 'Светлая тема' : 'Тёмная тема', run: toggle },
       { id: 'density', label: density === 'compact' ? 'Плотность: комфорт' : 'Плотность: компакт', run: () => switchDensity(density === 'compact' ? 'comfort' : 'compact') },
+      { id: 'logout', label: 'Выйти из аккаунта', run: logout },
     ];
     const pool = query.trim().length < 2 ? [...pages, ...tools] : [...people, ...pages];
     return pool;
-  }, [links, hits, query, router, setFocus, theme, toggle, density]);
+  }, [links, hits, query, router, setFocus, theme, toggle, density, logout]);
 
   useEffect(() => { setCursor(0); }, [query, palette]);
 

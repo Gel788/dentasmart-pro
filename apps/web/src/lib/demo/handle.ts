@@ -1,7 +1,7 @@
 import { phoneDigits } from '../phone';
 import { PLAN_TEMPLATES, composeFamily, lineTotal, type Mark } from '../plan-engine';
 import { resultFor, serviceKit, surfacesFor } from '../service-kit';
-import { fromKopecks, invoiceStatus, kopecks, labDueAt } from '@dentasmart/shared';
+import { canMoveVisit, dayLoad, fromKopecks, invoiceStatus, isVisitClosed, isVisitStatus, kopecks, labDueAt, parseWorkHours, visitMoveError, wallDate, type VisitStatus } from '@dentasmart/shared';
 import snapshot from './snapshot.json';
 import { demoLabWork, demoRoute, reserveDemoLines, type DemoReservation } from './route';
 
@@ -187,6 +187,7 @@ function read(path: string, token: string): unknown {
   if (pathname === '/patients') return patientPage(bag, query);
   if (pathname === '/workspace/search') return searchPeople(bag, query.q ?? '');
   if (pathname === '/flow/caller') return searchPeople(bag, query.phone ?? '');
+  if (pathname === '/workspace/schedule/range') return scheduleRange(bag, query.from ?? ANCHOR, query.to ?? ANCHOR);
   if (pathname === '/workspace/schedule') return scheduleFor(bag, query.date || ANCHOR);
   if (pathname === '/showcase/copilot') {
     return bag.gets['/showcase/copilot'] ?? bag.gets[`/showcase/copilot?patientId=${query.patientId}&note=кариес`];
@@ -273,6 +274,26 @@ function scheduleFor(bag: Bag, date: string) {
   const day = shiftString(date.slice(0, 10), -1);
   const appointments = bag.appointments.filter((row) => row.startsAt.slice(0, 10) === day && row.status !== 'CANCELLED');
   return { ...shell, date: `${day}T00:00:00.000Z`, appointments };
+}
+
+/** Same shape as the API's GET /workspace/schedule/range, worked out from the demo's stored visits. */
+function scheduleRange(bag: Bag, fromRaw: string, toRaw: string) {
+  const from = shiftString(fromRaw.slice(0, 10), -1);
+  const to = shiftString(toRaw.slice(0, 10), -1);
+  const fromDay = Date.parse(`${from}T00:00:00Z`);
+  const days = Math.max(1, Math.min(62, Math.round((Date.parse(`${to}T00:00:00Z`) - fromDay) / 86400000) + 1));
+  const shell = bag.gets[`/workspace/schedule?date=${ANCHOR}`] as AnyRec;
+  const chairs = ((shell.branches ?? []) as AnyRec[]).reduce((sum, branch) => sum + (branch.cabinets?.length ?? 0), 0);
+  const offset = 180;
+  const hours = parseWorkHours((config(bag).brand as AnyRec | undefined)?.workHours);
+  const visits = bag.appointments.filter((row) => row.status !== 'CANCELLED');
+  const dates = Array.from({ length: days }, (_, index) => new Date(fromDay + index * 86400000).toISOString().slice(0, 10));
+  const inRange = visits.filter((row) => dates.includes(wallDate(row.startsAt, offset)));
+  return {
+    from, to, timezone: 'Europe/Moscow', offsetMinutes: offset, hours, chairs,
+    days: dates.map((date) => ({ date, ...dayLoad(inRange.filter((row) => wallDate(row.startsAt, offset) === date), { chairs, ...hours, tzOffsetMinutes: offset }) })),
+    appointments: inRange.sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
+  };
 }
 
 function priceCsv(bag: Bag) {
@@ -362,7 +383,14 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
   if (pathname === '/config/promos') return pushConfig(bag, 'promos', { id: uid(), code: data.code, discountPct: data.discountPct ?? 10, isActive: true });
   if (pathname === '/config/rules') return pushConfig(bag, 'rules', { id: uid(), ...data, isActive: true });
 
-  if (pathname === '/workspace/appointments') return book(bag, data);
+  if (pathname === '/workspace/appointments') {
+    const startsAt = new Date(data.startsAt).toISOString();
+    const endsAt = new Date(Date.parse(startsAt) + (Number(data.durationMin) || 30) * 60000).toISOString();
+    assertFree(bag, { id: '' } as Appointment, startsAt, endsAt, data.cabinetId ?? null, data.doctorId ?? null);
+    return book(bag, data);
+  }
+  const moveStatus = pathname.match(/^\/appointments\/([^/]+)\/status$/);
+  if (moveStatus && method === 'PATCH') return setVisitStatus(bag, moveStatus[1], String(data.status ?? ''));
   const move = pathname.match(/^\/appointments\/([^/]+)$/);
   if (move && method === 'PATCH') return moveAppointment(bag, move[1], data);
   const visit = pathname.match(/^\/flow\/visits\/([^/]+)(?:\/([^/]+))?$/);
@@ -887,9 +915,43 @@ function book(bag: Bag, data: AnyRec) {
   return row;
 }
 
+/** The API's rules, in the browser: allowed status moves only. */
+function setVisitStatus(bag: Bag, id: string, status: string) {
+  const row = bag.appointments.find((item) => item.id === id);
+  if (!row) throw new Error('Запись не найдена');
+  const from = (row.status === 'ARRIVED' ? 'WAITING' : row.status) as VisitStatus;
+  if (!isVisitStatus(status)) throw new Error('Неизвестный статус визита');
+  if (!canMoveVisit(from, status)) throw new Error(visitMoveError(from, status));
+  row.status = status;
+  const visit = bag.gets[`/flow/visits/${id}`] as AnyRec | undefined;
+  if (visit) visit.status = status;
+  return row;
+}
+
+/** Mirrors the database's no-overlap constraints for one chair and one doctor. */
+function assertFree(bag: Bag, row: Appointment, startsAt: string, endsAt: string, cabinetId: string | null, doctorId: string | null) {
+  const live = (item: Appointment) => item.id !== row.id && item.status !== 'CANCELLED' && item.status !== 'NO_SHOW';
+  const overlaps = (item: Appointment) => item.startsAt < endsAt && startsAt < item.endsAt;
+  if (cabinetId && bag.appointments.some((item) => live(item) && item.cabinetId === cabinetId && overlaps(item))) {
+    throw new Error('Кресло на это время уже занято. Выберите другое время или кресло');
+  }
+  if (doctorId && bag.appointments.some((item) => live(item) && item.doctorId === doctorId && overlaps(item))) {
+    throw new Error('У врача на это время уже есть приём. Выберите другое время');
+  }
+}
+
 function moveAppointment(bag: Bag, id: string, data: AnyRec) {
   const row = bag.appointments.find((item) => item.id === id);
   if (!row) throw new Error('Запись не найдена');
+  if (isVisitClosed((row.status === 'ARRIVED' ? 'WAITING' : row.status) as VisitStatus) && (data.startsAt || data.cabinetId || data.doctorId)) {
+    throw new Error('Закрытый визит не переносят. Создайте новую запись');
+  }
+  if (data.startsAt || data.endsAt || data.cabinetId || data.doctorId) {
+    const startsAt = data.startsAt ?? row.startsAt;
+    const endsAt = data.endsAt ?? (data.startsAt && data.durationMin ? new Date(Date.parse(data.startsAt) + Number(data.durationMin) * 60000).toISOString() : row.endsAt);
+    if (!(endsAt > startsAt)) throw new Error('Конец приёма должен быть позже начала');
+    assertFree(bag, row, startsAt, endsAt, data.cabinetId ?? row.cabinetId, data.doctorId ?? row.doctorId);
+  }
   if (data.patientId) {
     const patient = findPatient(bag, data.patientId);
     row.patientId = data.patientId;
