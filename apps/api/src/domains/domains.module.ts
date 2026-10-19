@@ -26,6 +26,7 @@ import { IntegrationsService } from './integrations.service';
 import { SterilizationController } from './sterilization.controller';
 import { SterilizationService } from './sterilization.service';
 import { WorkspaceController } from './workspace.controller';
+import { PatientImportService } from './patient-import.service';
 import { WorkspaceService } from './workspace.service';
 import { FlowController } from './flow.controller';
 import { FlowService } from './flow.service';
@@ -73,6 +74,7 @@ import { MarketService } from './market.service';
     IntegrationsService,
     SterilizationService,
     WorkspaceService,
+    PatientImportService,
     FlowService,
     ShowcaseService,
     ClinicConfigService,

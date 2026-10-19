@@ -6,6 +6,8 @@ import { PermissionsGuard } from '../auth/permissions.guard';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { CurrentUser } from '../common/current-user.decorator';
 import { OrgId } from '../common/org.decorator';
+import { ImportPatientsDto } from './dto/import-patients.dto';
+import { PatientImportService } from './patient-import.service';
 import { WorkspaceService } from './workspace.service';
 
 @ApiTags('workspace')
@@ -13,7 +15,16 @@ import { WorkspaceService } from './workspace.service';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('workspace')
 export class WorkspaceController {
-  constructor(private readonly workspace: WorkspaceService) {}
+  constructor(
+    private readonly workspace: WorkspaceService,
+    private readonly patientImport: PatientImportService,
+  ) {}
+
+  @Post('import')
+  @RequirePermissions('patient.write')
+  importPatients(@OrgId() orgId: string, @Body() body: ImportPatientsDto) {
+    return this.patientImport.run(orgId, body);
+  }
 
   @Get('home')
   @RequirePermissions('patient.read')

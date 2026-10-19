@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:import": "node --experimental-strip-types src/lib/ole-biff.test.mjs",
+    "test:import": "node --experimental-strip-types src/lib/ole-biff.test.mjs && node --experimental-strip-types src/lib/migrate.test.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {
