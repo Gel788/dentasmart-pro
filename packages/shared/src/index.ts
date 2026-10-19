@@ -5,3 +5,4 @@ export * from './money';
 export * from './visit';
 export * from './schedule';
 export * from './patients';
+export * from './medical';

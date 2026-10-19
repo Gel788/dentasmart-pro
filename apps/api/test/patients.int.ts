@@ -7,6 +7,7 @@ import { PrismaClient } from '@dentasmart/database';
 import { PatientsService } from '../src/patients/patients.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 import type { AuditService } from '../src/common/audit.service';
+import type { AuthUser } from '@dentasmart/shared';
 
 const prisma = new PrismaClient();
 const patients = new PatientsService(prisma as unknown as PrismaService, {} as AuditService);
@@ -68,9 +69,36 @@ async function main() {
     const paged = await patients.findAll(clinic.id, { pageSize: 3, page: 2 });
     assert.equal(paged.items.length, 1);
     assert.equal((await patients.findAll(clinic.id, { segment: 'nonsense', sort: 'drop table' })).total, 4, 'неизвестные параметры игнорируются');
+    // Medical history: versioned saves, confirmation with author, audit, no cross-clinic writes.
+    const doctorUser = await prisma.user.create({ data: { organizationId: clinic.id, email: `doc-${stamp}@test.local`, passwordHash: 'x' } });
+    await prisma.employee.create({ data: { userId: doctorUser.id, firstName: 'Ольга', lastName: 'Козлова' } as never });
+    const doctor = { id: doctorUser.id, organizationId: clinic.id } as AuthUser;
+    const audited = new PatientsService(prisma as unknown as PrismaService, { log: (data: object) => prisma.auditLog.create({ data: data as never }) } as unknown as AuditService);
+    const v0 = await audited.medical(clinic.id, ivanov.id);
+    assert.equal(v0.version, 0);
+    assert.equal(v0.reviewDue, true, 'не подтверждённый анамнез требует подтверждения');
+    const v1 = await audited.saveMedical(doctor, ivanov.id, { version: 0, allergies: [' Латекс ', 'латекс'], anticoagulant: true, confirm: true });
+    assert.deepEqual(v1.fields.allergies, ['Латекс']);
+    assert.equal(v1.version, 1);
+    assert.equal(v1.reviewDue, false);
+    assert.equal(v1.confirmedBy, 'Козлова Ольга', 'видно, кто подтвердил');
+    await assert.rejects(audited.saveMedical(doctor, ivanov.id, { version: 0, medications: 'Аспирин' }), (error: { status?: number }) => error.status === 409, 'устаревшая форма не перезаписывает новую');
+    const parallel = await Promise.allSettled([
+      audited.saveMedical(doctor, ivanov.id, { version: 1, medications: 'Аспирин' }),
+      audited.saveMedical(doctor, ivanov.id, { version: 1, medications: 'Варфарин' }),
+    ]);
+    assert.equal(parallel.filter((r) => r.status === 'fulfilled').length, 1, 'из двух одновременных правок проходит одна');
+    const log = await prisma.auditLog.findMany({ where: { entityType: 'PatientMedical', entityId: ivanov.id } });
+    assert.equal(log.length, 2);
+    const strangerPatient = await prisma.patient.findFirstOrThrow({ where: { organizationId: other.id } });
+    await assert.rejects(audited.saveMedical(doctor, strangerPatient.id, { version: 0, anamnesis: 'x' }), /не найден/);
+    await assert.rejects(audited.update(clinic.id, strangerPatient.id, { firstName: 'Взлом' }, doctorUser.id), /не найден/, 'чужого пациента не изменить');
     console.log('patients ok');
   } finally {
     for (const org of [clinic.id, other.id]) {
+      await prisma.auditLog.deleteMany({ where: { organizationId: org } });
+      await prisma.employee.deleteMany({ where: { user: { organizationId: org } } });
+      await prisma.user.deleteMany({ where: { organizationId: org } });
       await prisma.invoice.deleteMany({ where: { organizationId: org } });
       await prisma.appointment.deleteMany({ where: { organizationId: org } });
       await prisma.patient.deleteMany({ where: { organizationId: org } });

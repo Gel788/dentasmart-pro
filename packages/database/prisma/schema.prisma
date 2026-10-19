@@ -320,6 +320,11 @@ model Patient {
   anxiety           AnxietyLevel   @default(NONE)
   pregnant          Boolean        @default(false)
   anticoagulant     Boolean        @default(false)
+  /// Grows with every change of the medical fields; a save names the version it was made from.
+  medicalVersion    Int            @default(0)
+  /// When a clinician last confirmed the medical history with the patient, and who.
+  medicalConfirmedAt   DateTime?
+  medicalConfirmedById String?
   isActive          Boolean        @default(true)
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt

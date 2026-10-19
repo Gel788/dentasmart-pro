@@ -1,10 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@dentasmart/database';
 import {
   AuthUser,
   DORMANT_DAYS,
   fromKopecks,
   kopecks,
+  MEDICAL_KEYS,
+  medicalDiff,
+  medicalReviewDue,
+  normalizeMedical,
+  type MedicalFields,
   patientSegments,
   phoneNeedle,
   searchTerms,
@@ -14,6 +19,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/audit.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
+import { MedicalDto } from './dto/medical.dto';
 
 export type PatientSort = 'name' | 'lastVisit' | 'nextVisit' | 'debt' | 'recent';
 export type PatientListQuery = { search?: string; page?: number; pageSize?: number; segment?: string; sort?: string };
@@ -64,6 +70,22 @@ const SORTS: Record<PatientSort, Prisma.Sql> = {
   debt: Prisma.sql`debt DESC`,
   recent: Prisma.sql`"createdAt" DESC`,
 };
+
+type MedicalPatient = MedicalFields & { medicalVersion: number; medicalConfirmedAt: Date | null; medicalConfirmedById: string | null };
+
+/** The medical history with who last confirmed it and whether it is due for review. Shared with the card. */
+export async function medicalView(prisma: Pick<PrismaService, 'user'>, patient: MedicalPatient) {
+  const by = patient.medicalConfirmedById
+    ? await prisma.user.findUnique({ where: { id: patient.medicalConfirmedById }, include: { employee: true } })
+    : null;
+  return {
+    version: patient.medicalVersion,
+    fields: Object.fromEntries(MEDICAL_KEYS.map((key) => [key, patient[key]])) as MedicalFields,
+    confirmedAt: patient.medicalConfirmedAt,
+    confirmedBy: by ? (by.employee ? `${by.employee.lastName} ${by.employee.firstName}` : by.email) : null,
+    reviewDue: medicalReviewDue(patient.medicalConfirmedAt),
+  };
+}
 
 @Injectable()
 export class PatientsService {
@@ -279,13 +301,69 @@ export class PatientsService {
     };
   }
 
+  /** The medical history with who last confirmed it and whether it is due for review. */
+  async medical(orgId: string, id: string) {
+    const patient = await this.prisma.patient.findFirst({ where: { id, organizationId: orgId } });
+    if (!patient) throw new NotFoundException('Пациент не найден');
+    return this.medicalView(patient);
+  }
+
+  medicalView(patient: MedicalPatient) {
+    return medicalView(this.prisma, patient);
+  }
+
+  /**
+   * Saves the medical history only if nobody changed it since `dto.version` was read; otherwise 409 with
+   * the current state, so the clinician sees what changed instead of overwriting it. Every save is audited
+   * with the changed fields and their old values.
+   */
+  async saveMedical(user: AuthUser, id: string, dto: MedicalDto) {
+    const orgId = user.organizationId;
+    const patient = await this.prisma.patient.findFirst({ where: { id, organizationId: orgId } });
+    if (!patient) throw new NotFoundException('Пациент не найден');
+    const { version, confirm, ...input } = dto;
+    if (patient.medicalVersion !== version) {
+      throw new ConflictException({ message: 'Медкарту уже изменили. Посмотрите новую версию и внесите правку ещё раз', current: await this.medicalView(patient) });
+    }
+    const next = normalizeMedical(input as Partial<MedicalFields>);
+    const changes = medicalDiff(patient, next);
+    if (!changes.length && !confirm) return this.medicalView(patient);
+
+    const now = new Date();
+    const saved = await this.prisma.patient.updateMany({
+      where: { id, organizationId: orgId, medicalVersion: version },
+      data: {
+        ...next,
+        medicalVersion: { increment: 1 },
+        ...(confirm ? { medicalConfirmedAt: now, medicalConfirmedById: user.id } : {}),
+      },
+    });
+    if (!saved.count) {
+      const fresh = await this.prisma.patient.findFirstOrThrow({ where: { id, organizationId: orgId } });
+      throw new ConflictException({ message: 'Медкарту только что изменили. Посмотрите новую версию и внесите правку ещё раз', current: await this.medicalView(fresh) });
+    }
+    await this.audit.log({
+      organizationId: orgId,
+      userId: user.id,
+      entityType: 'PatientMedical',
+      entityId: id,
+      action: 'UPDATE',
+      changes: { version: version + 1, confirmed: Boolean(confirm), changes } as unknown as Prisma.InputJsonValue,
+    });
+    return this.medical(orgId, id);
+  }
+
   async update(orgId: string, id: string, dto: Partial<CreatePatientDto>, userId: string) {
+    const owned = await this.prisma.patient.count({ where: { id, organizationId: orgId } });
+    if (!owned) throw new NotFoundException('Пациент не найден');
     if (dto.phone) await this.assertPhoneFree(orgId, dto.phone, id);
     const { birthDate, consentPd, dmsInsurer, dmsNumber, isActive, ...rest } = dto;
+    const touchesMedical = MEDICAL_KEYS.some((key) => key in rest);
     const patient = await this.prisma.patient.update({
       where: { id },
       data: {
         ...rest,
+        ...(touchesMedical ? { medicalVersion: { increment: 1 } } : {}),
         ...(isActive === undefined ? {} : { isActive }),
         ...(birthDate !== undefined
           ? { birthDate: birthDate ? new Date(birthDate) : null }

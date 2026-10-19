@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ToothCondition, ToothFormulaType } from '@dentasmart/database';
 import { dayLoad, parseWorkHours, tzOffsetMinutes, wallDate } from '@dentasmart/shared';
+import { medicalView } from '../patients/patients.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { openLabOrders, reserveForPlan } from '../route/route-chain';
 import { ClinicConfigService } from './clinic-config.service';
@@ -22,6 +23,17 @@ const TIER_LABEL: Record<string, string> = {
   OPTIMUM: 'Оптимум',
   PREMIUM: 'Премиум',
 };
+
+const PAYMENT_METHOD_RU: Record<string, string> = {
+  CASH: 'наличные', CARD: 'карта', ONLINE: 'онлайн', DMS: 'ДМС', INSTALLMENT: 'рассрочка', BONUS: 'бонусы',
+};
+const CONSENT_TYPE_RU: Record<string, string> = {
+  PD_PROCESSING: 'Согласие на обработку персональных данных',
+  MEDICAL_TREATMENT: 'Информированное согласие на лечение',
+  MARKETING: 'Согласие на рассылки',
+  TELEMEDICINE: 'Согласие на телемедицину',
+};
+const CONSENT_STATUS_RU: Record<string, string> = { PENDING: 'ждёт подписи', SIGNED: 'подписано', REVOKED: 'отозвано' };
 
 @Injectable()
 export class WorkspaceService {
@@ -105,7 +117,7 @@ export class WorkspaceService {
     });
     if (!patient) throw new NotFoundException('Пациент не найден');
 
-    const [debt, surfaces, events, perio, plans, appointments, payments, invoices, imaging, messages, consents] =
+    const [debt, surfaces, events, perio, plans, appointments, payments, invoices, imaging, messages, consents, medicalLog, next, deposit, medical] =
       await Promise.all([
         this.debtOf(patientId),
         this.prisma.toothSurface.findMany({ where: { patientId } }),
@@ -127,14 +139,27 @@ export class WorkspaceService {
         this.prisma.appointment.findMany({
           where: { patientId },
           orderBy: { startsAt: 'desc' },
-          take: 20,
-          include: { service: true, doctor: true },
+          take: 30,
+          include: { service: true, doctor: true, visitNote: true },
         }),
         this.prisma.payment.findMany({ where: { patientId }, orderBy: { paidAt: 'desc' }, take: 20 }),
         this.prisma.invoice.findMany({ where: { patientId }, orderBy: { createdAt: 'desc' }, take: 12 }),
         this.prisma.imagingStudy.findMany({ where: { patientId }, orderBy: { takenAt: 'desc' }, take: 12 }),
         this.prisma.patientCommunication.findMany({ where: { patientId }, orderBy: { createdAt: 'desc' }, take: 12 }),
         this.prisma.patientConsent.findMany({ where: { patientId }, take: 12 }),
+        this.prisma.auditLog.findMany({
+          where: { organizationId: orgId, entityType: 'PatientMedical', entityId: patientId },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          include: { user: { include: { employee: true } } },
+        }),
+        this.prisma.appointment.findFirst({
+          where: { patientId, startsAt: { gte: new Date() }, status: { in: ['SCHEDULED', 'CONFIRMED', 'WAITING'] } },
+          orderBy: { startsAt: 'asc' },
+          include: { service: true, doctor: true, cabinet: true },
+        }),
+        this.prisma.patientDeposit.findUnique({ where: { patientId } }),
+        medicalView(this.prisma, patient),
       ]);
 
     const timeline = [
@@ -144,13 +169,36 @@ export class WorkspaceService {
         kind: 'visit',
         title: a.service?.name ?? 'Визит',
         detail: [a.doctor ? `${a.doctor.lastName} ${a.doctor.firstName[0]}.` : null, this.statusRu(a.status)].filter(Boolean).join(' · '),
+        status: a.status,
+        protocol: a.visitNote
+          ? {
+              complaints: a.visitNote.complaints,
+              objective: a.visitNote.objective,
+              diagnosis: a.visitNote.diagnosis,
+              treatment: a.visitNote.treatment,
+              recommendations: a.visitNote.recommendations,
+            }
+          : null,
       })),
+      ...medicalLog.map((entry) => {
+        const data = (entry.changes ?? {}) as { confirmed?: boolean; changes?: { label: string }[] };
+        const labels = (data.changes ?? []).map((change) => change.label);
+        const who = entry.user?.employee ? `${entry.user.employee.lastName} ${entry.user.employee.firstName[0]}.` : entry.user?.email ?? null;
+        return {
+          id: `med-${entry.id}`,
+          at: entry.createdAt,
+          kind: 'medical',
+          title: labels.length ? 'Медкарта изменена' : 'Медкарта подтверждена',
+          detail: [labels.join(', ') || (data.confirmed ? 'без изменений' : null), labels.length && data.confirmed ? 'подтверждена с пациентом' : null, who].filter(Boolean).join(' · '),
+          changes: data.changes ?? [],
+        };
+      }),
       ...payments.map((p) => ({
         id: `p-${p.id}`,
         at: p.paidAt,
         kind: 'payment',
         title: `Оплата ${this.money(p.amount)}`,
-        detail: p.method,
+        detail: PAYMENT_METHOD_RU[p.method] ?? p.method,
       })),
       ...invoices.map((i) => ({
         id: `i-${i.id}`,
@@ -184,8 +232,8 @@ export class WorkspaceService {
         id: `c-${c.id}`,
         at: c.signedAt ?? new Date(0),
         kind: 'consent',
-        title: 'Согласие',
-        detail: `${c.type} · ${c.status}`,
+        title: CONSENT_TYPE_RU[c.type] ?? 'Согласие',
+        detail: CONSENT_STATUS_RU[c.status] ?? c.status,
       })),
       ...plans.map((p) => ({
         id: `plan-${p.id}`,
@@ -196,10 +244,22 @@ export class WorkspaceService {
       })),
     ]
       .sort((a, b) => +new Date(b.at) - +new Date(a.at))
-      .slice(0, 40);
+      .slice(0, 60);
 
     return {
       patient: this.patientDto(patient),
+      medical,
+      deposit: Number(deposit?.balance ?? 0),
+      nextVisit: next
+        ? {
+            id: next.id,
+            startsAt: next.startsAt,
+            status: next.status,
+            service: next.service?.name ?? 'Приём',
+            doctor: next.doctor ? `${next.doctor.lastName} ${next.doctor.firstName}` : null,
+            cabinet: next.cabinet?.name ?? null,
+          }
+        : null,
       debt,
       alerts: this.alerts(patient, debt),
       timeline,
@@ -245,9 +305,12 @@ export class WorkspaceService {
   }
 
   async paint(
+    orgId: string,
     patientId: string,
     body: { toothNum: number; formula?: 'ADULT' | 'CHILD'; surface: string; condition: string; diagnosis?: string },
   ) {
+    const owned = await this.prisma.patient.count({ where: { id: patientId, organizationId: orgId } });
+    if (!owned) throw new NotFoundException('Пациент не найден');
     const formula: ToothFormulaType = body.formula === 'CHILD' || body.toothNum >= 50 ? 'CHILD' : 'ADULT';
     const surface = (body.surface || 'TOOTH').toUpperCase();
     const condition = body.condition as ToothCondition;
@@ -1384,6 +1447,8 @@ export class WorkspaceService {
     anticoagulant: boolean;
     source: string | null;
     tags: string[];
+    notes?: string | null;
+    clientType?: string | null;
   }) {
     return {
       id: patient.id,
@@ -1404,6 +1469,8 @@ export class WorkspaceService {
       anticoagulant: patient.anticoagulant,
       source: patient.source,
       tags: patient.tags,
+      notes: patient.notes ?? null,
+      clientType: patient.clientType ?? null,
     };
   }
 

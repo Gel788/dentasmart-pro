@@ -1,7 +1,8 @@
 import { phoneDigits } from '../phone';
 import { PLAN_TEMPLATES, composeFamily, lineTotal, type Mark } from '../plan-engine';
 import { resultFor, serviceKit, surfacesFor } from '../service-kit';
-import { canMoveVisit, dayLoad, fromKopecks, invoiceStatus, isVisitClosed, isVisitStatus, kopecks, labDueAt, parseWorkHours, patientSegments, phoneMatches, searchTerms, SEGMENTS, visitMoveError, wallDate, type PatientSegment, type VisitStatus } from '@dentasmart/shared';
+import { canMoveVisit, dayLoad, fromKopecks, invoiceStatus, isVisitClosed, isVisitStatus, kopecks, labDueAt, MEDICAL_KEYS, medicalDiff, medicalReviewDue, normalizeMedical, parseWorkHours, patientSegments, phoneMatches, searchTerms, SEGMENTS, visitMoveError, wallDate, type MedicalFields, type PatientSegment, type VisitStatus } from '@dentasmart/shared';
+import { ApiError } from '../api';
 import snapshot from './snapshot.json';
 import { demoLabWork, demoRoute, reserveDemoLines, type DemoReservation } from './route';
 
@@ -209,6 +210,11 @@ function read(path: string, token: string): unknown {
   }
   if (pathname === '/workspace/recall') return recallList(bag);
 
+  const cardPath = pathname.match(/^\/workspace\/patients\/([^/]+)\/card$/);
+  if (cardPath && pathname in bag.gets) return cardView(bag, cardPath[1]);
+  const medicalPath = pathname.match(/^\/patients\/([^/]+)\/medical$/);
+  if (medicalPath) return medicalOf(findPatient(bag, medicalPath[1]));
+
   const anchored = anchorPath(pathname, query);
   if (anchored in bag.gets) return bag.gets[anchored];
   if (pathname + url.search in bag.gets) return bag.gets[pathname + url.search];
@@ -367,6 +373,9 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
 
   const patientCreate = pathname === '/patients' && method === 'POST';
   if (patientCreate) return addPatient(bag, data);
+
+  const medicalSave = pathname.match(/^\/patients\/([^/]+)\/medical$/);
+  if (medicalSave && method === 'PATCH') return saveMedical(bag, medicalSave[1], data, token);
 
   const patientPatch = pathname.match(/^\/patients\/([^/]+)$/);
   if (patientPatch && method === 'PATCH') return patchPatient(bag, patientPatch[1], data);
@@ -541,13 +550,92 @@ function addPatient(bag: Bag, data: AnyRec) {
   return row;
 }
 
+/** Mirrors PatientsService.medicalView. */
+function medicalOf(row: AnyRec | undefined) {
+  if (!row) throw new Error('Пациент не найден');
+  return {
+    version: Number(row.medicalVersion ?? 0),
+    fields: Object.fromEntries(MEDICAL_KEYS.map((key) => [key, row[key] ?? (key === 'allergies' ? [] : key === 'anxiety' ? 'NONE' : typeof row[key] === 'boolean' ? false : null)])),
+    confirmedAt: row.medicalConfirmedAt ?? null,
+    confirmedBy: row.medicalConfirmedBy ?? null,
+    reviewDue: medicalReviewDue(row.medicalConfirmedAt ?? null, new Date(anchorNow())),
+  };
+}
+
+/** Mirrors PatientsService.saveMedical: version check, normalized fields, an entry in the card's feed. */
+function saveMedical(bag: Bag, id: string, data: AnyRec, token: string) {
+  const row = findPatient(bag, id);
+  if (!row) throw new Error('Пациент не найден');
+  const current = medicalOf(row);
+  if (Number(data.version) !== current.version) {
+    throw new ApiError('Медкарту уже изменили. Посмотрите новую версию и внесите правку ещё раз', 409, { current });
+  }
+  const { version: _version, confirm, ...input } = data;
+  const next = normalizeMedical(input as Partial<MedicalFields>);
+  const changes = medicalDiff(current.fields as MedicalFields, next);
+  if (!changes.length && !confirm) return current;
+  const employee = Object.values(snapshot.users).find((item) => item.accessToken === token)?.user.employee;
+  const who = employee ? `${employee.lastName} ${employee.firstName}` : 'Сотрудник';
+  Object.assign(row, next, { medicalVersion: current.version + 1 });
+  if (confirm) Object.assign(row, { medicalConfirmedAt: anchorNow(), medicalConfirmedBy: who });
+  publishPatient(bag, row, false);
+  const card = bag.gets[`/workspace/patients/${id}/card`] as AnyRec | undefined;
+  if (card) {
+    const labels = changes.map((change) => change.label);
+    card.timeline = [
+      {
+        id: uid(),
+        at: anchorNow(),
+        kind: 'medical',
+        title: labels.length ? 'Медкарта изменена' : 'Медкарта подтверждена',
+        detail: [labels.join(', ') || 'без изменений', labels.length && confirm ? 'подтверждена с пациентом' : null, who].filter(Boolean).join(' · '),
+        changes,
+      },
+      ...(card.timeline ?? []),
+    ];
+  }
+  return medicalOf(row);
+}
+
+/** The stored card plus what the API computes on read: medical state, next visit, deposit. */
+function cardView(bag: Bag, id: string) {
+  const card = bag.gets[`/workspace/patients/${id}/card`] as AnyRec;
+  const row = findPatient(bag, id) ?? card.patient;
+  const now = anchorNow();
+  const next = bag.appointments
+    .filter((visit) => visit.patientId === id && visit.startsAt >= now && ['SCHEDULED', 'CONFIRMED', 'WAITING'].includes(visit.status))
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
+  const methods: Record<string, string> = { CASH: 'наличные', CARD: 'карта', ONLINE: 'онлайн', DMS: 'ДМС', INSTALLMENT: 'рассрочка', BONUS: 'бонусы' };
+  const consents: Record<string, string> = { PD_PROCESSING: 'Согласие на обработку персональных данных', MEDICAL_TREATMENT: 'Информированное согласие на лечение', MARKETING: 'Согласие на рассылки', TELEMEDICINE: 'Согласие на телемедицину' };
+  const signed: Record<string, string> = { PENDING: 'ждёт подписи', SIGNED: 'подписано', REVOKED: 'отозвано' };
+  const timeline = ((card.timeline ?? []) as AnyRec[]).map((item) => {
+    if (item.kind === 'payment') return { ...item, detail: methods[item.detail] ?? item.detail };
+    if (item.kind === 'consent' && /^[A-Z_]+ · [A-Z]+$/.test(item.detail ?? '')) {
+      const [type, status] = String(item.detail).split(' · ');
+      return { ...item, title: consents[type] ?? item.title, detail: signed[status] ?? status };
+    }
+    return item;
+  });
+  return {
+    ...card,
+    timeline,
+    patient: { ...card.patient, ...row },
+    medical: medicalOf(row),
+    deposit: Number(row.deposit ?? card.deposit ?? 0),
+    nextVisit: next
+      ? { id: next.id, startsAt: next.startsAt, status: next.status, service: next.service, doctor: next.doctor, cabinet: next.cabinet }
+      : null,
+  };
+}
+
 function patchPatient(bag: Bag, id: string, data: AnyRec) {
   const row = findPatient(bag, id);
   if (!row) throw new Error('Пациент не найден');
   if (data.phone) assertUniquePhone(bag, data.phone, id);
   const next = patientRecord({ ...row, ...data, allergies: data.allergies ?? row.allergies }, id);
   if (data.isActive === false) next.isActive = false;
-  Object.assign(row, next);
+  const touchesMedical = MEDICAL_KEYS.some((key) => key in data);
+  Object.assign(row, next, touchesMedical ? { medicalVersion: Number(row.medicalVersion ?? 0) + 1 } : {});
   publishPatient(bag, row, false);
   if (data.dmsInsurer && data.dmsNumber) attachPolicy(bag, row, data.dmsInsurer, data.dmsNumber);
   return row;

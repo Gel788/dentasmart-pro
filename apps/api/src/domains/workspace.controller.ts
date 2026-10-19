@@ -171,10 +171,11 @@ export class WorkspaceController {
   @Post('patients/:patientId/chart')
   @RequirePermissions('medical.write')
   chart(
+    @OrgId() orgId: string,
     @Param('patientId') patientId: string,
     @Body() body: { toothNum: number; formula?: 'ADULT' | 'CHILD'; surface: string; condition: string; diagnosis?: string },
   ) {
-    return this.workspace.paint(patientId, body);
+    return this.workspace.paint(orgId, patientId, body);
   }
 
   @Post('patients/:patientId/perio')
