@@ -33,6 +33,10 @@ describe('readiness', () => {
     expect(readiness(stage({ appointment: { id: 'a1', startsAt: '2026-10-22T07:00:00.000Z', status: 'COMPLETED' } })).visit.reason).toBe('Проведён');
   });
 
+  it('пациент в клинике — визит готов', () => {
+    expect(readiness(stage({ appointment: { id: 'a1', startsAt: '2026-10-22T07:00:00.000Z', status: 'WAITING' } })).visit).toEqual({ state: 'ready', reason: 'Пациент в клинике' });
+  });
+
   it('материалы: нет резервов — не нужны', () => {
     expect(readiness(stage()).materials.state).toBe('none');
   });

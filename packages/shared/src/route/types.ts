@@ -12,7 +12,7 @@ export interface Readiness {
   payment: Axis;
 }
 
-export type VisitStatus = 'SCHEDULED' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+export type VisitStatus = 'SCHEDULED' | 'CONFIRMED' | 'WAITING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
 export type ReservationStatus = 'RESERVED' | 'SHORT' | 'CONSUMED' | 'RELEASED';
 export type LabStatus = 'WAITING_IMPRESSION' | 'RECEIVED' | 'IN_PROGRESS' | 'READY' | 'DELIVERED' | 'REJECTED';
 
@@ -60,4 +60,12 @@ export interface ReservationDraft {
   itemId: string;
   quantity: number;
   status: 'RESERVED' | 'SHORT';
+}
+
+/** What `GET /route/patients/:id` returns; `route` is null until the patient signs a plan. */
+export interface RoutePayload {
+  planId: string | null;
+  title: string | null;
+  signedAt: string | null;
+  route: Route | null;
 }

@@ -10,7 +10,8 @@ function visitAxis(stage: StageInput): Axis {
   const visit = stage.appointment;
   if (!visit || visit.status === 'CANCELLED' || visit.status === 'NO_SHOW') return { state: 'blocked', reason: 'Визит не назначен' };
   if (visit.status === 'COMPLETED') return { state: 'ready', reason: 'Проведён' };
-  if (visit.status === 'CONFIRMED' || visit.status === 'IN_PROGRESS') return { state: 'ready', reason: 'Подтверждён' };
+  if (visit.status === 'WAITING' || visit.status === 'IN_PROGRESS') return { state: 'ready', reason: 'Пациент в клинике' };
+  if (visit.status === 'CONFIRMED') return { state: 'ready', reason: 'Подтверждён' };
   return { state: 'waiting', reason: 'Не подтверждён' };
 }
 
