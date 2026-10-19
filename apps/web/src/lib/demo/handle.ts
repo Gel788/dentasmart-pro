@@ -1,7 +1,9 @@
 import { phoneDigits } from '../phone';
 import { PLAN_TEMPLATES, composeFamily, lineTotal, type Mark } from '../plan-engine';
 import { resultFor, serviceKit, surfacesFor } from '../service-kit';
+import { labDueAt } from '@dentasmart/shared';
 import snapshot from './snapshot.json';
+import { demoLabWork, demoRoute, reserveDemoLines, type DemoReservation } from './route';
 
 const KEY = 'sd.demo.v1';
 const ANCHOR = snapshot.anchor;
@@ -196,6 +198,8 @@ function read(path: string, token: string): unknown {
   }
   if (pathname === '/market/export-1c') return bag.gets[pathname] ?? { filename: '1c.json', json: { demo: true } };
 
+  const route = pathname.match(/^\/route\/patients\/([^/]+)$/);
+  if (route) return demoRoute(acceptedPlanOf(bag, route[1]), bag.appointments, (bag.gets['/lab/orders'] ?? []) as AnyRec[]);
   const sheetPath = pathname.match(/^\/workspace\/plans\/([^/]+)\/sheet$/);
   if (sheetPath) return buildSheet(bag, sheetPath[1]);
   if (pathname === '/config') {
@@ -950,6 +954,7 @@ function visitAction(bag: Bag, id: string, action: string, data: AnyRec) {
   if (action === 'complete') {
     visit.status = 'COMPLETED';
     visit.actions = [];
+    consumeDemoVisit(bag, id);
   }
   if (action === 'no-show') {
     visit.status = 'NO_SHOW';
@@ -1148,7 +1153,8 @@ function bookPhaseVisit(bag: Bag, planId: string, phaseId: string) {
 
 function acceptPlan(bag: Bag, planId: string, action: string, data: AnyRec) {
   const appointments: { startsAt: string; title: string }[] = [];
-  const booked = new Set<string>();
+  // The same plan lives in the patient card and in its plan family: decide each stage once, then copy it to every copy.
+  const placed = new Map<string, { appointmentId: string; reservations: Map<string, DemoReservation[]> }>();
   eachPlan(bag, (plan, family, card) => {
     if (plan.id !== planId) return;
     if (action === 'abandon') {
@@ -1162,19 +1168,68 @@ function acceptPlan(bag: Bag, planId: string, action: string, data: AnyRec) {
     const chosen = new Set<string>(data.phaseIds ?? (plan.phases as AnyRec[]).map((phase) => phase.id));
     (plan.phases as AnyRec[]).forEach((phase, index) => {
       if (!chosen.has(phase.id)) return;
-      const mark = `${plan.id}:${phase.id}`;
-      if (booked.has(mark)) return;
-      booked.add(mark);
-      const starts = new Date(Date.parse(`${ANCHOR}T09:00:00.000Z`) + (index + 1) * 86400000);
-      const patientId = card?.patient?.id ?? family.patient?.id;
-      if (patientId) {
+      const items = (phase.items ?? []) as AnyRec[];
+      let stage = placed.get(phase.id);
+      if (!stage && phase.appointmentId) stage = { appointmentId: phase.appointmentId, reservations: new Map() };
+      if (!stage) {
+        const patientId = card?.patient?.id ?? family.patient?.id;
+        if (!patientId) return;
+        const starts = new Date(Date.parse(`${ANCHOR}T09:00:00.000Z`) + (index + 1) * 86400000);
         const row = book(bag, { patientId, startsAt: starts.toISOString(), durationMin: 60 });
         row.service = phase.title;
         appointments.push({ startsAt: row.startsAt, title: phase.title });
+        const reservations = reserveDemoLines(items, config(bag).services as AnyRec[], bag.gets['/warehouse/items'] as AnyRec[], heldReservations(bag));
+        const work = demoLabWork(phase);
+        if (work) {
+          const lab = addLab(bag, { patientId, title: work });
+          Object.assign(lab, { status: 'WAITING_IMPRESSION', planPhaseId: phase.id, appointmentId: row.id, dueAt: labDueAt(starts).toISOString() });
+        }
+        stage = { appointmentId: row.id, reservations };
+      }
+      placed.set(phase.id, stage);
+      phase.appointmentId = stage.appointmentId;
+      for (const item of items) {
+        item.status = 'ACCEPTED';
+        item.appointmentId = stage.appointmentId;
+        if (stage.reservations.has(item.id)) item.reservations = stage.reservations.get(item.id);
       }
     });
   });
   return { appointments };
+}
+
+/** Reservations already held by signed plans, so a second plan does not count the same shelf twice. */
+function heldReservations(bag: Bag) {
+  const seen = new Set<string>();
+  const rows: DemoReservation[] = [];
+  eachPlan(bag, (plan) => {
+    if (seen.has(plan.id)) return;
+    seen.add(plan.id);
+    for (const item of planItems(plan)) rows.push(...((item.reservations ?? []) as DemoReservation[]));
+  });
+  return rows;
+}
+
+function acceptedPlanOf(bag: Bag, patientId: string) {
+  let found: AnyRec | null = null;
+  eachPlan(bag, (plan, family, card) => {
+    const owner = card?.patient?.id ?? family.patient?.id;
+    if (owner !== patientId || !['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(plan.status)) return;
+    if (!found || String(plan.signedAt ?? '') > String(found.signedAt ?? '')) found = plan;
+  });
+  return found;
+}
+
+/** A closed visit marks the materials held for it as used, as the API does. */
+function consumeDemoVisit(bag: Bag, appointmentId: string) {
+  eachPlan(bag, (plan) => {
+    for (const item of planItems(plan)) {
+      if (item.appointmentId !== appointmentId) continue;
+      for (const row of (item.reservations ?? []) as DemoReservation[]) {
+        if (row.status === 'RESERVED' || row.status === 'SHORT') row.status = 'CONSUMED';
+      }
+    }
+  });
 }
 
 function restorePlan(bag: Bag, planId: string, versionId: string) {
