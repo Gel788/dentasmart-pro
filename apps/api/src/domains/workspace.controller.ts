@@ -6,6 +6,7 @@ import { PermissionsGuard } from '../auth/permissions.guard';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { CurrentUser } from '../common/current-user.decorator';
 import { OrgId } from '../common/org.decorator';
+import { ClinicalService } from './clinical.service';
 import { ImportPatientsDto } from './dto/import-patients.dto';
 import { PatientImportService } from './patient-import.service';
 import { WorkspaceService } from './workspace.service';
@@ -18,7 +19,54 @@ export class WorkspaceController {
   constructor(
     private readonly workspace: WorkspaceService,
     private readonly patientImport: PatientImportService,
+    private readonly clinical: ClinicalService,
   ) {}
+
+  /** An empty draft plan, so a service can be added to a patient who has none yet. */
+  @Post('patients/:patientId/plans')
+  @RequirePermissions('medical.write')
+  newPlan(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Param('patientId') patientId: string) {
+    return this.clinical.createPlan(orgId, { patientId, title: 'План лечения', doctorId: user.employee?.id });
+  }
+
+  @Post('plans/:planId/items')
+  @RequirePermissions('medical.write')
+  addItem(
+    @OrgId() orgId: string,
+    @Param('planId') planId: string,
+    @Body() body: { serviceId: string; phaseId?: string; toothNum?: number | null },
+  ) {
+    return this.clinical.addPlanItem(orgId, planId, {
+      serviceId: body.serviceId,
+      phaseId: body.phaseId && body.phaseId !== 'loose' ? body.phaseId : undefined,
+      toothNum: body.toothNum ?? undefined,
+    });
+  }
+
+  /** The line editor sends quantity × unit price less a discount; the plan total follows. */
+  @Post('plans/:planId/items/:itemId')
+  @RequirePermissions('medical.write')
+  editItem(
+    @OrgId() orgId: string,
+    @Param('itemId') itemId: string,
+    @Body() body: { qty?: number; unitPrice?: number; discountPercent?: number; price?: number; toothNum?: number | null },
+  ) {
+    const qty = Number(body.qty) > 0 ? Number(body.qty) : 1;
+    const discount = Math.min(100, Math.max(0, Number(body.discountPercent) || 0));
+    const price = body.unitPrice != null && Number.isFinite(Number(body.unitPrice))
+      ? Math.round(Number(body.unitPrice) * qty * (1 - discount / 100) * 100) / 100
+      : body.price;
+    return this.clinical.updatePlanItem(orgId, itemId, {
+      ...(price != null ? { price } : { discountPercent: discount }),
+      ...(body.toothNum !== undefined ? { toothNum: body.toothNum } : {}),
+    });
+  }
+
+  @Post('plans/:planId/installment')
+  @RequirePermissions('medical.write')
+  installment(@OrgId() orgId: string, @Param('planId') planId: string, @Body() body: { months?: number }) {
+    return this.workspace.setInstallment(orgId, planId, Number(body.months) || 0);
+  }
 
   @Post('import')
   @RequirePermissions('patient.write')

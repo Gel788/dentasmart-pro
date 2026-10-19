@@ -374,6 +374,20 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
   const patientCreate = pathname === '/patients' && method === 'POST';
   if (patientCreate) return addPatient(bag, data);
 
+  const newPlan = pathname.match(/^\/workspace\/patients\/([^/]+)\/plans$/);
+  if (newPlan && method === 'POST') {
+    const card = bag.gets[`/workspace/patients/${newPlan[1]}/card`] as AnyRec | undefined;
+    if (!card) throw new Error('Пациент не найден');
+    const id = uid();
+    const plan = {
+      id, tier: null, tierLabel: 'План', title: 'План лечения', status: 'DRAFT', total: 0, discountPercent: 0,
+      guaranteeMonths: 12, durationWeeks: 4, installmentMonths: 0, signedAt: null, explanation: '', showBreakdown: true,
+      phases: [], looseItems: [],
+    };
+    card.families = [...(card.families ?? []), { key: id, title: 'План лечения', plans: [plan] }];
+    return plan;
+  }
+
   const medicalSave = pathname.match(/^\/patients\/([^/]+)\/medical$/);
   if (medicalSave && method === 'PATCH') return saveMedical(bag, medicalSave[1], data, token);
 

@@ -16,7 +16,9 @@ export class ClinicalService {
     });
   }
 
-  createPlan(orgId: string, data: { patientId: string; title: string; doctorId?: string; appointmentId?: string }) {
+  async createPlan(orgId: string, data: { patientId: string; title: string; doctorId?: string; appointmentId?: string }) {
+    const owned = await this.prisma.patient.count({ where: { id: data.patientId, organizationId: orgId } });
+    if (!owned) throw new NotFoundException('Пациент не найден');
     return this.prisma.treatmentPlan.create({
       data: { organizationId: orgId, ...data },
       include: { items: true },
@@ -165,8 +167,10 @@ export class ClinicalService {
   }
 
   async addPlanItem(
+    orgId: string,
     planId: string,
     data: {
+      phaseId?: string;
       title?: string;
       toothNum?: number;
       price?: number;
@@ -177,8 +181,9 @@ export class ClinicalService {
       durationMin?: number;
     },
   ) {
-    const plan = await this.prisma.treatmentPlan.findUnique({ where: { id: planId } });
+    const plan = await this.prisma.treatmentPlan.findFirst({ where: { id: planId, organizationId: orgId } });
     if (!plan) throw new NotFoundException('План не найден');
+    const phaseRef = data.phaseId ? await this.prisma.planPhase.findFirst({ where: { id: data.phaseId, planId } }) : null;
     if (plan.status === 'REJECTED' || plan.status === 'CANCELLED') {
       throw new BadRequestException('В отклонённый план нельзя добавлять строки');
     }
@@ -210,7 +215,8 @@ export class ClinicalService {
         title,
         toothNum: data.toothNum,
         surfaces,
-        phase: data.phase && data.phase > 0 ? Math.round(data.phase) : (maxPhase._max.phase ?? 1),
+        phase: phaseRef ? phaseRef.sortOrder + 1 : data.phase && data.phase > 0 ? Math.round(data.phase) : (maxPhase._max.phase ?? 1),
+        phaseId: phaseRef?.id ?? null,
         price,
         listPrice,
         discountPercent: roundMoney(impliedDiscount),
@@ -224,6 +230,7 @@ export class ClinicalService {
   }
 
   async updatePlanItem(
+    orgId: string,
     itemId: string,
     data: { price?: number; serviceId?: string; discountPercent?: number; phase?: number; surfaces?: string[]; toothNum?: number | null },
   ) {
@@ -231,7 +238,7 @@ export class ClinicalService {
       where: { id: itemId },
       include: { plan: true },
     });
-    if (!item) throw new NotFoundException('Строка плана не найдена');
+    if (!item || item.plan.organizationId !== orgId) throw new NotFoundException('Строка плана не найдена');
     if (item.status === 'DONE') throw new BadRequestException('Выполненную строку нельзя пересчитывать — она уже в истории');
     let listPrice: number | null = item.listPrice == null ? null : Number(item.listPrice);
     let serviceId = item.serviceId;

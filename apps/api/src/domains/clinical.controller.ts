@@ -73,6 +73,7 @@ export class ClinicalController {
   @Post('treatment-plans/:planId/items')
   @RequirePermissions('medical.write')
   addItem(
+    @OrgId() orgId: string,
     @Param('planId') planId: string,
     @Body()
     body: {
@@ -86,7 +87,7 @@ export class ClinicalController {
       durationMin?: number;
     },
   ) {
-    return this.svc.addPlanItem(planId, body);
+    return this.svc.addPlanItem(orgId, planId, body);
   }
 
   @Post('treatment-plans/:planId/diary')
@@ -122,6 +123,7 @@ export class ClinicalController {
   @Patch('treatment-plans/items/:itemId')
   @RequirePermissions('medical.write')
   toggleItem(
+    @OrgId() orgId: string,
     @Param('itemId') itemId: string,
     @Body()
     body: {
@@ -143,7 +145,7 @@ export class ClinicalController {
       body.surfaces ||
       body.toothNum !== undefined
     ) {
-      return this.svc.updatePlanItem(itemId, body);
+      return this.svc.updatePlanItem(orgId, itemId, body);
     }
     if (body.status) return this.svc.setItemStatus(itemId, body.status);
     return this.svc.togglePlanItem(itemId, !!body.isCompleted);

@@ -55,6 +55,8 @@ export function PlanJourney({
   const [discount, setDiscount] = useState(plan?.discountPercent ?? 0);
   const [disclosure, setDisclosure] = useState(plan?.showBreakdown !== false);
   const [saved, setSaved] = useState('');
+  const [addNote, setAddNote] = useState('');
+  const [starting, setStarting] = useState(false);
   const [sent, setSent] = useState('');
   const [versions, setVersions] = useState<{ id: string; note: string | null; createdAt: string }[] | null>(null);
   const [payMonths, setPayMonths] = useState(plan && plan.installmentMonths >= 2 ? plan.installmentMonths : 1);
@@ -64,7 +66,12 @@ export function PlanJourney({
   useEffect(() => { setDiscount(plan?.discountPercent ?? 0); }, [plan?.id, plan?.discountPercent]);
   useEffect(() => { setPayMonths(plan && plan.installmentMonths >= 2 ? plan.installmentMonths : 1); }, [plan?.id, plan?.installmentMonths]);
   useEffect(() => { setDisclosure(plan?.showBreakdown !== false); }, [plan?.id, plan?.showBreakdown]);
-  useEffect(() => { setPicker(null); setTooth(null); }, [plan?.id]);
+  const shownPlan = useRef(plan?.id);
+  useEffect(() => {
+    // Switching plans clears the picker; the first plan appearing (just created for a service) keeps it open.
+    if (shownPlan.current && shownPlan.current !== plan?.id) { setPicker(null); setTooth(null); }
+    shownPlan.current = plan?.id;
+  }, [plan?.id]);
   useEffect(() => {
     if (tooth == null) return;
     document.querySelector('.jn-road li.hot')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -120,13 +127,35 @@ export function PlanJourney({
   const addService = async (service: PriceService, phaseId: string) => {
     if (!plan) return;
     const targetTooth = picker?.tooth ?? null;
-    await api(`/workspace/plans/${plan.id}/items`, {
-      method: 'POST',
-      body: JSON.stringify({ phaseId, serviceId: service.id, toothNum: targetTooth }),
-    });
-    await onAdded();
-    setSaved(`Добавлено: ${service.name}${targetTooth ? ` · зуб ${targetTooth}` : ''}`);
-    setPicker(null);
+    setAddNote('');
+    try {
+      await api(`/workspace/plans/${plan.id}/items`, {
+        method: 'POST',
+        body: JSON.stringify({ phaseId, serviceId: service.id, toothNum: targetTooth }),
+      });
+      await onAdded();
+      setAddNote(`Добавлено: ${service.name}${targetTooth ? ` · зуб ${targetTooth}` : ''}`);
+      setPicker(null);
+    } catch (err) {
+      setAddNote(err instanceof Error ? `Не добавили: ${err.message}` : 'Не добавили услугу. Попробуйте ещё раз');
+      setPicker(null);
+    }
+  };
+
+  /** A patient without a plan gets an empty draft first, then the price list opens. */
+  const openPicker = async (forTooth: number | null) => {
+    if (plan) { setPicker({ phaseId: defaultPhaseId(), tooth: forTooth }); return; }
+    setStarting(true);
+    setAddNote('');
+    try {
+      await api(`/workspace/patients/${patientId}/plans`, { method: 'POST', body: '{}' });
+      await onAdded();
+      setPicker({ phaseId: 'loose', tooth: forTooth });
+    } catch (err) {
+      setAddNote(err instanceof Error ? `Не создали план: ${err.message}` : 'Не создали план. Попробуйте ещё раз');
+    } finally {
+      setStarting(false);
+    }
   };
 
   return (
@@ -167,9 +196,10 @@ export function PlanJourney({
       <div className="jn-stage">
         <section className="jn-chart">
           <div className="jn-addbar">
-            <p>{plan ? 'Нажмите зуб, чтобы добавить услугу' : 'Выберите диагноз и нажмите зуб'}</p>
-            {plan && <button className="sd-btn-ghost" type="button" data-plan-add="global" onClick={() => setPicker({ phaseId: defaultPhaseId(), tooth })}>+ Услуга</button>}
+            <p>Нажмите зуб, чтобы добавить услугу на него, или добавьте услугу без зуба</p>
+            <button className="sd-btn-ghost" type="button" data-plan-add="global" disabled={starting} onClick={() => void openPicker(tooth)}>{starting ? 'Создаём план…' : '+ Услуга'}</button>
           </div>
+          {addNote && <p className="jn-note" role={addNote.startsWith('Не ') ? 'alert' : 'status'}>{addNote}</p>}
           <ToothChart
             surfaces={surfaces}
             items={visibleItems as ChartItem[]}
@@ -198,7 +228,7 @@ export function PlanJourney({
                   body: JSON.stringify({ toothNum: tooth, surface, condition, diagnosis: 'Осмотр' }),
                 }).then(() => onAdded()).catch((err: Error) => setSaved(err.message));
               }}
-              onAdd={plan ? () => setPicker({ phaseId: defaultPhaseId(), tooth }) : undefined}
+              onAdd={() => void openPicker(tooth)}
             />
           )}
           {tooth && <button className="sd-btn-ghost" type="button" onClick={() => setTooth(null)}>Показать все зубы</button>}

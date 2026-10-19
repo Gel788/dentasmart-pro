@@ -111,6 +111,13 @@ export class WorkspaceService {
     };
   }
 
+  async setInstallment(orgId: string, planId: string, months: number) {
+    const value = months >= 2 ? Math.min(36, Math.round(months)) : 0;
+    const saved = await this.prisma.treatmentPlan.updateMany({ where: { id: planId, organizationId: orgId }, data: { installmentMonths: value } });
+    if (!saved.count) throw new NotFoundException('План не найден');
+    return { installmentMonths: value };
+  }
+
   async card(orgId: string, patientId: string) {
     const patient = await this.prisma.patient.findFirst({
       where: { id: patientId, organizationId: orgId },
