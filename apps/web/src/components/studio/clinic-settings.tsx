@@ -87,7 +87,7 @@ export function ClinicSettings() {
               checked={data.aiPlans !== false}
               onChange={(event) => void flash(() => api('/config/ai', { method: 'POST', body: JSON.stringify({ enabled: event.target.checked }) }))}
             />
-            ИИ-план на карте пациента
+            Быстрый план на карте пациента
           </label>
         </div>
         <input className="sd-input" placeholder="Поиск" value={query} onChange={(event) => setQuery(event.target.value)} style={{ maxWidth: 240 }} />

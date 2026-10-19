@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { isDemo } from '@/lib/demo/mode';
 
 const ROLES = [
   { role: 'owner', email: 'owner@demo.local', title: 'Владелец', text: 'Выручка, загрузка, конверсия планов' },
@@ -13,8 +14,10 @@ const ROLES = [
 export default function LoginPage() {
   const { user, loading, login } = useAuth();
   const router = useRouter();
-  const [email, setEmail] = useState('owner@demo.local');
-  const [password, setPassword] = useState('demo12345');
+  // The demo prefills its shared password; a live clinic signs in with its own.
+  const demo = isDemo();
+  const [email, setEmail] = useState(demo ? 'owner@demo.local' : '');
+  const [password, setPassword] = useState(demo ? 'demo12345' : '');
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
 
@@ -31,6 +34,7 @@ export default function LoginPage() {
   };
 
   useEffect(() => {
+    if (!demo) return;
     const role = new URLSearchParams(window.location.search).get('role');
     const preset = ROLES.find((item) => item.role === role);
     if (preset) void enter(preset.email);
@@ -60,25 +64,27 @@ export default function LoginPage() {
           <div className="sd-mark">С</div>
           <div>
             <strong style={{ display: 'block', letterSpacing: '-0.04em' }}>Седракович Дент</strong>
-            <span style={{ color: '#99f6e4', fontSize: 12 }}>Sedrakovich Dent</span>
+            <span style={{ color: '#9fd8cf', fontSize: 12 }}>Sedrakovich Dent</span>
           </div>
         </div>
         <div>
           <h1>Карта, формула и три плана на одном экране.</h1>
-          <p style={{ color: '#a7f3d0', maxWidth: 420 }}>Демо-клиника в Москве. Пароль для всех ролей — demo12345.</p>
+          <p style={{ color: '#c3d2cf', maxWidth: 420 }}>
+            {demo ? 'Демо-клиника в Москве. Пароль для всех ролей — demo12345.' : 'Войдите рабочей почтой и паролем клиники.'}
+          </p>
         </div>
       </section>
       <section className="sd-login-panel">
         <form onSubmit={onSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <h2 style={{ margin: '0 0 8px', letterSpacing: '-0.04em', fontSize: 28 }}>Войти</h2>
-          {ROLES.map((role) => (
+          {demo && ROLES.map((role) => (
             <button key={role.role} className="sd-btn-ghost sd-role" type="button" disabled={pending} onClick={() => enter(role.email)}>
               <b>{role.title}</b>
               <div className="sd-muted">{role.text}</div>
             </button>
           ))}
-          <label className="sd-field"><span>Почта</span><input className="sd-input" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-          <label className="sd-field"><span>Пароль</span><input className="sd-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+          <label className="sd-field"><span>Почта</span><input className="sd-input" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          <label className="sd-field"><span>Пароль</span><input className="sd-input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
           {error && <p className="sd-chip danger">{error}</p>}
           <button className="sd-btn" disabled={pending} type="submit">{pending ? 'Входим…' : 'Продолжить'}</button>
         </form>

@@ -225,17 +225,17 @@ export function AiPlan({
   };
 
   if (!enabled) {
-    return owner ? <p className="ai-off">ИИ-план выключен. <Link href="/settings">Включить в настройках</Link></p> : null;
+    return owner ? <p className="ai-off">Быстрый план выключен. <Link href="/settings">Включить в настройках</Link></p> : null;
   }
 
   return (
     <section className="ai">
       <div className="ai-head">
         <div>
-          <p className="ai-kicker">ИИ-план за минуту</p>
+          <p className="ai-kicker">Быстрый план</p>
           <h2>Отметьте находки — соберём этапы и цены из прайса</h2>
         </div>
-        <button className="sd-btn" type="button" disabled={busy} onClick={() => void generate()}>{busy ? 'Собираем…' : 'Собрать план ИИ'}</button>
+        <button className="sd-btn" type="button" disabled={busy} onClick={() => void generate()}>{busy ? 'Собираем…' : 'Собрать план'}</button>
       </div>
       <div className="ai-chips">
         {FINDINGS.map((item) => (
