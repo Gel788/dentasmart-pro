@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { clinicianWhere } from './clinicians';
 import { PrismaService } from '../prisma/prisma.service';
 import { formatRub, fromKopecks, kopecks } from '@dentasmart/shared';
 import { inputKopecks, isUniqueViolation, paymentByKey, recordPayment } from './invoice-ledger';
@@ -501,7 +502,7 @@ export class FlowService {
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
     const doctors = await this.prisma.employee.findMany({
-      where: { user: { organizationId: orgId }, status: 'ACTIVE' },
+      where: clinicianWhere(orgId),
       include: {
         appointments: { where: { startsAt: { gte: monthStart } }, select: { status: true } },
       },

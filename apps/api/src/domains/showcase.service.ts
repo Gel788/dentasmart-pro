@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { clinicianWhere } from './clinicians';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkspaceService } from './workspace.service';
 
@@ -243,7 +244,7 @@ export class ShowcaseService {
   async kpis(orgId: string) {
     const month = monthWindow();
     const doctors = await this.prisma.employee.findMany({
-      where: { user: { organizationId: orgId }, status: 'ACTIVE' },
+      where: clinicianWhere(orgId),
       select: { id: true, firstName: true, lastName: true, specialization: true },
     });
     const [appointments, plans] = await Promise.all([
@@ -563,7 +564,7 @@ export class ShowcaseService {
 
   async bookPortal(orgId: string, patientId: string, startsAt: string, serviceId?: string) {
     const cabinet = await this.prisma.cabinet.findFirst({ where: { branch: { organizationId: orgId }, isActive: true } });
-    const doctor = await this.prisma.employee.findFirst({ where: { user: { organizationId: orgId }, status: 'ACTIVE' }, orderBy: { createdAt: 'asc' } });
+    const doctor = await this.prisma.employee.findFirst({ where: clinicianWhere(orgId), orderBy: { createdAt: 'asc' } });
     const appointment = await this.workspace.book(orgId, {
       patientId,
       startsAt,

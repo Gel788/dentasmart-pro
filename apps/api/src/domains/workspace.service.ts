@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma, ToothCondition, ToothFormulaType } from '@dentasmart/database';
 import { dayLoad, parseWorkHours, tzOffsetMinutes, wallDate } from '@dentasmart/shared';
 import { medicalView } from '../patients/patients.service';
+import { clinicianWhere } from './clinicians';
 import { PrismaService } from '../prisma/prisma.service';
 import { openLabOrders, reserveForPlan } from '../route/route-chain';
 import { ClinicConfigService } from './clinic-config.service';
@@ -1087,7 +1088,7 @@ export class WorkspaceService {
       }),
     ]);
     const doctors = await this.prisma.employee.findMany({
-      where: { user: { organizationId: orgId }, status: 'ACTIVE' },
+      where: clinicianWhere(orgId),
       orderBy: { lastName: 'asc' },
     });
     return {
