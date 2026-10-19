@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { AuthUser } from '@dentasmart/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { consumeStock } from '../domains/stock-consume';
+import { consumeForVisit, moveLabDeadlines } from '../route/route-chain';
 import { AuditService } from '../common/audit.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -142,6 +143,8 @@ export class AppointmentsService {
       },
     });
 
+    if (startsAt.getTime() !== appt.startsAt.getTime()) await moveLabDeadlines(this.prisma, orgId, id, startsAt);
+
     await this.audit.log({
       organizationId: orgId,
       userId,
@@ -249,6 +252,7 @@ export class AppointmentsService {
       },
     });
 
+    if (status === 'COMPLETED') await consumeForVisit(this.prisma, orgId, id);
     if (status === 'COMPLETED' && appt.serviceId) {
       await this.deductServiceMaterials(
         orgId,

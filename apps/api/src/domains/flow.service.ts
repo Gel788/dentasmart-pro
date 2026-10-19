@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { consumeForVisit } from '../route/route-chain';
 import { ClinicConfigService } from './clinic-config.service';
 
 export const PHOTO_SLOTS = [
@@ -233,6 +234,7 @@ export class FlowService {
     if (!note?.diagnosis?.trim()) throw new BadRequestException('Сначала запишите диагноз — без него визит не закрывается');
     if (!note.treatment?.trim()) throw new BadRequestException('Опишите, что сделали на приёме');
     await this.prisma.appointment.update({ where: { id }, data: { status: 'COMPLETED' } });
+    await consumeForVisit(this.prisma, orgId, id);
     await this.prisma.receptionQueueItem.updateMany({
       where: { appointmentId: id },
       data: { status: 'DONE' },

@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { PrismaClient } from '@dentasmart/database';
-import { openLabOrders, reserveForPlan } from '../src/route/route-chain';
+import { consumeForVisit, moveLabDeadlines, openLabOrders, reserveForPlan } from '../src/route/route-chain';
 
 const prisma = new PrismaClient();
 class Rollback extends Error {}
@@ -64,6 +64,14 @@ async function main() {
 
       const foreign = await reserveForPlan(tx, { organizationId: otherOrg.id, branchId: branch.id, planId: plan.id });
       assert.deepEqual(foreign, { reserved: 0, short: 0 }, 'нормы чужой клиники не применяются');
+
+      await moveLabDeadlines(tx, plan.organizationId, visit.id, new Date('2030-01-14T07:00:00Z'));
+      const moved = await tx.labOrder.findFirstOrThrow({ where: { id: lab.id } });
+      assert.equal(moved.dueAt?.toISOString(), '2030-01-10T07:00:00.000Z', 'перенос визита на понедельник сдвигает срок на четверг');
+
+      await consumeForVisit(tx, plan.organizationId, visit.id);
+      const used = await tx.materialReservation.findMany({ where: { appointmentId: visit.id } });
+      assert.ok(used.length > 0 && used.every((row) => row.status === 'CONSUMED'), 'закрытый визит отмечает резерв использованным');
 
       console.log('route-chain ok', { first, labs });
       throw new Rollback();

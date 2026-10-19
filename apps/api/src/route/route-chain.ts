@@ -92,3 +92,19 @@ export async function openLabOrders(tx: Tx, input: { organizationId: string; pla
   }
   return opened;
 }
+
+/** Stock leaves the shelf through the visit's materials (kits, service norms); the reservation only records that it was used. */
+export async function consumeForVisit(db: Tx, organizationId: string, appointmentId: string) {
+  await db.materialReservation.updateMany({
+    where: { organizationId, appointmentId, status: { in: ['RESERVED', 'SHORT'] } },
+    data: { status: 'CONSUMED' },
+  });
+}
+
+/** A moved visit drags its open lab orders' deadlines with it. */
+export async function moveLabDeadlines(db: Tx, organizationId: string, appointmentId: string, startsAt: Date) {
+  await db.labOrder.updateMany({
+    where: { organizationId, appointmentId, status: { in: ['WAITING_IMPRESSION', 'RECEIVED', 'IN_PROGRESS'] } },
+    data: { dueAt: labDueAt(startsAt) },
+  });
+}
