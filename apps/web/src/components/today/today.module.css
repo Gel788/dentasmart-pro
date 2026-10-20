@@ -31,11 +31,12 @@
 
 /* The one dominant plane: ink at rest, red wiped in from the left while someone is in the chair.
    The ink plane is the first frame, so a paused animation still shows a complete, readable plane. */
-.lead { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto 1fr; gap: 8px 24px; padding: 24px 26px 26px; margin-bottom: 26px; background: var(--text); color: var(--bg); }
+.lead { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto 1fr; gap: 8px 24px; padding: 24px 26px 26px; margin-bottom: 56px; background: var(--text); color: var(--bg); }
 .lead[data-live] { color: var(--now-ink); background: #141414; }
 .lead[data-live]::before { content: ''; position: absolute; inset: 0; z-index: -1; background: var(--now); animation: wipe 700ms cubic-bezier(.16, 1, .3, 1) both; }
 @keyframes wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
 .leadMainCol { grid-row: 1 / span 2; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.leadClock small { display: none; font-size: 0.55em; font-weight: 500; }
 .leadClock { align-self: start; justify-self: end; font-family: var(--font-display), sans-serif; font-size: clamp(34px, 2.4vw + 18px, 58px); font-weight: 500; line-height: 0.95; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .leadName { margin: 0; font-family: var(--font-display), sans-serif; font-size: clamp(32px, 2.6vw + 16px, 56px) !important; font-weight: 600; line-height: 1 !important; letter-spacing: -0.03em; overflow-wrap: anywhere; }
 .leadName a { color: inherit; text-decoration: none; }
@@ -53,11 +54,14 @@
 .leadPrimary:active, .leadGhost:active { transform: scale(0.98); }
 .leadPrimary:disabled { opacity: 0.7; cursor: default; }
 .leadGhost { background: transparent; color: inherit; }
+.leadPhone { width: 50px; padding: 0; }
 .leadGhost:hover { background: rgba(255, 255, 255, 0.12); }
 .lead :focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 /* Alerts: one black plane laid over the red plane's lower right edge, the way a constructivist sheet overlaps. */
 .leadAlert { grid-column: 2; grid-row: 2; align-self: end; justify-self: end; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; width: 290px; margin-bottom: -44px; padding: 12px 14px; background: #141414; color: #fff; }
-.leadAlert p { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.leadAlert ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.leadAlert li { font-size: 14px; font-weight: 600; line-height: 1.35; }
+.leadAlert li + li { padding-top: 4px; border-top: 1px solid rgba(255, 255, 255, 0.2); }
 .leadAlert svg { margin-top: 1px; }
 .lead:not([data-live]) .leadAlert { background: var(--bg); color: var(--text); outline: var(--rule) solid var(--border-strong); }
 
@@ -97,6 +101,10 @@
 .now { position: relative; height: 0; border-top: var(--rule-bold) solid var(--now); list-style: none; }
 .now span { position: absolute; left: 0; top: -13px; padding: 3px 16px 3px 8px; background: var(--now); color: var(--now-ink); font-family: var(--font-display), sans-serif; font-size: 13px; font-weight: 600; line-height: 18px; font-variant-numeric: tabular-nums; clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%); }
 .now + .visit { border-top: 0; }
+.doneLine button { display: flex; align-items: baseline; gap: 12px; width: 100%; min-height: 48px; padding: 12px 0; border: 0; border-top: var(--rule) solid var(--border-strong); background: transparent; color: var(--muted); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.doneLine b { flex: none; color: var(--text); font-family: var(--font-display), sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.doneLine span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doneLine em { flex: none; font-style: normal; color: var(--text); font-weight: 600; border-bottom: var(--rule) solid var(--border-strong); }
 
 .side { display: flex; flex-direction: column; gap: 0; position: sticky; top: 16px; background: var(--surface-2); padding: 20px 22px; }
 .block { display: flex; flex-direction: column; gap: 10px; padding: 18px 0; border-top: var(--rule) solid var(--border-strong); }
@@ -138,15 +146,15 @@
   .title span { display: block; }
   .lead { grid-template-columns: minmax(0, 1fr); padding: 18px 16px 18px; margin: 0 -16px; }
   .leadMainCol { grid-row: 2; }
-  .leadClock { grid-row: 1; font-size: 26px; }
+  .leadClock { grid-row: 1; justify-self: start; font-size: 26px; }
   .leadSub { font-size: 14.5px; }
   .leadAlert { grid-column: 1; grid-row: 3; justify-self: stretch; width: auto; margin-bottom: 0; padding: 10px 12px; }
-  .leadAlert p { -webkit-line-clamp: 2; font-size: 13.5px; }
+  .leadAlert li { font-size: 13.5px; }
+  .leadClock small { display: inline; }
   .leadActs { margin-top: 6px; }
   .leadActs > * { flex: 1 1 auto; min-height: 48px; padding: 0 14px; }
   .leadPrimary { flex-basis: 100% !important; }
   .leadPhone { flex: 0 0 48px !important; padding: 0 !important; }
-  .leadPhone span { display: none; }
   .lead { margin-bottom: 0; }
   .visit { grid-template-columns: 58px minmax(0, 1fr) auto; grid-template-areas: 'time what act' 'time status act'; align-items: start; padding: 14px 0; }
   .visit time { grid-area: time; font-size: 19px; }

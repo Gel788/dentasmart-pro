@@ -51,6 +51,7 @@ export function Today({ owner }: { owner: boolean }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [week, setWeek] = useState<RangeDay[] | null>(null);
+  const [showDone, setShowDone] = useState(false);
 
   const load = useCallback(() => api<Day>('/workspace/today').then((data) => { setDay(data); setError(''); }).catch((err: Error) => setError(err.message || 'День не загрузился')), []);
 
@@ -102,6 +103,8 @@ export function Today({ owner }: { owner: boolean }) {
   const chair = day.visits.find((visit) => visit.status === 'IN_PROGRESS') ?? null;
   const upcoming = chair ? null : day.visits.find((visit) => Date.parse(visit.startsAt) > now && !['COMPLETED', 'NO_SHOW'].includes(visit.status)) ?? null;
   const lead = chair ?? upcoming;
+  // Visits already closed before the current minute fold into one line once there are two or more.
+  const finished = day.visits.filter((visit, index) => ['COMPLETED', 'NO_SHOW'].includes(visit.status) && (nowIndex === -1 || index < nowIndex) && visit.next !== 'pay');
   const nowLabel = clock(new Date(now).toISOString());
 
   const openDay = (date: string) => {
@@ -154,14 +157,14 @@ export function Today({ owner }: { owner: boolean }) {
                     <Link className={styles.leadPrimary} href={`/visits/${lead.id}`}>{chair ? 'К приёму' : 'Открыть визит'}<ArrowRight size={18} aria-hidden="true" /></Link>
                   )}
                   <Link className={styles.leadGhost} href={`/patients/${lead.patientId}`}>Карта и формула</Link>
-                  {lead.phone && <a className={`${styles.leadGhost} ${styles.leadPhone}`} href={`tel:${lead.phone}`} aria-label={`Позвонить ${lead.phone}`}><Phone size={18} aria-hidden="true" /><span>{lead.phone}</span></a>}
+                  {lead.phone && <a className={`${styles.leadGhost} ${styles.leadPhone}`} href={`tel:${lead.phone}`} aria-label={`Позвонить ${lead.phone}`} title={lead.phone}><Phone size={18} aria-hidden="true" /></a>}
                 </div>
               </div>
-              <span className={styles.leadClock} aria-label={chair ? `Идёт ${elapsedLabel(lead.startsAt, now)}` : `Начало в ${clock(lead.startsAt)}`}>{chair ? elapsedLabel(lead.startsAt, now) : clock(lead.startsAt)}</span>
+              <span className={styles.leadClock}>{chair ? elapsedLabel(lead.startsAt, now) : clock(lead.startsAt)}<small>{chair ? ' в кресле' : ' начало'}</small></span>
               {lead.alerts.length > 0 && (
-                <div className={styles.leadAlert} role="note" title={lead.alerts.join(' · ')}>
+                <div className={styles.leadAlert} role="note" aria-label="Медицинские предупреждения">
                   <ShieldAlert size={18} aria-hidden="true" />
-                  <p>{lead.alerts.join(' · ')}</p>
+                  <ul>{alertLines(lead.alerts).map((line) => <li key={line}>{line}</li>)}</ul>
                 </div>
               )}
             </section>
@@ -179,7 +182,16 @@ export function Today({ owner }: { owner: boolean }) {
               </div>
             ) : (
               <ol className={styles.visits}>
-                {day.visits.map((visit, index) => (
+                {finished.length > 1 && !showDone && (
+                  <li className={styles.doneLine}>
+                    <button type="button" onClick={() => setShowDone(true)} aria-expanded={false}>
+                      <b>Принято {finished.length}</b>
+                      <span>{finished.map((visit) => `${clock(visit.startsAt)} ${visit.patient}`).join(' · ')}</span>
+                      <em>Показать</em>
+                    </button>
+                  </li>
+                )}
+                {day.visits.map((visit, index) => (finished.length > 1 && !showDone && finished.includes(visit)) ? null : (
                   <Fragment key={visit.id}>
                     {index === nowIndex && <li className={styles.now} aria-label={`Сейчас ${nowLabel}`}><span>{nowLabel}</span></li>}
                     <li className={styles.visit} data-status={visit.status} data-lead={visit.id === lead?.id ? '' : undefined}>
@@ -267,6 +279,13 @@ export function Today({ owner }: { owner: boolean }) {
       </div>
     </div>
   );
+}
+
+/** Allergies read as one line, every other warning keeps a line of its own; nothing is cut. */
+function alertLines(alerts: string[]) {
+  const allergies = alerts.filter((alert) => /^аллергия:/i.test(alert)).map((alert) => alert.replace(/^аллергия:\s*/i, '').toLowerCase());
+  const other = alerts.filter((alert) => !/^аллергия:/i.test(alert));
+  return [...(allergies.length ? [`Аллергия: ${allergies.join(', ')}`] : []), ...other];
 }
 
 function elapsedLabel(startsAt: string, now: number) {
