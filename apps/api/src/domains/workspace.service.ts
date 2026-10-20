@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ToothCondition, ToothFormulaType } from '@dentasmart/database';
-import { dayLoad, employeeWeek, hoursOn, kopecks, medicalReviewDue, tzOffsetMinutes, visibleHours, wallDate, weekHoursOf } from '@dentasmart/shared';
+import { dayLoad, effectiveHours, employeeWeek, kopecks, medicalReviewDue, tzOffsetMinutes, visibleHours, wallDate, weekHoursOf } from '@dentasmart/shared';
 import { medicalView } from '../patients/patients.service';
 import { clinicianWhere } from './clinicians';
 import { assertPlace } from '../common/clinic-place';
@@ -168,6 +168,8 @@ export class WorkspaceService {
     return {
       day: new Date(start.getTime() + offset * 60000).toISOString().slice(0, 10),
       now,
+      // Minutes the clinic's clock is ahead of UTC; the screen shows times in the clinic's zone.
+      offsetMinutes: offset,
       visits: day,
       counts: {
         total: day.filter((visit) => visit.status !== 'NO_SHOW').length,
@@ -1374,8 +1376,18 @@ export class WorkspaceService {
       })),
       // weekHours null: the doctor works by the clinic's hours.
       doctors: doctors.map((d) => ({ id: d.id, name: `${d.lastName} ${d.firstName}`, weekHours: employeeWeek(d.schedules) })),
+      exceptions: await this.scheduleExceptions(orgId, start.toISOString().slice(0, 10), new Date(start.getTime() + 86400000).toISOString().slice(0, 10)),
       appointments: appointments.map(boardVisit),
     };
+  }
+
+  /** Holidays, vacations and one-off hours touching the clinic-local dates from..to. */
+  private async scheduleExceptions(orgId: string, from: string, to: string) {
+    const rows = await this.prisma.scheduleException.findMany({
+      where: { organizationId: orgId, dateFrom: { lte: to }, dateTo: { gte: from } },
+      orderBy: { dateFrom: 'asc' },
+    });
+    return rows.map((row) => ({ id: row.id, employeeId: row.employeeId, dateFrom: row.dateFrom, dateTo: row.dateTo, opensAt: row.opensAt, closesAt: row.closesAt, note: row.note }));
   }
 
   /** Visits and how full each clinic-local day is, for the week, month and agenda views. */
@@ -1399,6 +1411,8 @@ export class WorkspaceService {
     const offset = tzOffsetMinutes(timezone, new Date(fromDay));
     const week = weekHoursOf(org.weekHours, org.workHours);
     const dates = Array.from({ length: days }, (_, index) => new Date(fromDay + index * 86400000).toISOString().slice(0, 10));
+    const exceptions = await this.scheduleExceptions(orgId, fromStr, toStr);
+    const clinicExceptions = exceptions.filter((row) => row.employeeId === null);
     const chairs = branches.reduce((sum, branch) => sum + branch.cabinets.length, 0);
     const appointments = await this.prisma.appointment.findMany({
       where: {
@@ -1421,12 +1435,13 @@ export class WorkspaceService {
       timezone,
       offsetMinutes: offset,
       // The widest working span of the range, for grids that show several days at once.
-      hours: visibleHours(dates.map((date) => hoursOn(week, date))),
+      hours: visibleHours(dates.map((date) => effectiveHours(week, date, clinicExceptions))),
       week,
+      exceptions,
       chairs,
       days: dates.map((date) => {
         const list = byDay.get(date) ?? [];
-        const open = hoursOn(week, date);
+        const open = effectiveHours(week, date, clinicExceptions);
         return {
           date,
           hours: open,

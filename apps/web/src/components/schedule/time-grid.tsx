@@ -152,5 +152,6 @@ function closedBands(day: DayHours, from: number, to: number) {
   const bands: { from: number; to: number }[] = [];
   if (day.opensAt > from) bands.push({ from, to: Math.min(to, day.opensAt) });
   if (day.closesAt < to) bands.push({ from: Math.max(from, day.closesAt), to });
+  if (day.breakFrom !== undefined && day.breakTo !== undefined) bands.push({ from: Math.max(from, day.breakFrom), to: Math.min(to, day.breakTo) });
   return bands.filter((band) => band.to > band.from);
 }

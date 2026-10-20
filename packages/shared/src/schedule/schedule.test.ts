@@ -49,7 +49,7 @@ describe('loadLevel', () => {
   });
 });
 
-import { employeeWeek, hoursOn, normalizeWeekHours, scheduleRows, parseWorkHours, tzOffsetMinutes, visibleHours, wallDate, weekHoursOf, weekHoursText } from './schedule';
+import { effectiveHours, employeeWeek, exceptionOn, hoursOn, normalizeException, normalizeWeekHours, scheduleRows, parseWorkHours, tzOffsetMinutes, visibleHours, wallDate, weekHoursOf, weekHoursText } from './schedule';
 
 describe('часы работы и часовой пояс', () => {
   it('читает часы в разных записях и падает на 8–20', () => {
@@ -108,11 +108,37 @@ describe('employee week', () => {
     expect(week[0]).toEqual({ opensAt: 900, closesAt: 1320 });
     expect(week[1]).toBeNull();
     expect(week[6]).toEqual({ opensAt: 480, closesAt: 900 });
-    expect(scheduleRows(week)).toEqual(rows);
+    expect(scheduleRows(week)).toEqual(rows.map((row) => ({ ...row, breakStart: null, breakEnd: null })));
     expect(employeeWeek([{ dayOfWeek: 0, startsAt: '10:00', endsAt: '12:00' }])![6]).toEqual({ opensAt: 600, closesAt: 720 });
   });
 
   it('no rows means the clinic hours', () => {
     expect(employeeWeek([])).toBeNull();
+  });
+});
+
+describe('breaks and exceptions', () => {
+  const day = { opensAt: 540, closesAt: 1080 };
+  const week = [day, day, day, day, day, null, null];
+
+  it('keeps a break inside the day and refuses one outside', () => {
+    const lunch = { ...day, breakFrom: 780, breakTo: 840 };
+    expect(normalizeWeekHours([lunch, day, day, day, day, null, null])[0]).toEqual(lunch);
+    expect(() => normalizeWeekHours([{ ...day, breakFrom: 500, breakTo: 600 }, day, day, day, day, null, null])).toThrow(/перерыв/);
+    expect(weekHoursText([lunch, lunch, null, null, null, null, null])).toBe('Пн–Вт 09:00–18:00 (перерыв 13:00–14:00)');
+    expect(employeeWeek([{ dayOfWeek: 1, startsAt: '09:00', endsAt: '18:00', breakStart: '13:00', breakEnd: '14:00' }])![0]).toEqual(lunch);
+  });
+
+  it('applies a clinic holiday, then the employee', () => {
+    const holiday = normalizeException({ employeeId: null, dateFrom: '2026-11-04', dateTo: '2026-11-04', opensAt: null });
+    const vacation = normalizeException({ employeeId: 'doc', dateFrom: '2026-11-02', dateTo: '2026-11-06' });
+    const short = normalizeException({ employeeId: null, dateFrom: '2026-11-03', opensAt: 600, closesAt: 900 });
+    const all = [holiday, vacation, short];
+    expect(effectiveHours(week, '2026-11-04', all)).toBeNull();
+    expect(effectiveHours(week, '2026-11-03', all)).toEqual({ opensAt: 600, closesAt: 900 });
+    expect(effectiveHours(week, '2026-11-03', all, 'doc')).toBeNull();
+    expect(effectiveHours(week, '2026-11-09', all, 'doc')).toEqual(day);
+    expect(exceptionOn('2026-11-03', all, 'doc')).toBe(vacation);
+    expect(() => normalizeException({ dateFrom: '2026-11-05', dateTo: '2026-11-01' })).toThrow(/раньше/);
   });
 });

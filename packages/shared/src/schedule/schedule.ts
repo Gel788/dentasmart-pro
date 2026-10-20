@@ -90,7 +90,8 @@ export function parseWorkHours(text: string | null | undefined) {
 }
 
 /** One day's opening hours in clinic-local minutes; null when the clinic is closed that day. */
-export type DayHours = { opensAt: number; closesAt: number } | null;
+/** A day's hours may carry one break (lunch) inside them. */
+export type DayHours = { opensAt: number; closesAt: number; breakFrom?: number; breakTo?: number } | null;
 /** Seven days, Monday first. */
 export type WeekHours = DayHours[];
 
@@ -107,7 +108,15 @@ export function normalizeWeekHours(input: unknown): WeekHours {
     const closesAt = Number((day as { closesAt?: unknown }).closesAt);
     const ok = Number.isInteger(opensAt) && Number.isInteger(closesAt) && opensAt >= 0 && closesAt <= 24 * 60 && opensAt < closesAt;
     if (!ok) throw new Error(`${WEEKDAYS_SHORT[index]}: время закрытия должно быть позже открытия`);
-    return { opensAt, closesAt };
+    const rawFrom = (day as { breakFrom?: unknown }).breakFrom;
+    const rawTo = (day as { breakTo?: unknown }).breakTo;
+    if (rawFrom === undefined || rawFrom === null || rawTo === undefined || rawTo === null) return { opensAt, closesAt };
+    const breakFrom = Number(rawFrom);
+    const breakTo = Number(rawTo);
+    if (!(Number.isInteger(breakFrom) && Number.isInteger(breakTo) && opensAt < breakFrom && breakFrom < breakTo && breakTo < closesAt)) {
+      throw new Error(`${WEEKDAYS_SHORT[index]}: перерыв должен быть внутри рабочего времени`);
+    }
+    return { opensAt, closesAt, breakFrom, breakTo };
   });
 }
 
@@ -137,7 +146,7 @@ export function weekHoursText(week: WeekHours) {
     while (end + 1 < 7 && sameHours(week[end + 1], day)) end += 1;
     if (day) {
       const days = end > index ? `${WEEKDAYS_SHORT[index]}–${WEEKDAYS_SHORT[end]}` : WEEKDAYS_SHORT[index];
-      parts.push(`${days} ${hhmm(day.opensAt)}–${hhmm(day.closesAt)}`);
+      parts.push(`${days} ${hhmm(day.opensAt)}–${hhmm(day.closesAt)}${day.breakFrom !== undefined && day.breakTo !== undefined ? ` (перерыв ${hhmm(day.breakFrom)}–${hhmm(day.breakTo)})` : ''}`);
     }
     index = end + 1;
   }
@@ -145,10 +154,51 @@ export function weekHoursText(week: WeekHours) {
 }
 
 function sameHours(a: DayHours, b: DayHours) {
-  return a === b || (!!a && !!b && a.opensAt === b.opensAt && a.closesAt === b.closesAt);
+  return a === b || (!!a && !!b && a.opensAt === b.opensAt && a.closesAt === b.closesAt && a.breakFrom === b.breakFrom && a.breakTo === b.breakTo);
 }
 
-export type ScheduleRow = { dayOfWeek: number; startsAt: string; endsAt: string };
+/**
+ * A dated change to the usual week: a holiday or vacation (closed) or different hours, for the whole
+ * clinic (employeeId null) or one employee. Dates are clinic-local YYYY-MM-DD, both ends included.
+ */
+export type ScheduleException = { id?: string; employeeId: string | null; dateFrom: string; dateTo: string; opensAt: number | null; closesAt: number | null; note?: string | null };
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Checks an exception sent by the settings screen. */
+export function normalizeException(input: Partial<ScheduleException>): ScheduleException {
+  const dateFrom = String(input.dateFrom ?? '');
+  const dateTo = String(input.dateTo || dateFrom);
+  if (!DATE.test(dateFrom) || !DATE.test(dateTo) || Number.isNaN(Date.parse(dateFrom)) || Number.isNaN(Date.parse(dateTo))) throw new Error('Укажите даты');
+  if (dateTo < dateFrom) throw new Error('Дата окончания раньше начала');
+  if ((Date.parse(dateTo) - Date.parse(dateFrom)) / 86400000 > 366) throw new Error('Не больше года за раз');
+  const closed = input.opensAt === null || input.opensAt === undefined;
+  if (closed) return { employeeId: input.employeeId ?? null, dateFrom, dateTo, opensAt: null, closesAt: null, note: input.note?.trim() || null };
+  const opensAt = Number(input.opensAt);
+  const closesAt = Number(input.closesAt);
+  if (!(Number.isInteger(opensAt) && Number.isInteger(closesAt) && opensAt >= 0 && closesAt <= 24 * 60 && opensAt < closesAt)) throw new Error('Время окончания должно быть позже начала');
+  return { employeeId: input.employeeId ?? null, dateFrom, dateTo, opensAt, closesAt, note: input.note?.trim() || null };
+}
+
+/**
+ * Hours for a date after exceptions: the week's hours, then the clinic's exceptions, then the
+ * employee's own (a vacation beats the clinic's day; different hours replace the day, breaks drop).
+ */
+export function effectiveHours(week: WeekHours, date: string, exceptions: ScheduleException[] = [], employeeId?: string | null): DayHours {
+  let day = hoursOn(week, date);
+  const hits = exceptions.filter((row) => row.dateFrom <= date && date <= row.dateTo && (row.employeeId === null || (!!employeeId && row.employeeId === employeeId)));
+  hits.sort((a, b) => (a.employeeId === null ? 0 : 1) - (b.employeeId === null ? 0 : 1));
+  for (const row of hits) day = row.opensAt === null || row.closesAt === null ? null : { opensAt: row.opensAt, closesAt: row.closesAt };
+  return day;
+}
+
+/** The exception that shaped a date, for a label in the calendar: employee's own first, then the clinic's. */
+export function exceptionOn(date: string, exceptions: ScheduleException[] = [], employeeId?: string | null) {
+  const hits = exceptions.filter((row) => row.dateFrom <= date && date <= row.dateTo);
+  return hits.find((row) => employeeId && row.employeeId === employeeId) ?? hits.find((row) => row.employeeId === null) ?? null;
+}
+
+export type ScheduleRow = { dayOfWeek: number; startsAt: string; endsAt: string; breakStart?: string | null; breakEnd?: string | null };
 
 const minutesOf = (text: string) => {
   const match = /^(\d{1,2}):(\d{2})$/.exec(text.trim());
@@ -167,14 +217,22 @@ export function employeeWeek(rows: ScheduleRow[]): WeekHours | null {
     const opensAt = minutesOf(row.startsAt);
     const closesAt = row.endsAt === '24:00' ? 24 * 60 : minutesOf(row.endsAt);
     if (index < 0 || index > 6 || !(opensAt < closesAt)) continue;
-    week[index] = { opensAt, closesAt };
+    const breakFrom = row.breakStart ? minutesOf(row.breakStart) : NaN;
+    const breakTo = row.breakEnd ? minutesOf(row.breakEnd) : NaN;
+    week[index] = opensAt < breakFrom && breakFrom < breakTo && breakTo < closesAt ? { opensAt, closesAt, breakFrom, breakTo } : { opensAt, closesAt };
   }
   return week;
 }
 
 /** Schedule rows for a week, one per working day. */
 export function scheduleRows(week: WeekHours): ScheduleRow[] {
-  return week.flatMap((day, index) => (day ? [{ dayOfWeek: index + 1, startsAt: hhmm(day.opensAt), endsAt: day.closesAt === 24 * 60 ? '24:00' : hhmm(day.closesAt) }] : []));
+  return week.flatMap((day, index) => (day ? [{
+    dayOfWeek: index + 1,
+    startsAt: hhmm(day.opensAt),
+    endsAt: day.closesAt === 24 * 60 ? '24:00' : hhmm(day.closesAt),
+    breakStart: day.breakFrom !== undefined ? hhmm(day.breakFrom) : null,
+    breakEnd: day.breakTo !== undefined ? hhmm(day.breakTo) : null,
+  }] : []));
 }
 
 /**

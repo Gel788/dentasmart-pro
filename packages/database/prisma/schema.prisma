@@ -36,6 +36,7 @@ model Organization {
   updatedAt   DateTime @updatedAt
 
   branches             Branch[]
+  scheduleExceptions   ScheduleException[]
   users                User[]
   roles                Role[]
   patients             Patient[]
@@ -203,17 +204,18 @@ model Employee {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  branches        EmployeeBranch[]
-  appointments    Appointment[]         @relation("DoctorAppointments")
-  schedules       EmployeeSchedule[]
-  certificates    EmployeeCertificate[]
-  treatmentPlans  TreatmentPlan[]
-  labOrders       LabOrder[]
-  payrollEntries  PayrollEntry[]
-  payrollRules    PayrollRule[]
-  omsCases        OmsCase[]
-  curatedPatients Patient[]             @relation("PatientCurator")
+  user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branches           EmployeeBranch[]
+  appointments       Appointment[]         @relation("DoctorAppointments")
+  schedules          EmployeeSchedule[]
+  scheduleExceptions ScheduleException[]
+  certificates       EmployeeCertificate[]
+  treatmentPlans     TreatmentPlan[]
+  labOrders          LabOrder[]
+  payrollEntries     PayrollEntry[]
+  payrollRules       PayrollRule[]
+  omsCases           OmsCase[]
+  curatedPatients    Patient[]             @relation("PatientCurator")
 
   @@map("employees")
 }
@@ -302,36 +304,36 @@ enum AnxietyLevel {
 }
 
 model Patient {
-  id                String         @id @default(cuid())
-  organizationId    String
-  firstName         String
-  lastName          String
-  middleName        String?
-  birthDate         DateTime?
-  gender            PatientGender?
-  phone             String?
-  email             String?
-  tags              String[]       @default([])
-  notes             String?
-  source            String?
+  id                   String         @id @default(cuid())
+  organizationId       String
+  firstName            String
+  lastName             String
+  middleName           String?
+  birthDate            DateTime?
+  gender               PatientGender?
+  phone                String?
+  email                String?
+  tags                 String[]       @default([])
+  notes                String?
+  source               String?
   /// Client type carried over from the previous CRM, e.g. «отказавшиеся».
-  clientType        String?
-  allergies         String[]       @default([])
-  chronicConditions String?
-  medications       String?
-  contraindications String?
-  anamnesis         String?
-  anxiety           AnxietyLevel   @default(NONE)
-  pregnant          Boolean        @default(false)
-  anticoagulant     Boolean        @default(false)
+  clientType           String?
+  allergies            String[]       @default([])
+  chronicConditions    String?
+  medications          String?
+  contraindications    String?
+  anamnesis            String?
+  anxiety              AnxietyLevel   @default(NONE)
+  pregnant             Boolean        @default(false)
+  anticoagulant        Boolean        @default(false)
   /// Grows with every change of the medical fields; a save names the version it was made from.
-  medicalVersion    Int            @default(0)
+  medicalVersion       Int            @default(0)
   /// When a clinician last confirmed the medical history with the patient, and who.
   medicalConfirmedAt   DateTime?
   medicalConfirmedById String?
-  isActive          Boolean        @default(true)
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  isActive             Boolean        @default(true)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
   organization       Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   appointments       Appointment[]
@@ -2295,4 +2297,24 @@ model PlanVersion {
 
   @@index([planId, createdAt])
   @@map("plan_versions")
+}
+
+/// A dated change to the usual week: a holiday or vacation (opensAt null) or different hours.
+/// employeeId null means the whole clinic. Dates are clinic-local YYYY-MM-DD, both ends included.
+model ScheduleException {
+  id             String   @id @default(cuid())
+  organizationId String
+  employeeId     String?
+  dateFrom       String
+  dateTo         String
+  opensAt        Int?
+  closesAt       Int?
+  note           String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employee     Employee?    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, dateFrom])
+  @@map("schedule_exceptions")
 }

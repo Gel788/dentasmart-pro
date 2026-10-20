@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@dentasmart/database';
-import { employeeWeek, normalizeWeekHours, scheduleRows, weekHoursOf, weekHoursText, type WeekHours } from '@dentasmart/shared';
+import { employeeWeek, normalizeException, normalizeWeekHours, scheduleRows, weekHoursOf, weekHoursText, type ScheduleException, type WeekHours } from '@dentasmart/shared';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -459,6 +459,46 @@ export class ClinicConfigService {
     }
     await this.trail(orgId, userId, 'Employee', employeeId, body.id ? 'UPDATE' : 'CREATE', { name: `${body.lastName} ${body.firstName}` });
     return { id: employeeId, ...(password ? { password, email: body.email!.trim().toLowerCase() } : {}) };
+  }
+
+  /** Holidays, vacations and one-off hours from a month ago onwards, nearest first. */
+  async exceptions(orgId: string) {
+    const since = new Date(Date.now() - 31 * 86400000).toISOString().slice(0, 10);
+    const rows = await this.prisma.scheduleException.findMany({
+      where: { organizationId: orgId, dateTo: { gte: since } },
+      include: { employee: { select: { firstName: true, lastName: true } } },
+      orderBy: [{ dateFrom: 'asc' }, { createdAt: 'asc' }],
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      employeeId: row.employeeId,
+      employee: row.employee ? `${row.employee.lastName} ${row.employee.firstName}` : null,
+      dateFrom: row.dateFrom,
+      dateTo: row.dateTo,
+      opensAt: row.opensAt,
+      closesAt: row.closesAt,
+      note: row.note,
+    }));
+  }
+
+  async saveException(orgId: string, userId: string, body: Partial<ScheduleException>) {
+    let row: ScheduleException;
+    try { row = normalizeException(body); } catch (err) { throw new BadRequestException((err as Error).message); }
+    if (row.employeeId) {
+      const own = await this.prisma.employee.findFirst({ where: { id: row.employeeId, user: { organizationId: orgId } } });
+      if (!own) throw new NotFoundException('Сотрудник не найден');
+    }
+    const saved = await this.prisma.scheduleException.create({ data: { organizationId: orgId, ...row } });
+    await this.trail(orgId, userId, 'ScheduleException', saved.id, 'CREATE', { ...row });
+    return saved;
+  }
+
+  async deleteException(orgId: string, userId: string, id: string) {
+    const own = await this.prisma.scheduleException.findFirst({ where: { id, organizationId: orgId } });
+    if (!own) throw new NotFoundException('Исключение не найдено');
+    await this.prisma.scheduleException.delete({ where: { id } });
+    await this.trail(orgId, userId, 'ScheduleException', id, 'DELETE', { dateFrom: own.dateFrom, dateTo: own.dateTo, employeeId: own.employeeId });
+    return { ok: true };
   }
 
   async setAiPlans(orgId: string, enabled: boolean) {

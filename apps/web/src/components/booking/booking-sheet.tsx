@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Check, Clock, Minus, Plus, Search, UserPlus, X } from 'lucide-react';
+import Link from 'next/link';
+import { AlertTriangle, ArrowLeft, Check, CheckCircle2, Clock, Minus, Plus, Search, UserPlus, X } from 'lucide-react';
+import { effectiveHours, weekHoursOf, type DayHours, type ScheduleException } from '@dentasmart/shared';
 import { PatientForm, type PatientSeed } from '@/components/studio/patient-form';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
@@ -14,11 +16,14 @@ type Hit = { id: string; firstName: string; lastName: string; phone: string | nu
 type Brief = { id: string; firstName: string; lastName: string; phone: string | null; debt: number; alerts: { tone: string; text: string }[] };
 type Shell = {
   branches: { id: string; name: string; cabinets: { id: string; name: string }[] }[];
-  doctors: { id: string; name: string }[];
+  doctors: { id: string; name: string; weekHours?: DayHours[] | null }[];
+  exceptions?: ScheduleException[];
   appointments: { id: string; patientId: string; patient: string; service: string; startsAt: string; endsAt: string }[];
 };
 
 const LENGTHS = [15, 30, 45, 60, 90, 120];
+type Range = { offsetMinutes: number; week?: DayHours[]; exceptions?: ScheduleException[] };
+const toClock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 
 /**
  * Booking a slot: who, what, how long, with whom and where, then one button. A side sheet on the desk,
@@ -42,7 +47,11 @@ export function BookingSheet() {
   const [pending, setPending] = useState(false);
   const [creating, setCreating] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [range, setRange] = useState<Range | null>(null);
+  const [confirmOutside, setConfirmOutside] = useState(false);
+  const [done, setDone] = useState<{ name: string; patientId: string; when: string } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { setConfirmOutside(false); }, [startsAt, doctorId, duration]);
 
   const editing = !!slot?.appointmentId;
   const day = (startsAt || slot?.startsAt || '').slice(0, 10);
@@ -54,6 +63,7 @@ export function BookingSheet() {
     setCabinetId(slot.cabinetId ?? '');
     setError('');
     setConfirmCancel(false);
+    setDone(null);
   }, [slot?.startsAt, slot?.doctorId, slot?.cabinetId, slot?.appointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -64,6 +74,7 @@ export function BookingSheet() {
   useEffect(() => {
     if (!slot || !day) return;
     api<Shell>(`/workspace/schedule?date=${day}`).then(setShell).catch(() => setShell(null));
+    api<Range>(`/workspace/schedule/range?from=${day}&to=${day}`).then(setRange).catch(() => setRange(null));
   }, [!!slot, day]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A patient chosen earlier (from the card's «Записать») or the visit being edited comes in ready.
@@ -127,12 +138,27 @@ export function BookingSheet() {
 
   const close = () => setFocus(null);
   const ends = new Date(Date.parse(at) + duration * 60000).toISOString();
+  // Does the visit fit the chosen doctor's day (their week, holidays, vacation, break)?
+  const offset = range?.offsetMinutes ?? 180;
+  const wall = (iso: string) => { const date = new Date(Date.parse(iso) + offset * 60000); return date.getUTCHours() * 60 + date.getUTCMinutes(); };
+  const localDay = new Date(Date.parse(at) + offset * 60000).toISOString().slice(0, 10);
+  const doctorRow = shell?.doctors.find((item) => item.id === doctorId);
+  const allExceptions = [...(range?.exceptions ?? []), ...(shell?.exceptions ?? [])];
+  const workday = range ? effectiveHours(doctorRow?.weekHours ?? range.week ?? weekHoursOf(null, null), localDay, allExceptions, doctorId || null) : undefined;
+  const from = wall(at);
+  const to = from + duration;
+  const outside = workday === undefined ? null
+    : workday === null ? `${doctorRow ? doctorRow.name : 'Клиника'}: в этот день не работает`
+    : from < workday.opensAt || to > workday.closesAt ? `${doctorRow ? doctorRow.name : 'Клиника'} работает ${toClock(workday.opensAt)}–${toClock(workday.closesAt)}`
+    : workday.breakFrom !== undefined && workday.breakTo !== undefined && from < workday.breakTo && to > workday.breakFrom ? `Попадает на перерыв ${toClock(workday.breakFrom)}–${toClock(workday.breakTo)}`
+    : null;
   const shift = (minutes: number) => setStartsAt(new Date(Date.parse(at) + minutes * 60000).toISOString());
   const cabinets = shell?.branches.flatMap((branch) => branch.cabinets.map((cabinet) => ({ ...cabinet, branch: branch.name }))) ?? [];
   const many = (shell?.branches.length ?? 0) > 1;
 
   const submit = async () => {
     if (!patient) { setError('Выберите пациента или добавьте нового'); searchRef.current?.focus(); return; }
+    if (outside && !confirmOutside) { setConfirmOutside(true); return; }
     setPending(true);
     setError('');
     try {
@@ -140,7 +166,8 @@ export function BookingSheet() {
       if (slot.appointmentId) await api(`/appointments/${slot.appointmentId}`, { method: 'PATCH', body: JSON.stringify(body) });
       else await api('/workspace/appointments', { method: 'POST', body: JSON.stringify(body) });
       bump();
-      setFocus({ type: 'patient', id: patient.id });
+      // The sheet answers in place; the old context panel no longer pops up over the calendar.
+      setDone({ name: `${patient.lastName} ${patient.firstName}`, patientId: patient.id, when: `${new Date(at).toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' })}, ${hm(at)}–${hm(ends)}` });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось записать');
     } finally {
@@ -169,6 +196,18 @@ export function BookingSheet() {
           <h2 id="booking-title">{editing ? 'Изменить запись' : 'Новая запись'}</h2>
         </header>
 
+        {done ? (
+          <div className={styles.done} role="status">
+            <CheckCircle2 className={styles.doneIcon} aria-hidden="true" />
+            <h3>{editing ? 'Запись изменена' : 'Записано'}</h3>
+            <p><b>{done.name}</b><span>{done.when}</span></p>
+            <div className={styles.doneActs}>
+              <button type="button" className={styles.submit} onClick={close}>Готово</button>
+              <Link className="sd-btn-ghost" href={`/patients/${done.patientId}`} onClick={close}>Открыть карту</Link>
+              {!editing && <button type="button" className="sd-btn-ghost" onClick={() => { setDone(null); setPatient(null); setServiceId(''); }}>Записать ещё</button>}
+            </div>
+          </div>
+        ) : (<>
         <div className={styles.body}>
           {/* When: the time as the big figure, nudged by a quarter hour. */}
           <section className={styles.when} aria-label="Время">
@@ -178,7 +217,7 @@ export function BookingSheet() {
               <span className={styles.time}>{hm(at)}<small>–{hm(ends)}</small></span>
               <button type="button" className={styles.step} onClick={() => shift(15)} aria-label="На 15 минут позже"><Plus /></button>
             </div>
-            {slot.label.includes('вне графика') && <p className={styles.note}><AlertTriangle size={16} aria-hidden="true" />Вне рабочих часов — запись возможна, проверьте, что врач будет на месте.</p>}
+            {outside && <p className={styles.note}><AlertTriangle size={16} aria-hidden="true" />Вне графика. {outside}. Записать можно, но подтвердите.</p>}
           </section>
 
           {/* Who. */}
@@ -301,14 +340,16 @@ export function BookingSheet() {
 
         <footer className={styles.foot}>
           {error && <p className={styles.error} role="alert"><AlertTriangle size={16} aria-hidden="true" />{error}</p>}
+          {outside && confirmOutside && <p className={styles.warn} role="alert">{outside}. Нажмите ещё раз, если запись согласована.</p>}
           <div className={styles.summary}>
             <span><Clock size={15} aria-hidden="true" />{hm(at)}–{hm(ends)} · {duration} мин</span>
             {service && <b>{formatMoney(service.price)}</b>}
           </div>
-          <button type="button" className={styles.submit} disabled={pending} onClick={() => void submit()}>
-            {pending ? 'Сохраняем…' : <><Check aria-hidden="true" />{editing ? 'Сохранить изменения' : `Записать на ${hm(at)}`}</>}
+          <button type="button" className={styles.submit} data-outside={outside && confirmOutside ? "" : undefined} disabled={pending} onClick={() => void submit()}>
+            {pending ? 'Сохраняем…' : outside && confirmOutside ? <><AlertTriangle aria-hidden="true" />Да, записать вне графика</> : <><Check aria-hidden="true" />{editing ? 'Сохранить изменения' : `Записать на ${hm(at)}`}</>}
           </button>
         </footer>
+        </>)}
       </section>
 
       <PatientForm

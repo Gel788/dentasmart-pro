@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser } from '@dentasmart/shared';
 import { Prisma } from '@dentasmart/database';
@@ -110,6 +110,24 @@ export class ClinicConfigController {
   @RequirePermissions('org.manage')
   ai(@OrgId() orgId: string, @Body() body: { enabled?: boolean }) {
     return this.config.setAiPlans(orgId, body.enabled !== false);
+  }
+
+  @Get('exceptions')
+  @RequirePermissions('schedule.read')
+  exceptions(@OrgId() orgId: string) {
+    return this.config.exceptions(orgId);
+  }
+
+  @Post('exceptions')
+  @RequirePermissions('org.manage')
+  saveException(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Body() body: Record<string, unknown>) {
+    return this.config.saveException(orgId, user.id, body as Parameters<ClinicConfigService['saveException']>[2]);
+  }
+
+  @Delete('exceptions/:id')
+  @RequirePermissions('org.manage')
+  deleteException(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.config.deleteException(orgId, user.id, id);
   }
 
   @Post('cabinets')

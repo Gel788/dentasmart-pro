@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { hoursOn, visibleHours, weekHoursOf, type DayHours, type VisitStatus } from '@dentasmart/shared';
+import { effectiveHours, exceptionOn, visibleHours, weekHoursOf, type DayHours, type ScheduleException, type VisitStatus } from '@dentasmart/shared';
 import { Protected } from '@/components/protected';
 import { Agenda } from '@/components/schedule/agenda';
 import { MonthStrip } from '@/components/schedule/month-strip';
@@ -216,16 +216,18 @@ function Calendar() {
   const daySummary = month?.days.find((item) => item.date === date);
 
   const weekHours = month?.week ?? weekHoursOf(null, null);
+  // Holidays, vacations and one-off hours from every payload on screen, each once.
+  const exceptions = [...new Map([...(month?.exceptions ?? []), ...(week?.exceptions ?? []), ...(shell?.exceptions ?? [])].map((row) => [row.id ?? `${row.employeeId}-${row.dateFrom}`, row] as const)).values()] as ScheduleException[];
   function hoursOfDay(day: string): DayHours {
-    return hoursOn(weekHours, day);
+    return effectiveHours(weekHours, day, exceptions);
   }
   const shownDates = view === 'week' ? Array.from({ length: 7 }, (_, index) => addDays(weekFrom, index)) : date ? [date] : [];
   const shownVisits = view === 'week' ? weekVisits : dayVisits;
   // A doctor column follows that doctor's own week when one is set; chairs follow the clinic.
   const weekOf = (doctorId: string | undefined) => shell?.doctors.find((item) => item.id === doctorId)?.weekHours ?? weekHours;
   const columnHours = (column: Column): DayHours => {
-    if (view === 'day' && axis === 'doctor') return hoursOn(weekOf(column.id), column.date);
-    if (view === 'week' && doctor) return hoursOn(weekOf(doctor), column.date);
+    if (view === 'day' && axis === 'doctor') return effectiveHours(weekOf(column.id), column.date, exceptions, column.id);
+    if (view === 'week' && doctor) return effectiveHours(weekOf(doctor), column.date, exceptions, doctor);
     return hoursOfDay(column.date);
   };
   function outsideHours(column: Column, minutes: number) {
@@ -237,7 +239,18 @@ function Calendar() {
     : visibleHours([...shownDates.map(hoursOfDay), ...columns.map(columnHours)], shownVisits.map((visit) => ({ start: wallMinutes(visit.startsAt, offset), end: wallMinutes(visit.endsAt, offset) })));
   const dayOff = view === 'day' && !!date && !hoursOfDay(date);
   const todayHours = date ? hoursOfDay(date) : null;
-  const hoursLabel = (day: DayHours) => (day ? `${clock(day.opensAt)}–${clock(day.closesAt)}` : 'выходной');
+  const hoursLabel = (day: DayHours) => (day ? `${clock(day.opensAt)}–${clock(day.closesAt)}${day.breakFrom !== undefined && day.breakTo !== undefined ? `, перерыв ${clock(day.breakFrom)}–${clock(day.breakTo)}` : ''}` : 'выходной');
+  const describe = (row: ScheduleException) => `${row.note || (row.opensAt === null ? 'не работает' : 'другие часы')}${row.opensAt !== null && row.closesAt !== null ? ` ${clock(row.opensAt)}–${clock(row.closesAt)}` : ''}`;
+  const clinicNote = view === 'day' && date ? exceptionOn(date, exceptions.filter((row) => row.employeeId === null)) : null;
+  const dayNotes = [
+    ...(clinicNote ? [`Клиника: ${describe(clinicNote)}`] : []),
+    ...(view === 'day' && date
+      ? (shell?.doctors ?? []).flatMap((item) => {
+          const own = exceptions.find((row) => row.employeeId === item.id && row.dateFrom <= date && date <= row.dateTo);
+          return own ? [`${item.name}: ${describe(own)}`] : [];
+        })
+      : []),
+  ];
 
   return (
     <div className={styles.page}>
@@ -289,6 +302,7 @@ function Calendar() {
             {(view === 'day' || view === 'week') && (
               <div className={styles.hoursBar}>
                 <b>{view === 'day' ? `Часы работы: ${hoursLabel(todayHours)}` : 'Рабочие часы по графику'}</b>
+                {dayNotes.length > 0 && <em className={styles.hoursNote}>{dayNotes.join(' · ')}</em>}
                 <span>{allHours ? 'Показано всё время; нерабочее заштриховано, туда тоже можно записать.' : 'Нерабочее время скрыто.'}{(view === 'day' && axis === 'doctor') || (view === 'week' && doctor) ? ' Колонки врачей — по их личным графикам.' : ''}</span>
                 <button type="button" className="sd-btn-ghost" aria-pressed={allHours} onClick={() => setAllHours((on) => !on)}>{allHours ? 'Только рабочие часы' : 'Всё время'}</button>
               </div>

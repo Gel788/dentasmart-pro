@@ -1,7 +1,7 @@
 import { phoneDigits } from '../phone';
 import { PLAN_TEMPLATES, composeFamily, lineTotal, type Mark } from '../plan-engine';
 import { resultFor, serviceKit, surfacesFor } from '../service-kit';
-import { canMoveVisit, dayLoad, fromKopecks, invoiceStatus, isVisitClosed, isVisitStatus, kopecks, labDueAt, MEDICAL_KEYS, medicalDiff, medicalReviewDue, normalizeMedical, employeeWeek, hoursOn, normalizeWeekHours, patientSegments, scheduleRows, visibleHours, weekHoursOf, weekHoursText, phoneMatches, searchTerms, SEGMENTS, visitMoveError, wallDate, type MedicalFields, type PatientSegment, type VisitStatus } from '@dentasmart/shared';
+import { canMoveVisit, dayLoad, fromKopecks, invoiceStatus, isVisitClosed, isVisitStatus, kopecks, labDueAt, MEDICAL_KEYS, medicalDiff, medicalReviewDue, normalizeMedical, effectiveHours, employeeWeek, normalizeException, normalizeWeekHours, patientSegments, scheduleRows, visibleHours, weekHoursOf, weekHoursText, phoneMatches, searchTerms, SEGMENTS, visitMoveError, wallDate, type MedicalFields, type PatientSegment, type VisitStatus } from '@dentasmart/shared';
 import { ApiError } from '../api';
 import snapshot from './snapshot.json';
 import { demoLabWork, demoRoute, reserveDemoLines, type DemoReservation } from './route';
@@ -190,6 +190,7 @@ function read(path: string, token: string): unknown {
   if (pathname === '/flow/caller') return searchPeople(bag, query.phone ?? '');
   if (pathname === '/workspace/schedule/range') return scheduleRange(bag, query.from ?? ANCHOR, query.to ?? ANCHOR);
   if (pathname === '/workspace/schedule') return scheduleFor(bag, query.date || ANCHOR);
+  if (pathname === '/config/exceptions') return [...demoExceptions(bag)].sort((a, b) => String(a.dateFrom).localeCompare(String(b.dateFrom)));
   if (pathname === '/showcase/copilot') {
     return bag.gets['/showcase/copilot'] ?? bag.gets[`/showcase/copilot?patientId=${query.patientId}&note=кариес`];
   }
@@ -327,7 +328,13 @@ function scheduleFor(bag: Bag, date: string) {
   const shell = bag.gets[`/workspace/schedule?date=${ANCHOR}`] as AnyRec;
   const day = shiftString(date.slice(0, 10), -1);
   const appointments = bag.appointments.filter((row) => row.startsAt.slice(0, 10) === day && row.status !== 'CANCELLED');
-  return { ...shell, date: `${day}T00:00:00.000Z`, appointments };
+  return { ...shell, date: `${day}T00:00:00.000Z`, exceptions: demoExceptions(bag).filter((row) => row.dateFrom <= day && day <= row.dateTo), appointments };
+}
+
+function demoExceptions(bag: Bag) {
+  const cfg = config(bag);
+  if (!Array.isArray(cfg.exceptions)) cfg.exceptions = [];
+  return cfg.exceptions as AnyRec[];
 }
 
 /** Same shape as the API's GET /workspace/schedule/range, worked out from the demo's stored visits. */
@@ -341,13 +348,15 @@ function scheduleRange(bag: Bag, fromRaw: string, toRaw: string) {
   const offset = 180;
   const brand = config(bag).brand as AnyRec | undefined;
   const week = weekHoursOf(brand?.weekHours, brand?.workHours);
+  const exceptions = demoExceptions(bag).filter((row) => row.dateFrom <= to && row.dateTo >= from) as Parameters<typeof effectiveHours>[2] & AnyRec[];
+  const clinicExceptions = exceptions.filter((row) => row.employeeId === null);
   const visits = bag.appointments.filter((row) => row.status !== 'CANCELLED');
   const dates = Array.from({ length: days }, (_, index) => new Date(fromDay + index * 86400000).toISOString().slice(0, 10));
   const inRange = visits.filter((row) => dates.includes(wallDate(row.startsAt, offset)));
   return {
-    from, to, timezone: 'Europe/Moscow', offsetMinutes: offset, hours: visibleHours(dates.map((date) => hoursOn(week, date))), week, chairs,
+    from, to, timezone: 'Europe/Moscow', offsetMinutes: offset, hours: visibleHours(dates.map((date) => effectiveHours(week, date, clinicExceptions))), week, exceptions, chairs,
     days: dates.map((date) => {
-      const open = hoursOn(week, date);
+      const open = effectiveHours(week, date, clinicExceptions);
       return { date, hours: open, ...dayLoad(inRange.filter((row) => wallDate(row.startsAt, offset) === date), { chairs, opensAt: open?.opensAt ?? 0, closesAt: open?.closesAt ?? 0, tzOffsetMinutes: offset }) };
     }),
     appointments: inRange.sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
@@ -442,6 +451,19 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
   if (pathname === '/config/visit-templates') return saveTemplate(bag, data);
   if (pathname === '/config/plan-templates') return pushConfig(bag, 'planTemplates', { id: uid(), ...data });
   if (pathname === '/config/documents') return pushConfig(bag, 'documents', { id: uid(), ...data });
+  if (pathname === '/config/exceptions' && method === 'POST') {
+    let row;
+    try { row = normalizeException(data); } catch (err) { throw new Error((err as Error).message); }
+    const employee = row.employeeId ? ((config(bag).employees ?? []) as AnyRec[]).find((item) => item.id === row.employeeId) : null;
+    const saved = { id: uid(), ...row, employee: employee ? `${employee.lastName} ${employee.firstName}` : null };
+    demoExceptions(bag).push(saved);
+    return saved;
+  }
+  if (pathname.startsWith('/config/exceptions/') && method === 'DELETE') {
+    const id = pathname.split('/').pop();
+    config(bag).exceptions = demoExceptions(bag).filter((row) => row.id !== id);
+    return { ok: true };
+  }
   if (pathname === '/config/brand') {
     const next: AnyRec = { ...data };
     if (data.weekHours !== undefined) {

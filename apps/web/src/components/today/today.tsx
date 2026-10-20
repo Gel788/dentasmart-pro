@@ -28,6 +28,7 @@ type Attention = { kind: 'confirm' | 'review' | 'pay' | 'plan' | string; title: 
 export type Day = {
   day: string;
   now: string;
+  offsetMinutes?: number;
   visits: Visit[];
   counts: { total: number; done: number; waiting: number; inChair: number; noShow: number };
   attention: Attention[];
@@ -41,7 +42,11 @@ const STATUS: Record<string, string> = {
 };
 const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 const ICON = { confirm: Phone, review: ShieldAlert, pay: Wallet, plan: AlertTriangle } as Record<string, typeof Phone>;
-const clock = (iso: string) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+/** Wall-clock time in the clinic's zone, whatever zone the device is in. */
+const clockAt = (iso: string, offset: number) => {
+  const date = new Date(Date.parse(iso) + offset * 60000);
+  return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`;
+};
 
 /** The working day: who comes and what to do with each of them, then what else needs a hand. */
 export function Today({ owner }: { owner: boolean }) {
@@ -91,6 +96,8 @@ export function Today({ owner }: { owner: boolean }) {
       : <div className={styles.page} aria-busy="true"><div className="sd-skel" style={{ height: 40, width: 220 }} /><div className="sd-skel" style={{ height: 320 }} /></div>;
   }
 
+  const off = day.offsetMinutes ?? 180;
+  const clock = (iso: string) => clockAt(iso, off);
   const title = new Date(`${day.day}T12:00:00`).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).replace(/(\d+) /, '$1\u00a0');
   const summary = [
     day.counts.inChair ? `${day.counts.inChair} в кресле` : '',
@@ -108,9 +115,9 @@ export function Today({ owner }: { owner: boolean }) {
     try { sessionStorage.setItem('sd.calendar', JSON.stringify({ view: 'day', axis: 'chair', date, doctor: '' })); } catch { /* the calendar opens on today instead */ }
   };
   const lanes = cabinetLanes(day.visits);
-  const span = dayHours(day.visits);
-  const at = (iso: string) => ((wallHour(iso) - span.from) / (span.to - span.from)) * 100;
-  const nowAt = Math.min(100, Math.max(0, ((wallHour(new Date(now).toISOString()) - span.from) / (span.to - span.from)) * 100));
+  const span = dayHours(day.visits, off);
+  const at = (iso: string) => ((wallHour(iso, off) - span.from) / (span.to - span.from)) * 100;
+  const nowAt = Math.min(100, Math.max(0, ((wallHour(new Date(now).toISOString(), off) - span.from) / (span.to - span.from)) * 100));
 
   return (
     <div className={styles.page}>
@@ -314,15 +321,15 @@ function stateWord(visit: Visit) {
   return STATUS[visit.status] ?? visit.status;
 }
 
-/** Hour of the day as the browser shows it, with minutes as a fraction. */
-function wallHour(iso: string) {
-  const date = new Date(iso);
-  return date.getHours() + date.getMinutes() / 60;
+/** Hour of the clinic's day, with minutes as a fraction. */
+function wallHour(iso: string, offset: number) {
+  const date = new Date(Date.parse(iso) + offset * 60000);
+  return date.getUTCHours() + date.getUTCMinutes() / 60;
 }
 
-function dayHours(visits: Visit[]) {
-  const starts = visits.map((visit) => Math.floor(wallHour(visit.startsAt)));
-  const ends = visits.map((visit) => Math.ceil(wallHour(visit.endsAt)));
+function dayHours(visits: Visit[], offset: number) {
+  const starts = visits.map((visit) => Math.floor(wallHour(visit.startsAt, offset)));
+  const ends = visits.map((visit) => Math.ceil(wallHour(visit.endsAt, offset)));
   const from = Math.min(9, ...starts);
   const to = Math.max(19, ...ends);
   return { from: from % 2 ? from - 1 : from, to: Math.min(24, to % 2 ? to + 1 : to) };

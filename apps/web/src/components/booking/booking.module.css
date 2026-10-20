@@ -76,6 +76,8 @@
 .summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-secondary); font-size: 14px; font-variant-numeric: tabular-nums; }
 .summary span { display: inline-flex; align-items: center; gap: 6px; }
 .summary b { color: var(--text); font-size: 16px; }
+.warn { margin: 0; padding: 10px 12px; border: 1px dashed var(--warning); background: var(--warning-soft); color: var(--warning); font-size: 14px; font-weight: 600; }
+.submit[data-outside] { background: var(--warning); }
 .error { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 10px 12px; border: 1px solid var(--danger); background: var(--danger-soft); color: var(--danger); font-size: 14px; font-weight: 600; }
 .error svg { flex: none; margin-top: 1px; }
 .submit { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; border: 0; background: var(--accent); color: #fff; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
@@ -84,6 +86,15 @@
 .submit svg { width: 19px; height: 19px; }
 :global(html.dark) .submit, :global(html.dark) .cancelBtn { color: #0f1215; }
 .sheet :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* After booking: the answer in place, then back to the calendar. */
+.done { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 32px 20px; }
+.doneIcon { width: 40px; height: 40px; color: var(--code-paid); }
+.done h3 { margin: 0; font-size: 26px !important; font-weight: 800; letter-spacing: -0.02em; }
+.done p { display: flex; flex-direction: column; margin: 0 0 12px; font-size: 16px; }
+.done p span { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.doneActs { display: flex; flex-direction: column; align-items: stretch; gap: 8px; width: 100%; }
+.doneActs > * { min-height: 48px; justify-content: center; }
 
 /* Phone: the whole screen, a back arrow, the button over the home bar. */
 @media (max-width: 720px) {

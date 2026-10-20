@@ -39,11 +39,23 @@ async function main() {
 
     await assert.rejects(config.saveBrand(clinic.id, user.id, { weekHours: [{ opensAt: 900, closesAt: 600 }, null, null, null, null, null, null] }), /Пн/);
     await assert.rejects(config.saveBrand(clinic.id, user.id, { weekHours: [evening] }), /семь дней/);
+    // A holiday closes the clinic's day; a vacation is the employee's own; both can be removed.
+    const holiday = await config.saveException(clinic.id, user.id, { employeeId: null, dateFrom: '2026-10-21', dateTo: '2026-10-21', opensAt: null, note: 'Праздник' });
+    const withHoliday = await workspace.scheduleRange(clinic.id, '2026-10-19', '2026-10-25');
+    assert.equal(withHoliday.days[2].hours, null, 'праздник закрывает среду');
+    assert.equal(withHoliday.exceptions.length, 1);
+    await assert.rejects(config.saveException(clinic.id, user.id, { employeeId: null, dateFrom: '2026-10-25', dateTo: '2026-10-20', opensAt: null }), /раньше/);
+    await config.deleteException(clinic.id, user.id, holiday.id);
+    assert.deepEqual((await workspace.scheduleRange(clinic.id, '2026-10-19', '2026-10-25')).days[2].hours, evening, 'после удаления — обычный день');
+
     // An employee's own week, shown on their doctor column; null again follows the clinic.
     const role = await prisma.role.create({ data: { organizationId: clinic.id, code: 'doctor', name: 'Врач' } });
     const doc = await prisma.user.create({ data: { organizationId: clinic.id, email: `doc-${stamp}@t.local`, passwordHash: 'x', userRoles: { create: { roleId: role.id } } } });
     const employee = await prisma.employee.create({ data: { userId: doc.id, firstName: 'Завен', lastName: 'Седракович' } });
     await config.saveEmployee(clinic.id, user.id, { id: employee.id, firstName: 'Завен', lastName: 'Седракович', weekHours: [morning, morning, null, null, null, null, evening] });
+    await config.saveException(clinic.id, user.id, { employeeId: employee.id, dateFrom: '2026-10-26', dateTo: '2026-10-30', opensAt: null, note: 'Отпуск' });
+    const shell = await workspace.schedule(clinic.id, '2026-10-27T12:00:00.000Z');
+    assert.ok(shell.exceptions.some((row) => row.employeeId === employee.id), 'отпуск врача виден в дне расписания');
     const rows = await prisma.employeeSchedule.findMany({ where: { employeeId: employee.id }, orderBy: { dayOfWeek: 'asc' } });
     assert.deepEqual(rows.map((row) => [row.dayOfWeek, row.startsAt, row.endsAt]), [[1, '08:00', '15:00'], [2, '08:00', '15:00'], [7, '15:00', '22:00']]);
     const bundle = await config.bundle(clinic.id);
@@ -55,6 +67,7 @@ async function main() {
   } finally {
     const org = clinic.id;
     await prisma.auditLog.deleteMany({ where: { organizationId: org } }).catch(() => undefined);
+    await prisma.scheduleException.deleteMany({ where: { organizationId: org } });
     await prisma.employeeSchedule.deleteMany({ where: { organizationId: org } });
     await prisma.employee.deleteMany({ where: { user: { organizationId: org } } });
     await prisma.userRole.deleteMany({ where: { user: { organizationId: org } } });

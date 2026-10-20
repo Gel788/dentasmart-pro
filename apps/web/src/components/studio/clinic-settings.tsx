@@ -128,7 +128,7 @@ export function ClinicSettings() {
           {section === 'price' && <Price data={data} query={q} flash={flash} />}
           {section === 'stock' && <Stock data={data} query={q} flash={flash} />}
           {section === 'templates' && <Templates data={data} query={q} flash={flash} aiPlans={data.aiPlans !== false} />}
-          {section === 'brand' && <><Brand data={data} flash={flash} /><Hours data={data} flash={flash} /></>}
+          {section === 'brand' && <><Brand data={data} flash={flash} /><Hours data={data} flash={flash} /><Exceptions data={data} /></>}
           {section === 'chairs' && <Chairs data={data} flash={flash} />}
           {section === 'security' && <Panel title="Безопасность" hint="Вход по коду из приложения-аутентификатора для вашей учётки."><TwoFactor /></Panel>}
           {section === 'staff' && <Staff data={data} query={q} flash={flash} />}
@@ -296,14 +296,15 @@ function WeekEditor({ initial, saveLabel, onSave, onCancel }: { initial: WeekHou
   const dirty = JSON.stringify(week) !== JSON.stringify(initial);
   const setDay = (index: number, value: WeekHours[number]) => setWeek(week.map((day, i) => (i === index ? value : day)));
   const copyToWeekdays = (index: number) => setWeek(week.map((day, i) => (i < 5 ? (week[index] ? { ...week[index]! } : null) : day)));
-  const bad = week.findIndex((day) => day && day.opensAt >= day.closesAt);
+  const brokenBreak = (day: WeekHours[number]) => !!day && day.breakFrom !== undefined && day.breakTo !== undefined && !(day.opensAt < day.breakFrom && day.breakFrom < day.breakTo && day.breakTo < day.closesAt);
+  const bad = week.findIndex((day) => (day && day.opensAt >= day.closesAt) || brokenBreak(day));
 
   return (
     <form
       className="cfg-hours"
       onSubmit={(event) => {
         event.preventDefault();
-        if (bad >= 0) { setError(`${DAY_NAMES[bad]}: закрытие должно быть позже открытия`); return; }
+        if (bad >= 0) { setError(`${DAY_NAMES[bad]}: ${brokenBreak(week[bad]) ? 'перерыв должен быть внутри рабочего времени' : 'закрытие должно быть позже открытия'}`); return; }
         setError('');
         void onSave(week);
       }}
@@ -322,6 +323,17 @@ function WeekEditor({ initial, saveLabel, onSave, onCancel }: { initial: WeekHou
                 <label><span className="sr-only">{DAY_NAMES[index]}, конец</span><input className="sd-input" type="time" step={900} value={toTime(day.closesAt === 1440 ? 1439 : day.closesAt)} onChange={(event) => setDay(index, { ...day, closesAt: fromTime(event.target.value) })} /></label>
               </span>
             ) : <span className="cfg-hours-off">не работает</span>}
+            {day && (day.breakFrom !== undefined && day.breakTo !== undefined ? (
+              <span className="cfg-hours-break">
+                <span>Перерыв</span>
+                <label><span className="sr-only">{DAY_NAMES[index]}, перерыв с</span><input className="sd-input" type="time" step={900} value={toTime(day.breakFrom)} onChange={(event) => setDay(index, { ...day, breakFrom: fromTime(event.target.value) })} /></label>
+                <span aria-hidden="true">—</span>
+                <label><span className="sr-only">{DAY_NAMES[index]}, перерыв до</span><input className="sd-input" type="time" step={900} value={toTime(day.breakTo)} onChange={(event) => setDay(index, { ...day, breakTo: fromTime(event.target.value) })} /></label>
+                <button className="sd-btn-ghost" type="button" aria-label={`${DAY_NAMES[index]}: убрать перерыв`} onClick={() => setDay(index, { opensAt: day.opensAt, closesAt: day.closesAt })}>Убрать</button>
+              </span>
+            ) : (
+              <button className="sd-btn-ghost cfg-hours-addbreak" type="button" onClick={() => setDay(index, { ...day, breakFrom: Math.min(day.closesAt - 60, Math.max(day.opensAt + 60, 13 * 60)), breakTo: Math.min(day.closesAt - 30, Math.max(day.opensAt + 120, 14 * 60)) })}>+ Перерыв</button>
+            ))}
             {index === 0 && <button className="sd-btn-ghost cfg-hours-copy" type="button" onClick={() => copyToWeekdays(0)}>На все будни</button>}
           </li>
         ))}
@@ -334,6 +346,84 @@ function WeekEditor({ initial, saveLabel, onSave, onCancel }: { initial: WeekHou
         {onCancel && <button className="sd-btn-ghost" type="button" onClick={onCancel}>Закрыть</button>}
       </div>
     </form>
+  );
+}
+
+type ExceptionRow = { id: string; employeeId: string | null; employee: string | null; dateFrom: string; dateTo: string; opensAt: number | null; closesAt: number | null; note: string | null };
+
+/** Holidays, vacations and one-off hours for the clinic or one employee. */
+function Exceptions({ data }: { data: Bundle }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const blank = { employeeId: '', dateFrom: today, dateTo: today, closed: true, opensAt: 540, closesAt: 1080, note: '' };
+  const [rows, setRows] = useState<ExceptionRow[]>([]);
+  const [form, setForm] = useState(blank);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const load = () => api<ExceptionRow[]>('/config/exceptions').then(setRows).catch(() => setRows([]));
+  useEffect(() => { void load(); }, []);
+  const staff = data.employees.filter((row) => row.status !== 'INACTIVE' && row.status !== 'TERMINATED');
+  const date = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+
+  const add = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api('/config/exceptions', { method: 'POST', body: JSON.stringify({ employeeId: form.employeeId || null, dateFrom: form.dateFrom, dateTo: form.dateTo || form.dateFrom, opensAt: form.closed ? null : form.opensAt, closesAt: form.closed ? null : form.closesAt, note: form.note }) });
+      setForm({ ...blank, employeeId: form.employeeId });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не сохранилось');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (id: string) => {
+    try { await api(`/config/exceptions/${id}`, { method: 'DELETE' }); await load(); } catch (err) { setError(err instanceof Error ? err.message : 'Не удалилось'); }
+  };
+
+  return (
+    <Panel title="Праздники и отпуска" hint="Разовые изменения графика: праздник для всей клиники, отпуск или больничный сотрудника, сокращённый день. В расписании эти дни отмечены, записать туда всё равно можно.">
+      <form className="cfg-exc-form" onSubmit={add}>
+        <label>Кто
+          <select className="sd-select" value={form.employeeId} onChange={(event) => setForm({ ...form, employeeId: event.target.value })}>
+            <option value="">Вся клиника</option>
+            {staff.map((row) => <option key={row.id} value={row.id}>{row.lastName} {row.firstName}</option>)}
+          </select>
+        </label>
+        <label>С<input className="sd-input" type="date" value={form.dateFrom} onChange={(event) => setForm({ ...form, dateFrom: event.target.value, dateTo: form.dateTo < event.target.value ? event.target.value : form.dateTo })} required /></label>
+        <label>По<input className="sd-input" type="date" value={form.dateTo} min={form.dateFrom} onChange={(event) => setForm({ ...form, dateTo: event.target.value })} required /></label>
+        <div className="sd-seg cfg-exc-kind" role="radiogroup" aria-label="Что меняется">
+          <button type="button" role="radio" aria-checked={form.closed} className={form.closed ? 'on' : ''} onClick={() => setForm({ ...form, closed: true })}>Не работает</button>
+          <button type="button" role="radio" aria-checked={!form.closed} className={!form.closed ? 'on' : ''} onClick={() => setForm({ ...form, closed: false })}>Другие часы</button>
+        </div>
+        {!form.closed && (
+          <span className="cfg-hours-time">
+            <label><span className="sr-only">Начало</span><input className="sd-input" type="time" step={900} value={toTime(form.opensAt)} onChange={(event) => setForm({ ...form, opensAt: fromTime(event.target.value) })} /></label>
+            <span aria-hidden="true">—</span>
+            <label><span className="sr-only">Конец</span><input className="sd-input" type="time" step={900} value={toTime(form.closesAt)} onChange={(event) => setForm({ ...form, closesAt: fromTime(event.target.value) })} /></label>
+          </span>
+        )}
+        <label className="cfg-exc-note">Комментарий<input className="sd-input" value={form.note} placeholder="Праздник, отпуск, больничный" onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
+        <button className="sd-btn" type="submit" disabled={busy}>{busy ? 'Сохраняем…' : 'Добавить'}</button>
+      </form>
+      {error && <p className="cfg-hours-error" role="alert">{error}</p>}
+      {rows.length === 0 ? (
+        <p className="sd-muted">Исключений нет — все дни идут по обычному графику.</p>
+      ) : (
+        <ul className="cfg-list">
+          {rows.map((row) => (
+            <li key={row.id} className="cfg-row">
+              <span className="cfg-main">
+                <b>{row.dateFrom === row.dateTo ? date(row.dateFrom) : `${date(row.dateFrom)} — ${date(row.dateTo)}`}</b>
+                <small>{[row.employee ?? 'вся клиника', row.opensAt === null ? 'не работает' : `${toTime(row.opensAt)}–${toTime(row.closesAt ?? 0)}`, row.note].filter(Boolean).join(' · ')}</small>
+              </span>
+              <span className="cfg-actions"><button className="sd-btn-ghost" type="button" onClick={() => void remove(row.id)}>Удалить</button></span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
 }
 
