@@ -27,7 +27,7 @@ type Bundle = {
   planTemplates: { id: string; name: string; note: string | null; isArchived: boolean }[];
   visitTemplates: { id: string; name: string; icd10: string | null; complaints: string; diagnosis: string; treatment: string; recommendations: string; isArchived: boolean }[];
   documents: { id: string; kind: string; name: string; body: string; isArchived: boolean }[];
-  employees: { id: string; firstName: string; lastName: string; specialization: string | null; phone: string | null; email: string; commission: number; status?: string; schedule: { dayOfWeek: number }[] }[];
+  employees: { id: string; firstName: string; lastName: string; specialization: string | null; phone: string | null; email: string; commission: number; status?: string; canLogin?: boolean; roles?: { code: string; name: string }[]; schedule: { dayOfWeek: number }[] }[];
   cabinets: { id: string; name: string; isActive: boolean }[];
   roles: { id: string; name: string; code: string; seeCost: boolean; maxDiscountPercent: number; editClosedVisits: boolean; editPrice: boolean; seeAllFinance: boolean; canExport: boolean; permissions: string[] }[];
   permissions: { code: string; description: string | null }[];
@@ -38,20 +38,50 @@ type Bundle = {
 };
 
 const SECTIONS = [
-  ['price', 'Прайс'],
-  ['stock', 'Склад'],
-  ['templates', 'Шаблоны'],
   ['brand', 'Клиника'],
   ['staff', 'Сотрудники'],
   ['roles', 'Права'],
-  ['offers', 'Акции'],
-  ['exchange', 'Обмен'],
-  ['history', 'История'],
+  ['chairs', 'Кресла'],
+  ['price', 'Прайс'],
+  ['stock', 'Склад'],
+  ['templates', 'Шаблоны'],
+  ['offers', 'Акции и напоминания'],
+  ['security', 'Безопасность'],
+  ['exchange', 'Обмен данными'],
+  ['history', 'История изменений'],
 ] as const;
+type SectionId = (typeof SECTIONS)[number][0];
+const SEARCHABLE: SectionId[] = ['staff', 'stock', 'templates'];
+
+/** One look for every section: a heading, one line on what it is for, then the work. */
+function Panel({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <section className="cfg-panel sd-stack">
+      <header>
+        <h2>{title}</h2>
+        {hint && <p className="sd-muted">{hint}</p>}
+      </header>
+      {children}
+    </section>
+  );
+}
 
 export function ClinicSettings() {
   const [data, setData] = useState<Bundle | null>(null);
-  const [section, setSection] = useState<(typeof SECTIONS)[number][0]>('price');
+  const [section, setSectionState] = useState<SectionId>('brand');
+  useEffect(() => {
+    const follow = () => {
+      const hash = window.location.hash.slice(1) as SectionId;
+      if (SECTIONS.some(([id]) => id === hash)) setSectionState(hash);
+    };
+    follow();
+    window.addEventListener('hashchange', follow);
+    return () => window.removeEventListener('hashchange', follow);
+  }, []);
+  const setSection = (id: SectionId) => {
+    setSectionState(id);
+    window.history.replaceState(null, '', `#${id}`);
+  };
   const [query, setQuery] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -77,34 +107,29 @@ export function ClinicSettings() {
   const q = query.trim().toLowerCase();
   return (
     <div className="cfg">
-      <div className="sd-h">
+      <div className="cfg-head">
         <div>
           <h1>Настройки</h1>
-          <p>Клиника, люди, склад и обмен.</p>
-          <label className="jn-toggle">
-            <input
-              type="checkbox"
-              checked={data.aiPlans !== false}
-              onChange={(event) => void flash(() => api('/config/ai', { method: 'POST', body: JSON.stringify({ enabled: event.target.checked }) }))}
-            />
-            Быстрый план на карте пациента
-          </label>
+          <p className="sd-muted">Клиника, люди и права, прайс, склад, шаблоны и обмен данными.</p>
         </div>
-        <input className="sd-input" placeholder="Поиск" value={query} onChange={(event) => setQuery(event.target.value)} style={{ maxWidth: 240 }} />
+        {SEARCHABLE.includes(section) && (
+          <input className="sd-input" type="search" placeholder="Найти в разделе" aria-label="Найти в разделе" value={query} onChange={(event) => setQuery(event.target.value)} />
+        )}
       </div>
-      {notice && <p className="wow-note">{notice}</p>}
-      {error && <p className="sd-chip danger">{error}</p>}
+      <p className="cfg-status" aria-live="polite" data-tone={error ? 'error' : notice ? 'ok' : undefined}>{error || notice}</p>
       <div className="cfg-layout">
-        <nav>
+        <nav aria-label="Разделы настроек">
           {SECTIONS.map(([id, label]) => (
-            <button key={id} className={section === id ? 'on' : ''} type="button" onClick={() => setSection(id)}>{label}</button>
+            <button key={id} className={section === id ? 'on' : ''} aria-current={section === id ? 'page' : undefined} type="button" onClick={() => { setSection(id); setQuery(''); }}>{label}</button>
           ))}
         </nav>
         <div>
           {section === 'price' && <Price data={data} query={q} flash={flash} />}
           {section === 'stock' && <Stock data={data} query={q} flash={flash} />}
-          {section === 'templates' && <Templates data={data} query={q} flash={flash} />}
+          {section === 'templates' && <Templates data={data} query={q} flash={flash} aiPlans={data.aiPlans !== false} />}
           {section === 'brand' && <Brand data={data} flash={flash} />}
+          {section === 'chairs' && <Chairs data={data} flash={flash} />}
+          {section === 'security' && <Panel title="Безопасность" hint="Вход по коду из приложения-аутентификатора для вашей учётки."><TwoFactor /></Panel>}
           {section === 'staff' && <Staff data={data} query={q} flash={flash} />}
           {section === 'roles' && <Roles data={data} flash={flash} />}
           {section === 'offers' && <Offers data={data} flash={flash} />}
@@ -119,11 +144,10 @@ export function ClinicSettings() {
 function Price({ data }: { data: Bundle; query: string; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
   const count = data.services.filter((row) => row.code && row.isActive).length;
   return (
-    <section className="sd-card sd-stack">
-      <h2>Прайс на своём экране</h2>
-      <p className="sd-muted">{count} услуг. Название, код, цена, длительность и набор расходников правятся там.</p>
+    <Panel title="Прайс" hint="Услуги, цены, длительность и расходники по каждой услуге — на отдельном экране, там же импорт и выгрузка.">
+      <p>{count} {count % 10 === 1 && count % 100 !== 11 ? 'услуга' : 'услуг'} в прайсе.</p>
       <Link className="sd-btn" href="/price" style={{ width: 'fit-content' }}>Открыть прайс</Link>
-    </section>
+    </Panel>
   );
 }
 
@@ -133,157 +157,212 @@ function Stock({ data, query, flash }: { data: Bundle; query: string; flash: (wo
   const [draft, setDraft] = useState({ name: '', quantity: 0, cost: 0 });
   const rows = data.stock.filter((row) => row.isActive !== false && (!query || row.name.toLowerCase().includes(query)));
   return (
-    <section className="sd-stack">
-      <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/stock', { method: 'POST', body: JSON.stringify({ name, unit: 'шт', minStock: 5, quantity: 10, cost: 100 }) })); setName(''); }}>
-        <input className="sd-input" placeholder="Новый материал" value={name} onChange={(event) => setName(event.target.value)} required />
-        <button className="sd-btn" type="submit">Приход 10 шт</button>
+    <Panel title="Склад" hint="Материалы, остатки и закупочная цена. Расход по нормам услуг списывается сам при закрытии визита.">
+      <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/stock', { method: 'POST', body: JSON.stringify({ name, unit: 'шт', minStock: 5, quantity: 0, cost: 0 }) })).then((ok) => { if (ok) setName(''); }); }}>
+        <label>Новый материал<input className="sd-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Композит A2" required /></label>
+        <button className="sd-btn" type="submit">Добавить</button>
       </form>
-      {rows.map((row) => (
-        <article key={row.id} className="cfg-row">
-          {editing === row.id ? (
-            <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/stock', { method: 'POST', body: JSON.stringify({ id: row.id, name: draft.name, quantity: draft.quantity, cost: draft.cost }) })).then((ok) => { if (ok) setEditing(null); }); }}>
-              <input className="sd-input" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} required />
-              <input className="sd-input" type="number" aria-label="Количество" value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: Number(event.target.value) })} />
-              <input className="sd-input" type="number" aria-label="Закупка" value={draft.cost} onChange={(event) => setDraft({ ...draft, cost: Number(event.target.value) })} />
-              <button className="sd-btn" type="submit">Сохранить</button>
-            </form>
-          ) : (
-            <>
-              <b>{row.name}</b>
-              <span>{row.quantity} {row.unit} · закупка {formatMoney(row.cost)} · мин {row.minStock}</span>
-              <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api(`/config/stock/${row.id}/receive`, { method: 'POST', body: JSON.stringify({ quantity: 1, cost: row.cost || 100 }) }))}>+1</button>
-              <button className="sd-btn-ghost" type="button" onClick={() => { setEditing(row.id); setDraft({ name: row.name, quantity: row.quantity, cost: row.cost }); }}>Изменить</button>
-              <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api('/config/stock', { method: 'POST', body: JSON.stringify({ id: row.id, isActive: false }) }))}>В архив</button>
-            </>
-          )}
-        </article>
-      ))}
-    </section>
+      {rows.length === 0 && <p className="sd-muted">{query ? 'Ничего не нашли.' : 'Материалов пока нет.'}</p>}
+      <ul className="cfg-list">
+        {rows.map((row) => (
+          <li key={row.id} className="cfg-row" data-low={row.quantity <= row.minStock || undefined}>
+            {editing === row.id ? (
+              <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/stock', { method: 'POST', body: JSON.stringify({ id: row.id, name: draft.name, quantity: draft.quantity, cost: draft.cost }) })).then((ok) => { if (ok) setEditing(null); }); }}>
+                <label>Название<input className="sd-input" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} required /></label>
+                <label>Остаток<input className="sd-input" type="number" min={0} value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: Number(event.target.value) })} /></label>
+                <label>Закупка, ₽<input className="sd-input" type="number" min={0} value={draft.cost} onChange={(event) => setDraft({ ...draft, cost: Number(event.target.value) })} /></label>
+                <button className="sd-btn" type="submit">Сохранить</button>
+                <button className="sd-btn-ghost" type="button" onClick={() => setEditing(null)}>Отмена</button>
+              </form>
+            ) : (
+              <>
+                <span className="cfg-main"><b>{row.name}</b><small>закупка {formatMoney(row.cost)} · минимум {row.minStock} {row.unit}</small></span>
+                <span className="cfg-qty">{row.quantity} {row.unit}{row.quantity <= row.minStock && <em> · пора заказать</em>}</span>
+                <span className="cfg-actions">
+                  <button className="sd-btn-ghost" type="button" onClick={() => { setEditing(row.id); setDraft({ name: row.name, quantity: row.quantity, cost: row.cost }); }}>Изменить</button>
+                  <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api('/config/stock', { method: 'POST', body: JSON.stringify({ id: row.id, isActive: false }) }))}>В архив</button>
+                </span>
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Panel>
   );
 }
 
-function Templates({ data, query, flash }: { data: Bundle; query: string; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
-  const [name, setName] = useState('Осмотр');
+function Templates({ data, query, flash, aiPlans }: { data: Bundle; query: string; flash: (work: () => Promise<unknown>) => Promise<boolean>; aiPlans: boolean }) {
+  const [name, setName] = useState('');
   const visits = data.visitTemplates.filter((row) => !query || row.name.toLowerCase().includes(query));
+  const documents = data.documents.filter((row) => !query || row.name.toLowerCase().includes(query));
   return (
-    <section className="sd-stack">
-      <h2>Осмотры и диагнозы</h2>
-      <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/visit-templates', { method: 'POST', body: JSON.stringify({ name, icd10: 'K02.1', complaints: 'Реакция на сладкое', diagnosis: 'K02.1 кариес дентина', treatment: 'Пломба', recommendations: 'Контроль через полгода' }) })); }}>
-        <input className="sd-input" value={name} onChange={(event) => setName(event.target.value)} />
-        <button className="sd-btn" type="submit">Шаблон приёма</button>
-      </form>
-      {visits.map((row) => (
-        <article key={row.id} className="cfg-row">
-          <b>{row.name}</b>
-          <span>{row.icd10} · {row.diagnosis}</span>
-          <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api('/config/visit-templates', { method: 'POST', body: JSON.stringify({ ...row, isArchived: !row.isArchived }) }))}>{row.isArchived ? 'Вернуть' : 'В архив'}</button>
-        </article>
-      ))}
-      <h2>Планы</h2>
-      {data.planTemplates.map((row) => <article key={row.id} className="cfg-row"><b>{row.name}</b><span>{row.note}</span></article>)}
-      <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api('/config/plan-templates', { method: 'POST', body: JSON.stringify({ name: 'Санация двух зубов', note: 'Эконом', phasesJson: [{ title: 'Санация', items: ['Лечение кариеса'] }] }) }))}>Добавить шаблон плана</button>
-      <h2>Документы</h2>
-      {data.documents.filter((row) => !query || row.name.toLowerCase().includes(query)).map((row) => (
-        <article key={row.id} className="cfg-row"><b>{row.name}</b><span>{row.kind}</span></article>
-      ))}
-      <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api('/config/documents', { method: 'POST', body: JSON.stringify({ kind: 'CONSENT', name: 'ИДС на лечение', body: 'Я, {{patient}}, согласен на лечение в {{clinic}} {{date}}.' }) }))}>Добавить ИДС</button>
-    </section>
+    <>
+      <Panel title="Быстрый план" hint="Врач отмечает находки на формуле, и план с этапами и ценами из прайса собирается сам.">
+        <label className="cfg-toggle">
+          <input type="checkbox" checked={aiPlans} onChange={(event) => void flash(() => api('/config/ai', { method: 'POST', body: JSON.stringify({ enabled: event.target.checked }) }))} />
+          <span>Показывать «Находки» и «Собрать план» в карте пациента</span>
+        </label>
+      </Panel>
+      <Panel title="Шаблоны протокола приёма" hint="Подставляются в протокол одной кнопкой на экране визита.">
+        <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/visit-templates', { method: 'POST', body: JSON.stringify({ name, icd10: 'K02.1', complaints: 'Реакция на сладкое', diagnosis: 'K02.1 кариес дентина', treatment: 'Пломба', recommendations: 'Контроль через полгода' }) })).then((ok) => { if (ok) setName(''); }); }}>
+          <label>Название шаблона<input className="sd-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Кариес дентина" required /></label>
+          <button className="sd-btn" type="submit">Добавить</button>
+        </form>
+        <ul className="cfg-list">
+          {visits.map((row) => (
+            <li key={row.id} className="cfg-row" data-off={row.isArchived || undefined}>
+              <span className="cfg-main"><b>{row.name}</b><small>{[row.icd10, row.diagnosis].filter(Boolean).join(' · ')}</small></span>
+              <span className="cfg-actions">
+                <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api('/config/visit-templates', { method: 'POST', body: JSON.stringify({ ...row, isArchived: !row.isArchived }) }))}>{row.isArchived ? 'Вернуть' : 'В архив'}</button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Panel>
+      <Panel title="Шаблоны планов" hint="Готовые наборы этапов и услуг для частых случаев.">
+        <ul className="cfg-list">
+          {data.planTemplates.map((row) => <li key={row.id} className="cfg-row"><span className="cfg-main"><b>{row.name}</b><small>{row.note}</small></span></li>)}
+        </ul>
+        <button className="sd-btn-ghost" type="button" style={{ width: 'fit-content' }} onClick={() => void flash(() => api('/config/plan-templates', { method: 'POST', body: JSON.stringify({ name: 'Санация двух зубов', note: 'Эконом', phasesJson: [{ title: 'Санация', items: ['Лечение кариеса'] }] }) }))}>Добавить шаблон плана</button>
+      </Panel>
+      <Panel title="Документы" hint="Согласия и договоры с подстановкой пациента, клиники и даты.">
+        <ul className="cfg-list">
+          {documents.map((row) => <li key={row.id} className="cfg-row"><span className="cfg-main"><b>{row.name}</b><small>{row.kind === 'CONSENT' ? 'согласие' : row.kind}</small></span></li>)}
+        </ul>
+        <button className="sd-btn-ghost" type="button" style={{ width: 'fit-content' }} onClick={() => void flash(() => api('/config/documents', { method: 'POST', body: JSON.stringify({ kind: 'CONSENT', name: 'ИДС на лечение', body: 'Я, {{patient}}, согласен на лечение в {{clinic}} {{date}}.' }) }))}>Добавить согласие на лечение</button>
+      </Panel>
+    </>
   );
 }
+
+const BRAND_GROUPS: { title: string; fields: [string, string][] }[] = [
+  { title: 'Клиника', fields: [['name', 'Название'], ['phone', 'Телефон'], ['email', 'Почта'], ['address', 'Адрес'], ['workHours', 'Часы работы']] },
+  { title: 'Юрлицо', fields: [['legalName', 'Юрлицо'], ['inn', 'ИНН'], ['ogrn', 'ОГРН'], ['bankName', 'Банк'], ['bankAccount', 'Счёт'], ['bik', 'БИК']] },
+  { title: 'Оформление', fields: [['logoUrl', 'Логотип (ссылка)'], ['brandColor', 'Цвет']] },
+];
 
 function Brand({ data, flash }: { data: Bundle; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
   const [form, setForm] = useState(data.brand);
-  const [chair, setChair] = useState('');
+  const dirty = BRAND_GROUPS.some((group) => group.fields.some(([key]) => (form[key] ?? '') !== (data.brand[key] ?? '')));
   return (
-    <section className="sd-stack">
-      {([
-        ['name', 'Название'],
-        ['legalName', 'Юрлицо'],
-        ['phone', 'Телефон'],
-        ['email', 'Почта'],
-        ['inn', 'ИНН'],
-        ['ogrn', 'ОГРН'],
-        ['address', 'Адрес'],
-        ['logoUrl', 'Логотип'],
-        ['brandColor', 'Цвет'],
-        ['workHours', 'Часы'],
-        ['bankName', 'Банк'],
-        ['bankAccount', 'Счёт'],
-        ['bik', 'БИК'],
-      ] as const).map(([key, label]) => (
-        <label key={key} className="sd-field">{label}
-          <input className="sd-input" value={form[key] ?? ''} onChange={(event) => setForm({ ...form, [key]: event.target.value })} />
-        </label>
-      ))}
-      <button className="sd-btn" type="button" onClick={() => void flash(() => api('/config/brand', { method: 'POST', body: JSON.stringify(form) }))}>Сохранить реквизиты</button>
-      <TwoFactor />
-      <h2>Кресла</h2>
-      {data.cabinets.map((cabinet) => <article key={cabinet.id} className="cfg-row"><b>{cabinet.name}</b><span>{cabinet.isActive ? 'работает' : 'архив'}</span></article>)}
-      <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/cabinets', { method: 'POST', body: JSON.stringify({ name: chair }) })); }}>
-        <input className="sd-input" placeholder="Новое кресло" value={chair} onChange={(event) => setChair(event.target.value)} />
-        <button className="sd-btn-ghost" type="submit">Добавить</button>
+    <Panel title="Клиника" hint="Реквизиты печатаются в планах лечения, счетах и согласиях; часы работы задают сетку расписания.">
+      <form className="cfg-brand" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/brand', { method: 'POST', body: JSON.stringify(form) })); }}>
+        {BRAND_GROUPS.map((group) => (
+          <fieldset key={group.title}>
+            <legend>{group.title}</legend>
+            {group.fields.map(([key, label]) => (
+              <label key={key}>{label}
+                <input className="sd-input" value={form[key] ?? ''} placeholder={key === 'workHours' ? '09:00–20:00' : undefined} onChange={(event) => setForm({ ...form, [key]: event.target.value })} />
+              </label>
+            ))}
+          </fieldset>
+        ))}
+        <div className="cfg-save">
+          <button className="sd-btn" type="submit" disabled={!dirty}>Сохранить</button>
+          {dirty && <button className="sd-btn-ghost" type="button" onClick={() => setForm(data.brand)}>Отменить</button>}
+        </div>
       </form>
-    </section>
+    </Panel>
   );
 }
 
+function Chairs({ data, flash }: { data: Bundle; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
+  const [chair, setChair] = useState('');
+  return (
+    <Panel title="Кресла" hint="Каждое рабочее кресло — колонка в расписании. Кресло в архиве пропадает из записи, прошлые визиты остаются.">
+      <ul className="cfg-list">
+        {data.cabinets.map((cabinet) => (
+          <li key={cabinet.id} className="cfg-row" data-off={!cabinet.isActive || undefined}>
+            <span className="cfg-main"><b>{cabinet.name}</b><small>{cabinet.isActive ? 'в расписании' : 'в архиве'}</small></span>
+            <span className="cfg-actions">
+              <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api('/config/cabinets', { method: 'POST', body: JSON.stringify({ id: cabinet.id, name: cabinet.name, isActive: !cabinet.isActive }) }))}>{cabinet.isActive ? 'В архив' : 'Вернуть'}</button>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/cabinets', { method: 'POST', body: JSON.stringify({ name: chair }) })).then((ok) => { if (ok) setChair(''); }); }}>
+        <label>Новое кресло<input className="sd-input" placeholder="Кресло 2" value={chair} onChange={(event) => setChair(event.target.value)} required /></label>
+        <button className="sd-btn-ghost" type="submit">Добавить</button>
+      </form>
+    </Panel>
+  );
+}
+
+const STAFF_ROLES: [string, string][] = [['doctor', 'Врач'], ['assistant', 'Ассистент'], ['admin', 'Администратор'], ['manager', 'Управляющий'], ['accountant', 'Бухгалтер']];
+
 function Staff({ data, query, flash }: { data: Bundle; query: string; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', specialization: 'Терапевт', commission: 30 });
+  const blank = { firstName: '', lastName: '', email: '', specialization: '', roleCode: 'doctor', commission: 0 };
+  const [form, setForm] = useState(blank);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState({ firstName: '', lastName: '', specialization: '', phone: '', commission: 0 });
   const [issued, setIssued] = useState<{ email: string; password: string } | null>(null);
   const off = (status?: string) => status === 'INACTIVE' || status === 'TERMINATED';
-  const rows = data.employees.filter((row) => !query || `${row.lastName} ${row.firstName}`.toLowerCase().includes(query));
+  const rows = data.employees.filter((row) => !query || `${row.lastName} ${row.firstName} ${row.email}`.toLowerCase().includes(query));
   return (
-    <section className="sd-stack">
-      <form className="cfg-new" onSubmit={(event) => {
+    <Panel title="Сотрудники" hint="У каждого свой вход. Роль задаёт, что человек видит и может менять. Сотрудник в архиве не входит в систему, его история остаётся.">
+      <form className="cfg-new cfg-staff" onSubmit={(event) => {
         event.preventDefault();
         void flash(async () => {
-          const created = await api<{ id: string; email?: string; password?: string }>('/config/employees', { method: 'POST', body: JSON.stringify({ ...form, days: [1, 2, 3, 4, 5], startsAt: '09:00', endsAt: '18:00' }) });
+          const doctor = form.roleCode === 'doctor' || form.roleCode === 'assistant';
+          const created = await api<{ id: string; email?: string; password?: string }>('/config/employees', { method: 'POST', body: JSON.stringify({ ...form, ...(doctor ? { days: [1, 2, 3, 4, 5], startsAt: '09:00', endsAt: '18:00' } : {}) }) });
           if (created.password && created.email) setIssued({ email: created.email, password: created.password });
-        }).then((ok) => { if (!ok) return;
-          setForm({ firstName: '', lastName: '', email: '', specialization: 'Терапевт', commission: 30 });
-        });
+        }).then((ok) => { if (ok) setForm(blank); });
       }}>
-        <label>Имя<input className="sd-input" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} required /></label>
         <label>Фамилия<input className="sd-input" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} required /></label>
-        <label>Почта<input className="sd-input" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
-        <button className="sd-btn" type="submit">Врач, пн–пт</button>
+        <label>Имя<input className="sd-input" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} required /></label>
+        <label>Почта для входа<input className="sd-input" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
+        <label>Роль
+          <select className="sd-input" value={form.roleCode} onChange={(event) => setForm({ ...form, roleCode: event.target.value })}>
+            {STAFF_ROLES.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+          </select>
+        </label>
+        <label>Специализация<input className="sd-input" value={form.specialization} placeholder="Терапевт" onChange={(event) => setForm({ ...form, specialization: event.target.value })} /></label>
+        <button className="sd-btn" type="submit">Добавить сотрудника</button>
       </form>
       {issued && (
-        <p className="sd-chip info" role="status">
-          Вход для {issued.email}: пароль <b className="sd-mono">{issued.password}</b>. Он показан один раз — передайте его сотруднику, после входа пароль лучше сменить.
-          <button className="sd-btn-ghost" type="button" onClick={() => setIssued(null)}>Скрыть</button>
-        </p>
+        <div className="cfg-issued" role="status">
+          <p>Вход для <b>{issued.email}</b>: пароль <b className="sd-mono">{issued.password}</b></p>
+          <p className="sd-muted">Пароль показан один раз. Передайте его сотруднику лично; после первого входа его лучше сменить.</p>
+          <button className="sd-btn-ghost" type="button" onClick={() => setIssued(null)}>Я записал пароль</button>
+        </div>
       )}
-      {rows.map((row) => (
-        <article key={row.id} className={`cfg-row${off(row.status) ? ' off' : ''}`}>
-          {editing === row.id ? (
-            <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/employees', { method: 'POST', body: JSON.stringify({ id: row.id, ...draft, email: row.email }) })).then((ok) => { if (ok) setEditing(null); }); }}>
-              <label>Фамилия<input className="sd-input" value={draft.lastName} onChange={(event) => setDraft({ ...draft, lastName: event.target.value })} required /></label>
-              <label>Имя<input className="sd-input" value={draft.firstName} onChange={(event) => setDraft({ ...draft, firstName: event.target.value })} required /></label>
-              <label>Специализация<input className="sd-input" value={draft.specialization} onChange={(event) => setDraft({ ...draft, specialization: event.target.value })} /></label>
-              <label>Телефон<input className="sd-input" value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} /></label>
-              <label>Процент<input className="sd-input" type="number" value={draft.commission} onChange={(event) => setDraft({ ...draft, commission: Number(event.target.value) })} /></label>
-              <button className="sd-btn" type="submit">Сохранить</button>
-            </form>
-          ) : (
-            <>
-              <b>{row.lastName} {row.firstName}</b>
-              <span>{row.specialization} · {row.email} · {row.commission}% · смен {row.schedule.length}{off(row.status) ? ' · в архиве, вход закрыт' : ''}</span>
-              <button className="sd-btn-ghost" type="button" onClick={() => { setEditing(row.id); setDraft({ firstName: row.firstName, lastName: row.lastName, specialization: row.specialization ?? '', phone: row.phone ?? '', commission: row.commission }); }}>Изменить</button>
-              <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api('/config/employees', { method: 'POST', body: JSON.stringify({ id: row.id, firstName: row.firstName, lastName: row.lastName, specialization: row.specialization, email: row.email, commission: row.commission, status: off(row.status) ? 'ACTIVE' : 'INACTIVE' }) }))}>{off(row.status) ? 'Вернуть' : 'В архив'}</button>
-            </>
-          )}
-        </article>
-      ))}
-    </section>
+      <ul className="cfg-list">
+        {rows.map((row) => (
+          <li key={row.id} className="cfg-row" data-off={off(row.status) || undefined}>
+            {editing === row.id ? (
+              <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/employees', { method: 'POST', body: JSON.stringify({ id: row.id, ...draft, email: row.email }) })).then((ok) => { if (ok) setEditing(null); }); }}>
+                <label>Фамилия<input className="sd-input" value={draft.lastName} onChange={(event) => setDraft({ ...draft, lastName: event.target.value })} required /></label>
+                <label>Имя<input className="sd-input" value={draft.firstName} onChange={(event) => setDraft({ ...draft, firstName: event.target.value })} required /></label>
+                <label>Специализация<input className="sd-input" value={draft.specialization} onChange={(event) => setDraft({ ...draft, specialization: event.target.value })} /></label>
+                <label>Телефон<input className="sd-input" value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} /></label>
+                <label>Процент с выручки<input className="sd-input" type="number" min={0} max={100} value={draft.commission} onChange={(event) => setDraft({ ...draft, commission: Number(event.target.value) })} /></label>
+                <button className="sd-btn" type="submit">Сохранить</button>
+                <button className="sd-btn-ghost" type="button" onClick={() => setEditing(null)}>Отмена</button>
+              </form>
+            ) : (
+              <>
+                <span className="cfg-main">
+                  <b>{row.lastName} {row.firstName}</b>
+                  <small>{[(row.roles ?? []).map((role) => role.name).join(', '), row.specialization, row.email].filter(Boolean).join(' · ')}</small>
+                </span>
+                <span className="cfg-state" data-off={off(row.status) || undefined}>{off(row.status) ? 'в архиве, вход закрыт' : `работает${row.schedule.length ? ` · смен в неделю ${row.schedule.length}` : ''}${row.commission ? ` · ${row.commission}%` : ''}`}</span>
+                <span className="cfg-actions">
+                  <button className="sd-btn-ghost" type="button" onClick={() => { setEditing(row.id); setDraft({ firstName: row.firstName, lastName: row.lastName, specialization: row.specialization ?? '', phone: row.phone ?? '', commission: row.commission }); }}>Изменить</button>
+                  <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api('/config/employees', { method: 'POST', body: JSON.stringify({ id: row.id, firstName: row.firstName, lastName: row.lastName, specialization: row.specialization, email: row.email, commission: row.commission, status: off(row.status) ? 'ACTIVE' : 'INACTIVE' }) }))}>{off(row.status) ? 'Вернуть' : 'В архив'}</button>
+                </span>
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Panel>
   );
 }
 
 function Roles({ data, flash }: { data: Bundle; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
   return (
-    <section className="sd-stack">
+    <section className="cfg-panel sd-stack">
+      <header><h2>Права</h2><p className="sd-muted">Что видит и может каждая роль: себестоимость, правка закрытых визитов и прайса, максимальная скидка. Сохраняется сразу.</p></header>
       {data.roles.map((role) => (
         <article key={role.id} className="cfg-role">
           <b>{role.name}</b>
@@ -305,7 +384,8 @@ function Roles({ data, flash }: { data: Bundle; flash: (work: () => Promise<unkn
 function Offers({ data, flash }: { data: Bundle; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
   const [code, setCode] = useState('ВЕСНА10');
   return (
-    <section className="sd-stack">
+    <section className="cfg-panel sd-stack">
+      <header><h2>Акции и напоминания</h2><p className="sd-muted">Промокоды для пациентов и правила напоминаний: кому и когда напомнить о визите или гигиене.</p></header>
       <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/promos', { method: 'POST', body: JSON.stringify({ code, discountPct: 10 }) })); }}>
         <input className="sd-input" value={code} onChange={(event) => setCode(event.target.value)} />
         <button className="sd-btn" type="submit">Скидка 10%</button>
@@ -351,7 +431,8 @@ function Exchange() {
   };
 
   return (
-    <section className="sd-stack">
+    <section className="cfg-panel sd-stack">
+      <header><h2>Обмен данными</h2><p className="sd-muted">Выгрузка пациентов и отчётов, ключ для внешних сервисов, заявки агрегаторов и 1С.</p></header>
       <form className="sd-card sd-inline" onSubmit={(event) => { event.preventDefault(); void run(() => downloadReport(type), 'Файл скачан'); }}>
         <select className="sd-input" aria-label="Отчёт" value={type} onChange={(event) => setType(event.target.value as (typeof REPORTS)[number][0])}>
           {REPORTS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
@@ -400,7 +481,8 @@ function TwoFactor() {
 function History({ rows }: { rows: Bundle['history'] }) {
   const text = useMemo(() => rows, [rows]);
   return (
-    <section className="sd-stack">
+    <section className="cfg-panel sd-stack">
+      <header><h2>История изменений</h2><p className="sd-muted">Кто и когда менял настройки: прайс, роли, сотрудников, шаблоны.</p></header>
       {text.map((row) => (
         <article key={row.id} className="cfg-row">
           <b>{new Date(row.at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</b>

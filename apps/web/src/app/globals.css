@@ -620,10 +620,11 @@ html.dark .sd-appt { background: var(--accent-soft); color: #ecfdf5; }
     pointer-events: auto;
     overflow: auto;
     transform: translateY(105%);
-    transition: transform 220ms cubic-bezier(.2,.8,.2,1);
+    visibility: hidden;
+    transition: transform 220ms cubic-bezier(.2,.8,.2,1), visibility 0s linear 220ms;
     box-shadow: var(--shadow-overlay);
   }
-  .sd-panel.open { transform: none; }
+  .sd-panel.open { transform: none; visibility: visible; transition: transform 220ms cubic-bezier(.2,.8,.2,1); }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -995,16 +996,59 @@ html.dark .ai-chips button.on { color: #042f2e; }
 .wow-variants { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .wow-variants article { padding: 8px; border-radius: 12px; background: var(--surface-2); }
 .wow-variants em { font-style: normal; color: var(--accent); font-size: 12px; }
-.cfg-layout { display: grid; grid-template-columns: 180px 1fr; gap: 16px; }
-.cfg-layout nav { display: flex; flex-direction: column; gap: 4px; }
-.cfg-layout nav button { text-align: left; border: 0; background: transparent; border-radius: 12px; padding: 8px 10px; }
-.cfg-layout nav button.on { background: var(--accent-soft); color: var(--accent-ink); }
-.cfg-bar, .cfg-new, .cfg-row, .cfg-role { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.cfg-row, .cfg-role { padding: 8px 0; border-bottom: 1px solid var(--border); }
-.cfg-row.off { opacity: 0.45; }
+.cfg { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cfg-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 16px; }
+.cfg-head h1 { margin: 0; font-size: clamp(22px, 1.8vw + 10px, 30px); }
+.cfg-head p { margin: 4px 0 0; }
+.cfg-head .sd-input { width: min(280px, 100%); }
+.cfg-status { min-height: 20px; margin: 0; font-size: 13.5px; color: var(--muted); }
+.cfg-status[data-tone='ok'] { color: var(--ok); }
+.cfg-status[data-tone='error'] { color: var(--danger); }
+.cfg-layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 16px; align-items: start; }
+.cfg-layout nav { position: sticky; top: calc(var(--top-h) + 12px); display: flex; flex-direction: column; gap: 2px; }
+.cfg-layout nav button { min-height: 40px; text-align: left; border: 0; background: transparent; border-radius: 10px; padding: 8px 12px; color: var(--text-secondary); font: inherit; font-size: 14px; }
+.cfg-layout nav button:hover { background: var(--surface-2); color: var(--text); }
+.cfg-layout nav button.on { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.cfg-layout > div { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.cfg-panel { padding: 16px 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-solid); min-width: 0; }
+.cfg-panel > header h2, .cfg h2 { margin: 0; font-family: var(--font-body), sans-serif; font-weight: 600; font-size: 16px; letter-spacing: 0; }
+.cfg-panel > header p { margin: 4px 0 0; font-size: 13.5px; max-width: 70ch; }
+.cfg-bar, .cfg-new, .cfg-role { display: flex; gap: 8px 10px; align-items: flex-end; flex-wrap: wrap; }
+.cfg-new label, .cfg-brand label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--text-secondary); min-width: 0; }
+.cfg-new label .sd-input { min-width: 150px; }
+.cfg-new > button { min-height: 40px; }
+.cfg-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.cfg-row, .cfg-role { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 10px 0; border-top: 1px solid var(--border); }
+.cfg-list > li:first-child { border-top: 0; }
+.cfg-row[data-off], .cfg-row.off { opacity: 0.55; }
+.cfg-main { display: flex; flex-direction: column; gap: 1px; flex: 1 1 260px; min-width: 0; }
+.cfg-main b { font-weight: 600; }
+.cfg-main small, .cfg-state { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.cfg-state[data-off] { color: var(--danger); }
+.cfg-qty { font-family: var(--font-mono), monospace; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.cfg-qty em { font-style: normal; font-family: var(--font-body), sans-serif; color: var(--warning); }
+.cfg-row[data-low] .cfg-qty { color: var(--warning); }
+.cfg-actions { display: flex; gap: 6px; margin-left: auto; }
+.cfg-brand { display: flex; flex-direction: column; gap: 14px; }
+.cfg-brand fieldset { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 12px; margin: 0; padding: 0; border: 0; }
+.cfg-brand legend { margin-bottom: 8px; font-weight: 600; font-size: 13.5px; color: var(--text); }
+.cfg-save { display: flex; gap: 8px; }
+.cfg-staff { padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.cfg-issued { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px 14px; border-radius: 12px; background: var(--ok-soft); }
+.cfg-issued p { margin: 0; }
+.cfg-toggle { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14.5px; cursor: pointer; }
+.cfg-toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
 .cfg-role { align-items: flex-end; }
-.cfg h2 { font-family: var(--font-display), 'Golos Text', sans-serif; font-weight: 500; margin: 8px 0; }
-@media (max-width: 960px) { .cfg-layout { grid-template-columns: 1fr; } }
+@media (max-width: 960px) {
+  .cfg-layout { grid-template-columns: minmax(0, 1fr); }
+  .cfg-layout nav { position: static; flex-direction: row; overflow-x: auto; scrollbar-width: none; gap: 4px; }
+  .cfg-layout nav::-webkit-scrollbar { display: none; }
+  .cfg-layout nav button { flex: 0 0 auto; white-space: nowrap; }
+}
+@media (max-width: 720px) {
+  .cfg-new label, .cfg-new label .sd-input { width: 100%; }
+  .cfg-actions { margin-left: 0; }
+}
 @keyframes wow-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes wow-marquee { from { transform: translateX(0); } to { transform: translateX(-100%); } }
 

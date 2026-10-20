@@ -56,7 +56,7 @@ export class ClinicConfigService {
       this.prisma.documentTemplate.findMany({ where: { organizationId: orgId }, orderBy: { name: 'asc' } }),
       this.prisma.employee.findMany({
         where: { user: { organizationId: orgId } },
-        include: { user: true, schedules: true, payrollRules: true },
+        include: { user: { include: { userRoles: { include: { role: true } } } }, schedules: true, payrollRules: true },
         orderBy: { lastName: 'asc' },
       }),
       this.prisma.cabinet.findMany({ where: { branch: { organizationId: orgId } }, orderBy: { name: 'asc' } }),
@@ -135,6 +135,8 @@ export class ClinicConfigService {
         phone: employee.phone,
         email: employee.user.email,
         status: employee.status,
+        canLogin: employee.user.isActive,
+        roles: employee.user.userRoles.map((link) => ({ code: link.role.code, name: link.role.name })),
         schedule: employee.schedules.map((row) => ({ dayOfWeek: row.dayOfWeek, startsAt: row.startsAt, endsAt: row.endsAt })),
         commission: num((employee.payrollRules.find((rule) => rule.isActive)?.paramsJson as { percent?: number } | null)?.percent),
       })),
@@ -362,20 +364,23 @@ export class ClinicConfigService {
     return { id: row.id };
   }
 
-  async saveEmployee(orgId: string, userId: string, body: { id?: string; firstName: string; lastName: string; email?: string; phone?: string; specialization?: string; commission?: number; days?: number[]; startsAt?: string; endsAt?: string; status?: string }) {
+  async saveEmployee(orgId: string, userId: string, body: { id?: string; firstName: string; lastName: string; email?: string; phone?: string; specialization?: string; commission?: number; days?: number[]; startsAt?: string; endsAt?: string; status?: string; roleCode?: string }) {
     if (!body.firstName?.trim() || !body.lastName?.trim()) throw new BadRequestException('Нужны имя и фамилия');
     let employeeId = body.id;
     // A new login gets a random one-time password, shown once to whoever created it.
     let password: string | null = null;
     if (!employeeId) {
       if (!body.email?.includes('@')) throw new BadRequestException('Для нового врача нужна почта');
+      // The owner role is never handed out from here; anything else must be one of this clinic's roles.
+      const code = body.roleCode && body.roleCode !== 'owner' ? body.roleCode : 'doctor';
+      const role = await this.prisma.role.findFirst({ where: { organizationId: orgId, code } });
+      if (!role) throw new BadRequestException('Такой роли нет');
       password = randomBytes(9).toString('base64url');
       const passwordHash = await bcrypt.hash(password, 10);
       const user = await this.prisma.user.create({
         data: { organizationId: orgId, email: body.email.trim().toLowerCase(), passwordHash },
       });
-      const doctorRole = await this.prisma.role.findFirst({ where: { organizationId: orgId, code: 'doctor' } });
-      if (doctorRole) await this.prisma.userRole.create({ data: { userId: user.id, roleId: doctorRole.id } });
+      await this.prisma.userRole.create({ data: { userId: user.id, roleId: role.id } });
       const employee = await this.prisma.employee.create({
         data: { userId: user.id, firstName: body.firstName.trim(), lastName: body.lastName.trim(), phone: body.phone ?? null, specialization: body.specialization ?? null },
       });
