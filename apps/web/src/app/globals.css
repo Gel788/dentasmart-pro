@@ -1282,3 +1282,45 @@ html.dark .sd-login-submit { color: #121212; }
 .cfg-exc-form .cfg-exc-note { flex: 1 1 220px; }
 .cfg-exc-kind button { height: 44px; }
 .cfg-exc-form > .sd-btn { min-height: 44px; }
+
+/* ── Pack-and-grid primitives for every older screen: page headings, cards as ruled modules,
+   square tags, segmented tabs, tables with a fog header, dialogs as side sheets. ─────────────── */
+.sd-h { padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.sd-h h1, .sd-workspace h1 { font-weight: 800; letter-spacing: -0.02em; }
+.sd-h h1 { font-size: clamp(22px, 1.2vw + 14px, 28px); }
+.sd-kicker { color: var(--muted); font-size: 13px; letter-spacing: 0; text-transform: none; font-weight: 600; }
+.sd-card, .sd-metric, .ds-card { border-radius: 0; border: 1px solid var(--border); background: var(--surface-solid); box-shadow: none; }
+.sd-metric::after { content: none !important; }
+.sd-metric > strong, .ds-display { font-weight: 300; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.sd-chip { min-height: 24px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-solid); color: var(--text-secondary); font-weight: 600; }
+.sd-chip.danger { border-color: transparent; background: var(--danger-soft); color: var(--danger); }
+.sd-chip.warning { border-color: transparent; background: var(--warning-soft); color: var(--warning); }
+.sd-chip.info { border-color: transparent; background: var(--accent-soft); color: var(--accent-ink); }
+.sd-table th { background: var(--surface-2); color: var(--muted); font-weight: 600; font-size: 12px; padding: 9px 10px; }
+.sd-table td { padding: 11px 10px; font-variant-numeric: tabular-nums; }
+.t-tabs { gap: 0; padding: 0; border: 1px solid var(--border-strong); border-radius: 0; background: var(--surface-solid); }
+.t-tabs-pill { top: 0; bottom: 0; border-radius: 0; background: var(--text); box-shadow: none; }
+.t-tab { min-height: 40px; border-radius: 0; }
+.t-tab[aria-selected='true'] { color: var(--surface-solid); }
+.t-tab + .t-tab { box-shadow: inset 1px 0 0 var(--border); }
+/* Dialogs: a side sheet on the desk, the whole screen on a phone, actions pinned at the bottom. */
+.sd-sheet-back { place-items: stretch end; padding: 0; background: rgba(21, 25, 30, 0.32); }
+.sd-sheet { width: min(600px, 100%); max-height: none; height: 100%; border: 0; border-left: 1px solid var(--border); border-radius: 0; padding: 0 20px 0; animation: sd-sheet-in 240ms cubic-bezier(.2, .8, .2, 1); display: flex; flex-direction: column; }
+.sd-sheet-head { position: sticky; top: 0; z-index: 2; margin: 0 -20px 12px; padding: 16px 20px 12px; background: var(--surface-solid); border-bottom: 1px solid var(--border); align-items: center; }
+.sd-sheet h2 { font-size: 20px !important; font-weight: 800; letter-spacing: -0.01em; line-height: 1.2 !important; }
+.sd-sheet-actions { position: sticky; bottom: 0; z-index: 2; margin: auto -20px 0; padding: 12px 20px calc(14px + env(safe-area-inset-bottom, 0px)); background: var(--surface-solid); border-top: 1px solid var(--border); }
+.sd-sheet-actions .sd-btn, .sd-sheet-actions .sd-btn-ghost { min-height: 46px; }
+@keyframes sd-sheet-in { from { transform: translateX(32px); opacity: 0.4; } }
+@media (max-width: 720px) {
+  .sd-sheet-back { background: var(--surface-solid); }
+  .sd-sheet { width: 100%; max-height: none; height: 100%; border: 0; border-radius: 0; padding: 0 16px; }
+  .sd-sheet-head { top: 0; margin: 0 -16px 10px; padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 10px; }
+  .sd-sheet-actions { margin: auto -16px 0; padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
+}
+/* Older decorations brought into the code-square language. */
+.radar-orb { display: none; }
+.lead-line::before { width: 10px; height: 10px; border-radius: 0; background: var(--code-here); }
+.lead-line.is-callback::before { background: transparent; border: 2px dashed var(--code-owe); }
+.lead-line.is-booked::before { background: var(--code-chair); }
+.lead-line.is-visited::before { background: var(--code-paid); }
+.lead-line.is-refused::before { background: transparent; border: 1px solid var(--muted); }
