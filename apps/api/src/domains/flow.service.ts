@@ -132,8 +132,8 @@ export class FlowService {
         channel: 'TELEGRAM',
         message: `Седракович Дент: ждём вас ${appointment.startsAt.toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}. Ответьте «да», чтобы подтвердить.`,
         scheduledAt: when,
-        sentAt: new Date(),
-        status: 'SENT',
+        // No messenger is connected yet: the reminder waits in the queue, it is not «sent».
+        status: 'PENDING',
       },
     });
     return this.visit(orgId, id);
@@ -243,8 +243,8 @@ export class FlowService {
         channel: 'WHATSAPP',
         message: 'Седракович Дент: напоминаем о визите сегодня. Если планы изменились, ответьте на это сообщение.',
         scheduledAt: new Date(),
-        sentAt: new Date(),
-        status: 'SENT',
+        // No messenger is connected yet: the reminder waits in the queue, it is not «sent».
+        status: 'PENDING',
       },
     });
     return this.visit(orgId, id);

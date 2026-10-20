@@ -422,13 +422,12 @@ export class ShowcaseService {
           channel: row.channel,
           message: `[автопилот] ${row.message}`,
           scheduledAt: new Date(),
-          sentAt: new Date(),
-          status: 'SENT',
+          status: 'PENDING',
         },
       });
       created.push({ id: reminder.id, channel: row.channel, name: row.name, demo: true });
     }
-    return { demo: true, sent: created.length, items: created };
+    return { demo: true, sent: 0, queued: created.length, items: created };
   }
 
   async copilot(orgId: string, patientId: string, note = '') {

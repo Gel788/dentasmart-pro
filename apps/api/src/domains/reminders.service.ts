@@ -54,17 +54,15 @@ export class RemindersService {
     return { queued: created.length, items: created };
   }
 
+  /**
+   * Nothing delivers messages yet (no Telegram, WhatsApp or SMS provider is connected), so reminders are
+   * never marked sent here: a «sent» in the patient's history must mean the patient got it.
+   */
   async sendPending(orgId: string) {
-    const pending = await this.prisma.reminder.findMany({
+    const pending = await this.prisma.reminder.count({
       where: { organizationId: orgId, status: 'PENDING', scheduledAt: { lte: new Date() } },
     });
-    for (const r of pending) {
-      await this.prisma.reminder.update({
-        where: { id: r.id },
-        data: { status: 'SENT', sentAt: new Date() },
-      });
-    }
-    return { sent: pending.length };
+    return { sent: 0, pending, reason: 'Канал отправки не подключён: напоминания ждут в очереди' };
   }
 
   listTemplates(orgId: string) {
