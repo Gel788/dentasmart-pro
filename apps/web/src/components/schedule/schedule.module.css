@@ -25,10 +25,10 @@
   --tone-bad-fg: var(--danger);
 }
 :global(html.dark) .page {
-  --load-1: #17403b;
-  --load-2: #1f6158;
-  --load-3: #2c8c7f;
-  --load-4: #5eead4;
+  --load-1: #252b32;
+  --load-2: #39414b;
+  --load-3: #5a6470;
+  --load-4: var(--accent);
 }
 
 /* Header: one ruled module — date navigation, the date, the booking button; the view switches below. */
@@ -71,7 +71,7 @@
 .cell[data-level='1'] { background: var(--load-1); }
 .cell[data-level='2'] { background: var(--load-2); }
 .cell[data-level='3'] { background: var(--load-3); }
-.cell[data-level='2'] *, .cell[data-level='3'] * { color: #141414; }
+.cell[data-level='2'] *, .cell[data-level='3'] * { color: var(--text); }
 .cell[data-level='4'] { background: var(--load-4); }
 .cell[data-level='4'] * { color: #fff; }
 :global(html.dark) .cell[data-level='4'] * { color: #121212; }

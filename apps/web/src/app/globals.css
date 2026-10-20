@@ -1324,3 +1324,10 @@ html.dark .sd-login-submit { color: #121212; }
 .lead-line.is-booked::before { background: var(--code-chair); }
 .lead-line.is-visited::before { background: var(--code-paid); }
 .lead-line.is-refused::before { background: transparent; border: 1px solid var(--muted); }
+
+/* Sign-in chart in the system's codes: treated is the paid green, planned the chair cobalt outline. */
+.sd-formula-row span[data-mark='done'] { background: #0b8a5f; color: #fff; }
+.sd-formula-row span[data-mark='plan'] { border-color: #6d93ff; color: #a9c0ff; }
+.sd-formula figcaption i[data-mark='done'] { background: #0b8a5f; }
+.sd-formula figcaption i[data-mark='plan'] { border-color: #6d93ff; }
+.sd-login-copy h1 { font-weight: 800; letter-spacing: -0.03em; }
