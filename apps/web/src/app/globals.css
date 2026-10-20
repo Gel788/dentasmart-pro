@@ -71,6 +71,7 @@ html[data-density='compact'] { --pad: 12px; --row: 40px; --text-size: 13px; }
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   margin: 0;
   color: var(--text);
@@ -1112,6 +1113,12 @@ html.dark .ai-chips button.on { color: #042f2e; }
   .sd-panel, .sd-panel.open { left: 0; bottom: calc(62px + env(safe-area-inset-bottom, 0px)); }
   .sd-seg { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; }
   .sd-seg button { flex: none; }
+}
+
+/* iOS Safari zooms the page into any field typed in below 16px and leaves it zoomed, which cuts the
+   right edge off after signing in. On touch screens every field is 16px; nothing disables zooming. */
+@media (pointer: coarse), (max-width: 720px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']), select, textarea { font-size: 16px !important; }
 }
 
 /* The plan total rides above the phone menu bar instead of under it. */

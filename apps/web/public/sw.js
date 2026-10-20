@@ -1,4 +1,4 @@
-const CACHE = 'sedrakovich-dent-v3';
+const CACHE = 'sedrakovich-dent-v4';
 const SHELL = ['/', '/dashboard', '/patients', '/schedule', '/manifest.json'];
 
 self.addEventListener('install', (e) => {
@@ -19,6 +19,8 @@ self.addEventListener('fetch', (e) => {
   if (request.method !== 'GET' || request.mode === 'navigate') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  // Patient and money data never goes into the browser cache: only the app's own static files do.
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/uploads/')) return;
   e.respondWith(
     fetch(request)
       .then((res) => {
