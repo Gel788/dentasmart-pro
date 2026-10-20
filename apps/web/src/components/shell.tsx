@@ -139,39 +139,37 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <aside className="sd-nav" aria-label="Разделы">
         <Link href="/" className="sd-brand" aria-label="Седракович Дент — сегодня">
           <span className="sd-mark" aria-hidden>С</span>
+          <span className="sd-brand-text"><strong>Седракович Дент</strong><span>{today}</span></span>
         </Link>
+        <button className="sd-search" type="button" onClick={() => setPalette(true)} title="Поиск (⌘K)">
+          <Search />
+          <span className="sd-search-text">Поиск</span>
+          <kbd>⌘K</kbd>
+        </button>
         <nav className="sd-nav-list">
           {primary.map((link) => <NavLink key={link.href} link={link} active={isActive(link.href)} />)}
+          {more.length > 0 && <span className="sd-nav-group">Ещё</span>}
+          {more.map((link) => <NavLink key={link.href} link={link} active={isActive(link.href)} extra />)}
         </nav>
         <button className={`sd-link sd-link-more${sheet ? ' open' : ''}`} type="button" onClick={() => setSheet((open) => !open)} aria-expanded={sheet} aria-current={sheetActive ? 'page' : undefined}>
           <span className="sd-link-ico"><LayoutGrid /></span>
           <span className="sd-nav-label">Ещё</span>
         </button>
-        <button className="sd-nav-foot" type="button" onClick={() => setSheet(true)} title={fullName}>
-          <span className="sd-avatar" aria-hidden>{initials}</span>
-          <span className="sr-only">{fullName}, меню аккаунта</span>
-        </button>
+        <div className="sd-nav-foot">
+          {settings && <NavLink link={settings} active={isActive(settings.href)} extra />}
+          <button className={`sd-link is-extra${panelOpen ? ' active' : ''}`} type="button" onClick={() => setPanelOpen(!panelOpen)} aria-pressed={panelOpen} title="Панель контекста">
+            <span className="sd-link-ico"><PanelRight /></span>
+            <span className="sd-nav-label">{panelOpen ? 'Скрыть контекст' : 'Контекст'}</span>
+          </button>
+          <div className="sd-user">
+            <span className="sd-avatar" aria-hidden>{initials}</span>
+            <span className="sd-user-text"><b>{fullName}</b><span>{user?.organization.name}</span></span>
+            <button className="sd-user-btn" type="button" onClick={toggle} title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'} aria-label={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}>{theme === 'dark' ? <Sun /> : <Moon />}</button>
+            <button className="sd-user-btn" type="button" onClick={logout} title="Выйти" aria-label="Выйти"><LogOut /></button>
+          </div>
+        </div>
       </aside>
       <div className="sd-main">
-        <header className="sd-top">
-          <Link href="/" className="sd-top-mark" aria-label="Сегодня"><span className="sd-mark" aria-hidden>С</span></Link>
-          <button className="sd-search" type="button" onClick={() => setPalette(true)}>
-            <Search />
-            <span className="sd-search-text">Поиск пациента и команды</span>
-            <kbd>⌘K</kbd>
-          </button>
-          {pathname !== '/' && <span className="sd-today">{today}</span>}
-          <button
-            className={`sd-top-btn sd-panel-toggle${panelOpen ? ' on' : ''}`}
-            type="button"
-            aria-pressed={panelOpen}
-            onClick={() => setPanelOpen(!panelOpen)}
-            title={panelOpen ? 'Скрыть контекст' : 'Показать контекст'}
-          >
-            <PanelRight />
-            <span>Контекст</span>
-          </button>
-        </header>
         <div className="sd-workspace">{children}</div>
       </div>
       <aside className={`sd-panel ${panelOpen ? 'open' : ''}`}>
@@ -184,6 +182,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <span className="sd-avatar" aria-hidden>{initials}</span>
               <span className="sd-user-text"><b>{fullName}</b><span>{user?.organization.name}</span></span>
             </div>
+            <button className="sd-sheet-search" type="button" onClick={() => { setSheet(false); setPalette(true); }}><Search size={18} />Поиск пациента и команды</button>
             <div className="sd-more-sheet-grid">
               {[...more, ...(settings ? [settings] : [])].map((link) => {
                 const Icon = link.icon;
@@ -196,6 +195,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               })}
             </div>
             <div className="sd-more-sheet-actions">
+              <button className="sd-btn-ghost" type="button" onClick={() => setPanelOpen(!panelOpen)}><PanelRight size={16} />{panelOpen ? 'Скрыть контекст' : 'Контекст'}</button>
               <button className="sd-btn-ghost" type="button" onClick={toggle}>{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}{theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</button>
               <button className="sd-btn-ghost" type="button" onClick={logout}><LogOut size={16} />Выйти</button>
             </div>

@@ -1,13 +1,13 @@
 import type { Metadata, Viewport } from 'next';
-import { IBM_Plex_Mono, Jost, Onest } from 'next/font/google';
+import { IBM_Plex_Mono, Onest } from 'next/font/google';
 import { AuthProvider } from '@/lib/auth-context';
 import { BranchProvider } from '@/lib/branch-context';
 import { ThemeProvider } from '@/lib/theme-context';
 import { PwaRegister } from '@/components/pwa-register';
 import './globals.css';
 
-const body = Onest({ subsets: ['cyrillic', 'latin'], weight: ['400', '500', '600', '700'], display: 'swap', variable: '--font-body' });
-const display = Jost({ subsets: ['cyrillic', 'latin'], weight: ['400', '500', '600', '700'], display: 'swap', variable: '--font-display' });
+// One face for everything: names heavy, figures light.
+const body = Onest({ subsets: ['cyrillic', 'latin'], weight: ['300', '400', '500', '600', '700', '800'], display: 'swap', variable: '--font-body' });
 const mono = IBM_Plex_Mono({ subsets: ['cyrillic', 'latin'], weight: ['500'], display: 'swap', variable: '--font-mono' });
 
 export const metadata: Metadata = {
@@ -27,13 +27,13 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: 'cover',
-  themeColor: '#141414',
+  themeColor: '#f2f3f5',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // The inline script below sets the theme class and density before React hydrates.
-    <html lang="ru" className={`${body.variable} ${display.variable} ${mono.variable}`} suppressHydrationWarning>
+    <html lang="ru" className={`${body.variable} ${mono.variable}`} suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
         <script
