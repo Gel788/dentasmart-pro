@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>DentaSmart: три направления</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Geologica:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap">
+<style>
+/* One doctor's day drawn three ways. Same content and structure; each direction owns its palette, type, depth and layout. */
+:root {
+  --bg: #f3f5f4; --surface: #ffffff; --surface-2: #eef1f0; --ink: #0d1514; --ink-2: #44514e; --muted: #6b7875;
+  --line: rgba(13, 21, 20, 0.08); --accent: #00a389; --accent-ink: #00634f; --accent-soft: #dcf5ef;
+  --warn: #b25b00; --warn-soft: #fff0dc; --bad: #c0352b; --bad-soft: #fde7e4; --ok: #1a7f4b;
+  --hero-bg: #0d1514; --hero-ink: #f2fbf8; --hero-muted: #9db3ae; --hero-accent: #47e0c2;
+  --display: 'Onest', 'Golos Text', system-ui, sans-serif; --body: 'Onest', system-ui, sans-serif;
+  --r-lg: 24px; --r-md: 16px; --r-sm: 12px;
+  --shadow: 0 1px 2px rgba(13, 21, 20, 0.04), 0 8px 24px rgba(13, 21, 20, 0.06);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45; -webkit-font-smoothing: antialiased; transition: background 300ms ease; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+#root { min-height: 100vh; background: var(--bg); color: var(--ink); font-family: var(--body); transition: background 300ms ease, color 300ms ease; }
+
+/* ── Direction switcher ─────────────────────────────────────────── */
+.switch { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 50; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); border-bottom: 1px solid var(--line); }
+.switch-in { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; max-width: 1280px; margin: 0 auto; }
+.switch p { margin: 0; color: var(--muted); font-size: 13px; flex: 1 1 260px; min-width: 0; }
+.switch p b { color: var(--ink); font-weight: 600; }
+.tabs { display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--surface-2); }
+.tabs button { border: 0; background: transparent; padding: 8px 14px; border-radius: 999px; font-size: 14px; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
+.tabs button[aria-selected='true'] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+
+/* ── App frame ──────────────────────────────────────────────────── */
+.app { max-width: 1280px; margin: 0 auto; padding-block: 20px 120px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); grid-template-areas: 'top' 'week' 'now' 'list' 'side'; }
+@media (min-width: 980px) { .app { grid-template-columns: minmax(0, 1fr) 340px; grid-template-areas: 'top top' 'week week' 'now side' 'list side'; align-items: start; } }
+.top { grid-area: top; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 20px; }
+.hello small { display: block; color: var(--muted); font-size: 14px; margin-bottom: 4px; }
+.hello h1 { margin: 0; font-family: var(--display); font-weight: 600; font-size: clamp(28px, 3vw + 14px, 44px); line-height: 1.05; letter-spacing: -0.03em; text-wrap: balance; }
+.hello h1 span { color: var(--muted); font-weight: 400; }
+.tools { display: flex; gap: 8px; flex: 1 1 320px; max-width: 460px; }
+.search { flex: 1; display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 16px; border-radius: 999px; background: var(--surface); color: var(--muted); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 15px; text-align: left; min-width: 0; }
+.search span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search kbd { font: 500 12px var(--body); padding: 2px 7px; border-radius: 7px; background: var(--surface-2); color: var(--muted); }
+.cta { display: inline-flex; align-items: center; gap: 8px; height: 46px; padding: 0 20px; border: 0; border-radius: 999px; background: var(--ink); color: var(--surface); font-weight: 600; white-space: nowrap; box-shadow: var(--shadow); transition: transform 160ms ease; }
+.cta:active { transform: scale(0.97); }
+.ico { width: 18px; height: 18px; flex: none; }
+
+/* Week: weekday + date, month named, the doctor's load as a bar under each day. */
+.week { grid-area: week; display: flex; flex-direction: column; gap: 10px; }
+.week-head { display: flex; align-items: center; gap: 10px; }
+.week-head b { font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: -0.01em; }
+.week-head span { color: var(--muted); font-size: 13.5px; }
+.week-head .arrows { margin-left: auto; display: flex; gap: 6px; }
+.round { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); }
+.days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.day { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 0 10px; border: 1px solid transparent; border-radius: var(--r-md); background: var(--surface); transition: transform 200ms cubic-bezier(.2,.8,.2,1), background 200ms ease; }
+.day:hover { transform: translateY(-2px); }
+.day small { font-size: 12px; color: var(--muted); text-transform: lowercase; }
+.day b { font-family: var(--display); font-size: 20px; font-weight: 600; line-height: 1.2; }
+.day i { display: block; width: 60%; height: 4px; margin-top: 6px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.day i::after { content: ''; display: block; height: 100%; width: var(--load); background: var(--accent); border-radius: inherit; }
+.day em { font-style: normal; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.day[data-weekend] small { color: var(--bad); }
+.day[aria-current='date'] { background: var(--ink); color: var(--surface); }
+.day[aria-current='date'] small, .day[aria-current='date'] em { color: color-mix(in srgb, var(--surface) 70%, transparent); }
+.day[aria-current='date'] i { background: color-mix(in srgb, var(--surface) 20%, transparent); }
+
+/* Now in the chair: the one loud object on the screen. */
+.now { grid-area: now; position: relative; overflow: hidden; display: grid; gap: 18px; padding: 22px; border-radius: var(--r-lg); background: var(--hero-bg); color: var(--hero-ink); box-shadow: var(--shadow); }
+.now-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.live { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 10px; border-radius: 999px; background: color-mix(in srgb, var(--hero-accent) 18%, transparent); color: var(--hero-accent); font-size: 13px; font-weight: 600; }
+.live::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--hero-accent); box-shadow: 0 0 0 0 var(--hero-accent); animation: pulse 2s ease-out infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--hero-accent) 60%, transparent); } 100% { box-shadow: 0 0 0 10px transparent; } }
+.timer { margin-left: auto; font-family: var(--display); font-size: 28px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.now h2 { margin: 0; font-family: var(--display); font-weight: 600; font-size: clamp(26px, 2.4vw + 14px, 38px); line-height: 1.05; letter-spacing: -0.025em; }
+.now p { margin: 6px 0 0; color: var(--hero-muted); font-size: 15px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+.chip.bad { background: var(--bad); color: #fff; }
+.chip.soft { background: color-mix(in srgb, var(--hero-ink) 10%, transparent); color: var(--hero-ink); font-weight: 500; }
+.plan { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.plan div { padding: 12px 14px; border-radius: var(--r-sm); background: color-mix(in srgb, var(--hero-ink) 7%, transparent); }
+.plan small { display: block; color: var(--hero-muted); font-size: 12.5px; }
+.plan b { font-weight: 600; font-size: 15px; }
+.acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.act { flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 50px; padding: 0 18px; border-radius: 999px; border: 0; font-weight: 600; font-size: 15px; transition: transform 160ms ease, filter 160ms ease; }
+.act:active { transform: scale(0.97); }
+.act.main { background: var(--hero-accent); color: #062b25; }
+.act.ghost { background: color-mix(in srgb, var(--hero-ink) 10%, transparent); color: var(--hero-ink); }
+
+/* The day as a timeline: time, who, what, state. */
+.list { grid-area: list; display: flex; flex-direction: column; gap: 10px; }
+.list-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.list-head h3 { margin: 0; font-family: var(--display); font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+.list-head span { color: var(--muted); font-size: 13.5px; }
+.rows { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 14px 16px; border-radius: var(--r-md); background: var(--surface); border: 1px solid transparent; box-shadow: var(--shadow); text-align: left; width: 100%; transition: transform 200ms cubic-bezier(.2,.8,.2,1), border-color 200ms ease; }
+.row:hover { transform: translateX(3px); }
+.row time { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.row time small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
+.who { min-width: 0; }
+.who b { display: block; font-weight: 600; font-size: 15.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who span { display: block; color: var(--muted); font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.state { padding: 5px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; background: var(--surface-2); color: var(--ink-2); }
+.state[data-s='chair'] { background: var(--ink); color: var(--surface); }
+.state[data-s='here'] { background: var(--accent-soft); color: var(--accent-ink); }
+.state[data-s='debt'] { background: var(--warn-soft); color: var(--warn); }
+.state[data-s='unconf'] { background: var(--bad-soft); color: var(--bad); }
+.state[data-s='done'] { color: var(--ok); background: transparent; padding-right: 0; }
+.row[data-past] { opacity: 0.62; box-shadow: none; }
+.row[data-on] { border-color: var(--ink); }
+.free { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-radius: var(--r-md); border: 1.5px dashed color-mix(in srgb, var(--ink) 18%, transparent); color: var(--muted); font-size: 14px; }
+.free button { border: 0; background: transparent; color: var(--accent-ink); font-weight: 600; padding: 6px 4px; }
+.nowline { display: flex; align-items: center; gap: 10px; color: var(--bad); font-size: 12.5px; font-weight: 600; margin: 2px 0; }
+.nowline::after { content: ''; flex: 1; height: 2px; border-radius: 2px; background: var(--bad); }
+
+/* Side: what needs the doctor, and the day in money. */
+.side { grid-area: side; display: flex; flex-direction: column; gap: 12px; }
+.panel { padding: 18px; border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 12px; }
+.panel h3 { margin: 0; font-family: var(--display); font-size: 16px; font-weight: 600; }
+.todo { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.todo li { display: grid; grid-template-columns: 10px 1fr; gap: 10px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.todo li:first-child { border-top: 0; }
+.todo li::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); transform: translateY(-1px); }
+.todo li[data-t='bad']::before { background: var(--bad); }
+.todo small { display: block; color: var(--muted); font-size: 12.5px; }
+.money { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.money div small { display: block; color: var(--muted); font-size: 12.5px; }
+.money div b { font-family: var(--display); font-size: 24px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.money div:last-child b { color: var(--warn); }
+.bar { height: 8px; border-radius: 8px; background: var(--surface-2); overflow: hidden; grid-column: 1 / -1; display: flex; }
+.bar i { display: block; height: 100%; }
+.bar i:first-child { background: var(--accent); }
+.bar i:last-child { background: color-mix(in srgb, var(--warn) 55%, transparent); }
+
+/* Phone tab bar. */
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; justify-content: space-around; padding: 8px max(8px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); background: color-mix(in srgb, var(--surface) 86%, transparent); backdrop-filter: saturate(1.5) blur(18px); -webkit-backdrop-filter: saturate(1.5) blur(18px); border-top: 1px solid var(--line); }
+.tabbar button { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 1; border: 0; background: transparent; color: var(--muted); font-size: 11px; font-weight: 500; padding: 4px 0; }
+.tabbar button[aria-current] { color: var(--ink); font-weight: 600; }
+.tabbar button[aria-current] .ico { color: var(--accent); }
+@media (min-width: 980px) { .tabbar { display: none; } .app { padding-bottom: 48px; } }
+
+@media (max-width: 560px) {
+  .tools .cta span { display: none; }
+  .tools .cta { width: 46px; padding: 0; justify-content: center; }
+  .row { grid-template-columns: 54px minmax(0, 1fr); }
+  .row .state { grid-column: 2; justify-self: start; margin-top: -4px; }
+  .day b { font-size: 17px; }
+  .day em { display: none; }
+  .now { padding: 18px; }
+  .timer { font-size: 22px; }
+}
+
+/* ══ B · Графит: dark premium, warm graphite, ivory type, one sky-blue signal. ══ */
+[data-dir='b'] {
+  --bg: #121214; --surface: #1b1b1f; --surface-2: #26262b; --ink: #f1ece1; --ink-2: #cfc9bd; --muted: #8f8b84;
+  --line: rgba(241, 236, 225, 0.08); --accent: #7cc4ff; --accent-ink: #a9d8ff; --accent-soft: rgba(124, 196, 255, 0.14);
+  --warn: #f0b35b; --warn-soft: rgba(240, 179, 91, 0.14); --bad: #ff7a6b; --bad-soft: rgba(255, 122, 107, 0.14); --ok: #8fd6a7;
+  --hero-bg: linear-gradient(160deg, #23324a 0%, #1b1b1f 70%); --hero-ink: #f6f1e7; --hero-muted: #a9b3c2; --hero-accent: #7cc4ff;
+  --display: 'Geologica', 'Onest', system-ui, sans-serif; --body: 'Manrope', system-ui, sans-serif;
+  --r-lg: 28px; --r-md: 18px; --r-sm: 14px;
+  --shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 12px 32px rgba(0,0,0,0.35);
+  color-scheme: dark;
+}
+[data-dir='b'] .hello h1 { font-weight: 300; letter-spacing: -0.04em; }
+[data-dir='b'] .hello h1 span { font-weight: 300; }
+[data-dir='b'] .now { border: 1px solid rgba(124, 196, 255, 0.18); }
+[data-dir='b'] .now h2 { font-weight: 400; letter-spacing: -0.035em; }
+[data-dir='b'] .timer { font-weight: 300; font-size: 34px; }
+[data-dir='b'] .act.main { color: #08223a; }
+[data-dir='b'] .cta { background: var(--ink); color: #121214; }
+[data-dir='b'] .day[aria-current='date'] { background: var(--accent); color: #08223a; }
+[data-dir='b'] .day[aria-current='date'] small, [data-dir='b'] .day[aria-current='date'] em { color: rgba(8, 34, 58, 0.7); }
+[data-dir='b'] .state[data-s='chair'] { background: var(--accent); color: #08223a; }
+[data-dir='b'] .row { box-shadow: none; border-color: var(--line); }
+[data-dir='b'] .row[data-on] { border-color: var(--accent); }
+[data-dir='b'] .chip.bad { background: var(--bad); color: #2a0b07; }
+[data-dir='b'] .tabs button[aria-selected='true'] { background: #33333a; }
+[data-dir='b'] .money div b, [data-dir='b'] .row time { font-weight: 400; }
+
+/* ══ C · Пульс: bold colour blocks, every state a colour, oversized time. ══ */
+[data-dir='c'] {
+  --bg: #f7f6f2; --surface: #ffffff; --surface-2: #ecebe5; --ink: #111111; --ink-2: #3a3a38; --muted: #6e6d68;
+  --line: rgba(17, 17, 17, 0.1); --accent: #2f4bff; --accent-ink: #1f33c9; --accent-soft: #e4e8ff;
+  --warn: #8a5400; --warn-soft: #ffe08a; --bad: #d4321c; --bad-soft: #ffd9d1; --ok: #10703c;
+  --hero-bg: #2f4bff; --hero-ink: #ffffff; --hero-muted: #c9d1ff; --hero-accent: #ffe14d;
+  --display: 'Geologica', 'Onest', system-ui, sans-serif; --body: 'Onest', system-ui, sans-serif;
+  --r-lg: 30px; --r-md: 22px; --r-sm: 16px;
+  --shadow: none;
+  color-scheme: light;
+}
+[data-dir='c'] .hello h1 { font-weight: 700; letter-spacing: -0.045em; font-size: clamp(34px, 4vw + 14px, 60px); }
+[data-dir='c'] .now h2 { font-weight: 700; font-size: clamp(32px, 3.4vw + 14px, 52px); letter-spacing: -0.04em; }
+[data-dir='c'] .timer { font-weight: 700; font-size: clamp(30px, 3vw + 12px, 48px); }
+[data-dir='c'] .live { background: var(--hero-accent); color: #111; }
+[data-dir='c'] .live::before { background: #111; }
+[data-dir='c'] .act.main { background: var(--hero-accent); color: #111; }
+[data-dir='c'] .act.ghost { background: rgba(255,255,255,0.16); }
+[data-dir='c'] .plan div { background: rgba(255,255,255,0.14); }
+[data-dir='c'] .search, [data-dir='c'] .panel, [data-dir='c'] .day { border: 1.5px solid var(--ink); }
+[data-dir='c'] .cta { background: var(--ink); }
+[data-dir='c'] .day[aria-current='date'] { background: var(--hero-accent); color: #111; border-color: #111; }
+[data-dir='c'] .day[aria-current='date'] small, [data-dir='c'] .day[aria-current='date'] em { color: #111; }
+[data-dir='c'] .day[aria-current='date'] i { background: rgba(0,0,0,0.12); }
+[data-dir='c'] .day i::after { background: var(--ink); }
+[data-dir='c'] .row { border: 0; padding: 16px 18px; }
+[data-dir='c'] .row time { font-size: 22px; font-weight: 700; letter-spacing: -0.03em; }
+[data-dir='c'] .row[data-tone='here'] { background: #c9f2dc; }
+[data-dir='c'] .row[data-tone='debt'] { background: var(--warn-soft); }
+[data-dir='c'] .row[data-tone='unconf'] { background: var(--bad-soft); }
+[data-dir='c'] .row[data-tone='chair'] { background: var(--accent); color: #fff; }
+[data-dir='c'] .row[data-tone='chair'] .who span, [data-dir='c'] .row[data-tone='chair'] time small { color: #d5dbff; }
+[data-dir='c'] .row .state { background: rgba(17,17,17,0.08); color: var(--ink); }
+[data-dir='c'] .row[data-tone='chair'] .state { background: var(--hero-accent); color: #111; }
+[data-dir='c'] .row[data-on] { outline: 2px solid var(--ink); outline-offset: 2px; }
+[data-dir='c'] .row[data-past] { opacity: 1; background: transparent; }
+[data-dir='c'] .row[data-past] .who b { text-decoration: line-through; text-decoration-thickness: 1.5px; text-decoration-color: rgba(17,17,17,0.35); }
+[data-dir='c'] .free { border-color: var(--ink); border-radius: var(--r-md); color: var(--ink-2); }
+[data-dir='c'] .free button { color: var(--accent-ink); }
+[data-dir='c'] .bar i:first-child { background: var(--accent); }
+[data-dir='c'] .bar i:last-child { background: var(--warn-soft); }
+[data-dir='c'] .money div:last-child b { color: var(--ink); }
+[data-dir='c'] .tabbar { background: var(--ink); border-top: 0; }
+[data-dir='c'] .tabbar button { color: #9a9a96; }
+[data-dir='c'] .tabbar button[aria-current] { color: #fff; }
+[data-dir='c'] .tabbar button[aria-current] .ico { color: var(--hero-accent); }
+
+.note { grid-column: 1 / -1; margin: 8px 0 0; color: var(--muted); font-size: 13px; text-align: center; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+
+<div id="root" data-dir="a">
+  <div class="switch">
+    <div class="switch-in">
+      <div class="tabs" role="tablist" aria-label="Направление дизайна">
+        <button id="tab-a" role="tab" aria-selected="true" data-go="a">A · Фарфор</button>
+        <button id="tab-b" role="tab" aria-selected="false" data-go="b">B · Графит</button>
+        <button id="tab-c" role="tab" aria-selected="false" data-go="c">C · Пульс</button>
+      </div>
+      <p id="about"></p>
+    </div>
+  </div>
+
+  <main class="app">
+    <header class="top">
+      <div class="hello">
+        <small>Доброе утро, Завен</small>
+        <h1>Вторник, 20 октября <span>· 7 пациентов</span></h1>
+      </div>
+      <div class="tools">
+        <button class="search" type="button">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <span>Пациент, телефон или запись</span><kbd>⌘K</kbd>
+        </button>
+        <button class="cta" type="button">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          <span>Записать</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="week" aria-label="Неделя">
+      <div class="week-head">
+        <b>Октябрь 2026</b><span>неделя 19–25</span>
+        <div class="arrows">
+          <button class="round" type="button" aria-label="Прошлая неделя"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 6-6 6 6 6"/></svg></button>
+          <button class="round" type="button" aria-label="Следующая неделя"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button>
+        </div>
+      </div>
+      <div class="days" id="days"></div>
+    </section>
+
+    <section class="now" aria-label="Сейчас в кресле">
+      <div class="now-top">
+        <span class="live">В кресле · кабинет 1</span>
+        <span class="timer" id="timer">00:24:10</span>
+      </div>
+      <div>
+        <h2>Абрамян Лилит</h2>
+        <p>34 года · лечение кариеса 26, 27 · с 12:00 до 13:00</p>
+      </div>
+      <div class="chips">
+        <span class="chip bad">Аллергия: лидокаин</span>
+        <span class="chip soft">Анамнез подтверждён 3 дня назад</span>
+        <span class="chip soft">Долг 0 ₽</span>
+      </div>
+      <div class="plan">
+        <div><small>Сегодня по плану</small><b>2 услуги · 11 000 ₽</b></div>
+        <div><small>Следующий этап</small><b>Коронка 26 · ноябрь</b></div>
+        <div><small>Снимки</small><b>ОПТГ от 2 октября</b></div>
+      </div>
+      <div class="acts">
+        <button class="act main" type="button">Завершить приём</button>
+        <button class="act ghost" type="button">+ Услуга</button>
+        <button class="act ghost" type="button">Карта и формула</button>
+      </div>
+    </section>
+
+    <section class="list" aria-label="Записи дня">
+      <div class="list-head"><h3>Записи на сегодня</h3><span>2 приняты · 1 в кресле · 4 впереди</span></div>
+      <ul class="rows" id="rows"></ul>
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <h3>Требует внимания</h3>
+        <ul class="todo">
+          <li data-t="bad"><span>Шубин Глеб не подтвердил запись на 16:30<small>позвонить до 14:00</small></span></li>
+          <li><span>Ким Артур ушёл с долгом 4 500 ₽<small>консультация, 10:30</small></span></li>
+          <li><span>Орлова Вера: план на имплантацию ждёт решения 12 дней<small>3 варианта, от 96 000 ₽</small></span></li>
+        </ul>
+      </section>
+      <section class="panel">
+        <h3>Деньги дня</h3>
+        <div class="money">
+          <div><small>Оплачено</small><b>18 200 ₽</b></div>
+          <div><small>Ждём</small><b>4 500 ₽</b></div>
+          <div class="bar" aria-hidden="true"><i style="width:80%"></i><i style="width:20%"></i></div>
+        </div>
+      </section>
+    </aside>
+
+    <p class="note">Пример с выдуманными пациентами. Нажмите на день или запись, чтобы увидеть, как экран отвечает.</p>
+  </main>
+
+  <nav class="tabbar" aria-label="Разделы">
+    <button type="button" aria-current="page"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>Сегодня</button>
+    <button type="button"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5c2 .6 3.2 2.4 3.6 5.5"/></svg>Пациенты</button>
+    <button type="button"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Запись</button>
+    <button type="button"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M16 15h2"/></svg>Деньги</button>
+    <button type="button"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18" cy="12" r="1.3"/></svg>Ещё</button>
+  </nav>
+</div>
+
+<script>
+(function () {
+  var ABOUT = {
+    a: '<b>Фарфор.</b> Светлый, воздушный, как приложения Apple: много воздуха, мягкие тени, тёмная карточка «в кресле» как главный объект.',
+    b: '<b>Графит.</b> Тёмный премиальный: тёплый графит, светлый текст цвета эмали, один голубой сигнал. Удобно вечером и в кабинете с приглушённым светом.',
+    c: '<b>Пульс.</b> Смелый и цветной: у каждого состояния свой цвет, огромное время, видно с другого конца кабинета.'
+  };
+  var DAYS = [
+    ['пн', 19, 0.9, 9], ['вт', 20, 0.7, 7], ['ср', 21, 0.45, 4], ['чт', 22, 0.6, 5], ['пт', 23, 0.3, 3], ['сб', 24, 0.15, 1], ['вс', 25, 0, 0]
+  ];
+  var ROWS = [
+    { t: '09:00', e: '10:00', n: 'Орлова Вера', s: 'Лечение кариеса 16 · кабинет 1', st: 'Оплачено', k: 'done', past: true },
+    { t: '10:30', e: '11:00', n: 'Ким Артур', s: 'Консультация · кабинет 1', st: 'Долг 4 500 ₽', k: 'debt', past: true },
+    { now: '11:55 · сейчас' },
+    { t: '12:00', e: '13:00', n: 'Абрамян Лилит', s: 'Кариес 26, 27 · кабинет 1', st: 'В кресле', k: 'chair' },
+    { t: '13:30', e: '14:30', n: 'Ветров Павел', s: 'Чистка и фторирование · кабинет 2', st: 'Пришёл', k: 'here' },
+    { t: '15:00', e: '16:00', n: 'Новикова Ирина', s: 'Эндодонтия 36, второй визит', st: 'Подтвердила', k: 'conf' },
+    { t: '16:30', e: '17:00', n: 'Шубин Глеб', s: 'Осмотр после имплантации', st: 'Не подтвердил', k: 'unconf' },
+    { free: '17:00–19:00 свободно' }
+  ];
+  var root = document.getElementById('root');
+  var days = document.getElementById('days');
+  var rows = document.getElementById('rows');
+  var about = document.getElementById('about');
+  var selected = 20, picked = 3;
+
+  function drawDays() {
+    days.innerHTML = DAYS.map(function (d) {
+      var weekend = d[0] === 'сб' || d[0] === 'вс';
+      return '<button class="day" type="button" data-d="' + d[1] + '"' + (weekend ? ' data-weekend' : '') + (d[1] === selected ? ' aria-current="date"' : '') +
+        ' aria-label="' + d[0] + ' ' + d[1] + ' октября, ' + d[3] + ' записей" style="--load:' + Math.round(d[2] * 100) + '%"><small>' + d[0] + '</small><b class="num">' + d[1] + '</b><i></i><em>' + (d[3] ? d[3] + ' зап.' : 'свободно') + '</em></button>';
+    }).join('');
+  }
+  function drawRows() {
+    rows.innerHTML = ROWS.map(function (r, i) {
+      if (r.now) return '<li class="nowline">' + r.now + '</li>';
+      if (r.free) return '<li class="free"><span>' + r.free + '</span><button type="button">Записать сюда</button></li>';
+      return '<li><button class="row" type="button" data-i="' + i + '" data-tone="' + r.k + '"' + (r.past ? ' data-past' : '') + (i === picked ? ' data-on' : '') + '>' +
+        '<time class="num">' + r.t + '<small>до ' + r.e + '</small></time><span class="who"><b>' + r.n + '</b><span>' + r.s + '</span></span><span class="state" data-s="' + r.k + '">' + r.st + '</span></button></li>';
+    }).join('');
+  }
+  function go(dir) {
+    root.dataset.dir = dir;
+    document.body.style.background = getComputedStyle(root).getPropertyValue('--bg');
+    document.querySelectorAll('[data-go]').forEach(function (b) { b.setAttribute('aria-selected', String(b.dataset.go === dir)); });
+    about.innerHTML = ABOUT[dir];
+    try { localStorage.setItem('ds-dir', dir); } catch (e) {}
+  }
+  document.querySelector('.tabs').addEventListener('click', function (e) { var b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
+  days.addEventListener('click', function (e) { var b = e.target.closest('.day'); if (!b) return; selected = Number(b.dataset.d); drawDays(); });
+  rows.addEventListener('click', function (e) { var b = e.target.closest('.row'); if (!b) return; picked = Number(b.dataset.i); drawRows(); });
+
+  var start = 24 * 60 + 10;
+  setInterval(function () {
+    start += 1;
+    var h = Math.floor(start / 3600), m = Math.floor(start / 60) % 60, s = start % 60;
+    document.getElementById('timer').textContent = [h, m, s].map(function (n) { return String(n).padStart(2, '0'); }).join(':');
+  }, 1000);
+
+  drawDays(); drawRows();
+  var saved = 'a';
+  try { saved = localStorage.getItem('ds-dir') || 'a'; } catch (e) {}
+  go(ABOUT[saved] ? saved : 'a');
+})();
+</script>
+
+</body>
+</html>
