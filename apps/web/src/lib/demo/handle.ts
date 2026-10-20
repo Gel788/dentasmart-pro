@@ -1,7 +1,7 @@
 import { phoneDigits } from '../phone';
 import { PLAN_TEMPLATES, composeFamily, lineTotal, type Mark } from '../plan-engine';
 import { resultFor, serviceKit, surfacesFor } from '../service-kit';
-import { canMoveVisit, dayLoad, fromKopecks, invoiceStatus, isVisitClosed, isVisitStatus, kopecks, labDueAt, MEDICAL_KEYS, medicalDiff, medicalReviewDue, normalizeMedical, parseWorkHours, patientSegments, phoneMatches, searchTerms, SEGMENTS, visitMoveError, wallDate, type MedicalFields, type PatientSegment, type VisitStatus } from '@dentasmart/shared';
+import { canMoveVisit, dayLoad, fromKopecks, invoiceStatus, isVisitClosed, isVisitStatus, kopecks, labDueAt, MEDICAL_KEYS, medicalDiff, medicalReviewDue, normalizeMedical, hoursOn, normalizeWeekHours, patientSegments, visibleHours, weekHoursOf, weekHoursText, phoneMatches, searchTerms, SEGMENTS, visitMoveError, wallDate, type MedicalFields, type PatientSegment, type VisitStatus } from '@dentasmart/shared';
 import { ApiError } from '../api';
 import snapshot from './snapshot.json';
 import { demoLabWork, demoRoute, reserveDemoLines, type DemoReservation } from './route';
@@ -339,13 +339,17 @@ function scheduleRange(bag: Bag, fromRaw: string, toRaw: string) {
   const shell = bag.gets[`/workspace/schedule?date=${ANCHOR}`] as AnyRec;
   const chairs = ((shell.branches ?? []) as AnyRec[]).reduce((sum, branch) => sum + (branch.cabinets?.length ?? 0), 0);
   const offset = 180;
-  const hours = parseWorkHours((config(bag).brand as AnyRec | undefined)?.workHours);
+  const brand = config(bag).brand as AnyRec | undefined;
+  const week = weekHoursOf(brand?.weekHours, brand?.workHours);
   const visits = bag.appointments.filter((row) => row.status !== 'CANCELLED');
   const dates = Array.from({ length: days }, (_, index) => new Date(fromDay + index * 86400000).toISOString().slice(0, 10));
   const inRange = visits.filter((row) => dates.includes(wallDate(row.startsAt, offset)));
   return {
-    from, to, timezone: 'Europe/Moscow', offsetMinutes: offset, hours, chairs,
-    days: dates.map((date) => ({ date, ...dayLoad(inRange.filter((row) => wallDate(row.startsAt, offset) === date), { chairs, ...hours, tzOffsetMinutes: offset }) })),
+    from, to, timezone: 'Europe/Moscow', offsetMinutes: offset, hours: visibleHours(dates.map((date) => hoursOn(week, date))), week, chairs,
+    days: dates.map((date) => {
+      const open = hoursOn(week, date);
+      return { date, hours: open, ...dayLoad(inRange.filter((row) => wallDate(row.startsAt, offset) === date), { chairs, opensAt: open?.opensAt ?? 0, closesAt: open?.closesAt ?? 0, tzOffsetMinutes: offset }) };
+    }),
     appointments: inRange.sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
   };
 }
@@ -439,7 +443,12 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
   if (pathname === '/config/plan-templates') return pushConfig(bag, 'planTemplates', { id: uid(), ...data });
   if (pathname === '/config/documents') return pushConfig(bag, 'documents', { id: uid(), ...data });
   if (pathname === '/config/brand') {
-    config(bag).brand = { ...(config(bag).brand ?? {}), ...data };
+    const next: AnyRec = { ...data };
+    if (data.weekHours !== undefined) {
+      try { next.weekHours = normalizeWeekHours(data.weekHours); } catch (err) { throw new Error((err as Error).message); }
+      next.workHours = weekHoursText(next.weekHours as ReturnType<typeof normalizeWeekHours>);
+    }
+    config(bag).brand = { ...(config(bag).brand ?? {}), ...next };
     return config(bag).brand;
   }
   if (pathname === '/config/cabinets') return pushConfig(bag, 'cabinets', { id: uid(), name: data.name });

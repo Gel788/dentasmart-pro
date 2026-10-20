@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ArrowRight, CalendarPlus, CheckCircle2, Phone, ShieldAlert, Wallet } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -117,12 +117,13 @@ export function Today({ owner }: { owner: boolean }) {
       {error && <p className={styles.error} role="alert"><AlertTriangle size={17} aria-hidden="true" />{error}</p>}
       <div className={styles.grid}>
         <section className={`${styles.m} ${styles.dateM}`} aria-label="Сегодня">
-          <h3>Сегодня</h3>
           <div className={styles.date}>
-            <h1>{title.charAt(0).toUpperCase() + title.slice(1)}</h1>
-            <p>{[`${day.counts.total} ${plural(day.counts.total, 'пациент', 'пациента', 'пациентов')}`, summary].filter(Boolean).join(' · ')}</p>
+            <div>
+              <h1>{title.charAt(0).toUpperCase() + title.slice(1)}</h1>
+              <p>{[`${day.counts.total} ${plural(day.counts.total, 'пациент', 'пациента', 'пациентов')}`, summary].filter(Boolean).join(' · ')}</p>
+            </div>
+            <Link className={styles.book} href="/schedule"><CalendarPlus size={17} aria-hidden="true" />Записать</Link>
           </div>
-          <Link className={styles.book} href="/schedule"><CalendarPlus size={17} aria-hidden="true" />Записать</Link>
         </section>
 
         {week && (
@@ -149,8 +150,6 @@ export function Today({ owner }: { owner: boolean }) {
             <dl className={styles.kpi}>
               <div><dt>Оплачено</dt><dd>{formatMoney(day.money.revenueToday)}</dd></div>
               <div><dt>Ждём оплаты</dt><dd>{formatMoney(day.money.dueToday)}</dd></div>
-              {month && <div><dt>Средний чек, месяц</dt><dd>{formatMoney(month.avgCheck)}</dd></div>}
-              {month && <div><dt>Неявки, месяц</dt><dd>{month.noShowRate}%</dd></div>}
             </dl>
           </section>
         )}
@@ -159,10 +158,20 @@ export function Today({ owner }: { owner: boolean }) {
           <article className={`${styles.m} ${styles.pack}`} data-live={chair ? '' : undefined} aria-label={chair ? 'Сейчас в кресле' : 'Следующий пациент'}>
             <div className={styles.band} />
             <div className={styles.face}>
-              <span className={styles.code}><i className={styles.k} data-code={chair ? 'chair' : 'next'} />{chair ? 'В кресле' : `Следующий, ${untilLabel(lead.startsAt, now)}`}{lead.cabinet ? ` · ${lead.cabinet}` : ''}</span>
               <h2><Link href={`/patients/${lead.patientId}`}>{lead.patient}</Link></h2>
-              <span className={styles.faceSub}>{[lead.service, lead.doctor].filter(Boolean).join(' · ') || 'Услуга не указана'}</span>
-              <div className={styles.dose}>{chair ? elapsedLabel(lead.startsAt, now) : clock(lead.startsAt)}<small>{clock(lead.startsAt)}–{clock(lead.endsAt)}</small></div>
+              <span className={styles.faceSub}>{[lead.cabinet, lead.service, lead.doctor].filter(Boolean).join(' · ') || 'Услуга не указана'}</span>
+              <div className={styles.dose} data-over={chair && overrun(lead, now) > 0 ? '' : undefined}>
+                {chair ? elapsedLabel(lead.startsAt, now) : clock(lead.startsAt)}
+                <small>
+                  <i className={styles.k} data-code={chair ? (overrun(lead, now) > 0 ? 'here' : 'chair') : 'next'} />
+                  {chair
+                    ? overrun(lead, now) > 0
+                      ? `в кресле, сверх плана на ${minutesLabel(overrun(lead, now))}`
+                      : `в кресле из ${minutesLabel(planned(lead))}`
+                    : `следующий, ${untilLabel(lead.startsAt, now)}`}
+                  {' · '}{clock(lead.startsAt)}–{clock(lead.endsAt)}
+                </small>
+              </div>
             </div>
             <dl className={styles.facts}>
               {alertLines(lead.alerts).map((line, index) => (
@@ -227,14 +236,14 @@ export function Today({ owner }: { owner: boolean }) {
         {lanes.length > 0 && (
           <section className={`${styles.m} ${styles.lanesM}`} aria-label="Загрузка кабинетов">
             <h3>Кабинеты <em>{String(span.from).padStart(2, '0')}:00–{String(span.to).padStart(2, '0')}:00 · сейчас {nowLabel}</em></h3>
-            <div className={styles.lanes}>
+            <div className={styles.lanes} style={{ '--hours': span.to - span.from } as CSSProperties}>
               {lanes.map((lane) => (
                 <Fragment key={lane.name}>
                   <span className={styles.laneName}>{lane.name}</span>
                   <div className={styles.lane}>
                     {lane.visits.map((visit) => (
                       <Link key={visit.id} href={`/visits/${visit.id}`} className={styles.block} data-code={codeOf(visit)} style={{ left: `${at(visit.startsAt)}%`, width: `${Math.max(2, at(visit.endsAt) - at(visit.startsAt))}%` }} title={`${clock(visit.startsAt)}–${clock(visit.endsAt)} ${visit.patient}`}>
-                        {visit.patient.split(' ')[0]}
+                        <span>{visit.patient.split(' ')[0]}</span>
                       </Link>
                     ))}
                     <i className={styles.nowLine} style={{ left: `${nowAt}%` }} aria-hidden="true" />
@@ -242,7 +251,7 @@ export function Today({ owner }: { owner: boolean }) {
                 </Fragment>
               ))}
               <div className={styles.hours} aria-hidden="true">
-                {Array.from({ length: Math.floor((span.to - span.from) / 2) + 1 }, (_, index) => <span key={index}>{String(span.from + index * 2).padStart(2, '0')}</span>)}
+                {Array.from({ length: Math.floor((span.to - span.from) / 2) + 1 }, (_, index) => <span key={index} style={{ left: `${((index * 2) / (span.to - span.from)) * 100}%` }}>{String(span.from + index * 2).padStart(2, '0')}</span>)}
               </div>
             </div>
           </section>
@@ -280,6 +289,8 @@ export function Today({ owner }: { owner: boolean }) {
               <dl className={styles.kpi}>
                 <div><dt>Выручка</dt><dd>{formatMoney(month.revenue)}</dd></div>
                 <div><dt>Визитов</dt><dd>{month.visits}</dd></div>
+                <div><dt>Средний чек</dt><dd>{formatMoney(month.avgCheck)}</dd></div>
+                <div><dt>Неявки</dt><dd>{month.noShowRate}%</dd></div>
               </dl>
             </>
           )}
@@ -337,6 +348,12 @@ function alertLines(alerts: string[]) {
   const allergies = alerts.filter((alert) => /^аллергия:/i.test(alert)).map((alert) => alert.replace(/^аллергия:\s*/i, '').toLowerCase());
   const other = alerts.filter((alert) => !/^аллергия:/i.test(alert));
   return [...(allergies.length ? [`Аллергия: ${allergies.join(', ')}`] : []), ...other];
+}
+
+const planned = (visit: Visit) => Math.max(0, Math.round((Date.parse(visit.endsAt) - Date.parse(visit.startsAt)) / 60000));
+const overrun = (visit: Visit, now: number) => Math.max(0, Math.floor((now - Date.parse(visit.endsAt)) / 60000));
+function minutesLabel(minutes: number) {
+  return minutes < 60 ? `${minutes} мин` : `${Math.floor(minutes / 60)} ч${minutes % 60 ? ` ${minutes % 60} мин` : ''}`;
 }
 
 function elapsedLabel(startsAt: string, now: number) {

@@ -36,7 +36,7 @@ export class ClinicConfigController {
 
   @Post('brand')
   @RequirePermissions('org.manage')
-  brand(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Body() body: Record<string, string>) {
+  brand(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Body() body: Record<string, unknown>) {
     return this.config.saveBrand(orgId, user.id, body);
   }
 

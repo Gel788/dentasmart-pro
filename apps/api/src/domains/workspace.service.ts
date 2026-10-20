@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ToothCondition, ToothFormulaType } from '@dentasmart/database';
-import { dayLoad, kopecks, medicalReviewDue, parseWorkHours, tzOffsetMinutes, wallDate } from '@dentasmart/shared';
+import { dayLoad, hoursOn, kopecks, medicalReviewDue, tzOffsetMinutes, visibleHours, wallDate, weekHoursOf } from '@dentasmart/shared';
 import { medicalView } from '../patients/patients.service';
 import { clinicianWhere } from './clinicians';
 import { assertPlace } from '../common/clinic-place';
@@ -1386,7 +1386,7 @@ export class WorkspaceService {
     if (days < 1 || days > 62) throw new BadRequestException('Период от 1 до 62 дней');
 
     const [org, branches] = await Promise.all([
-      this.prisma.organization.findUniqueOrThrow({ where: { id: orgId }, select: { workHours: true } }),
+      this.prisma.organization.findUniqueOrThrow({ where: { id: orgId }, select: { workHours: true, weekHours: true } }),
       this.prisma.branch.findMany({
         where: { organizationId: orgId, isActive: true },
         include: { cabinets: { where: { isActive: true }, select: { id: true } } },
@@ -1395,7 +1395,8 @@ export class WorkspaceService {
     ]);
     const timezone = branches[0]?.timezone ?? 'Europe/Moscow';
     const offset = tzOffsetMinutes(timezone, new Date(fromDay));
-    const hours = parseWorkHours(org.workHours);
+    const week = weekHoursOf(org.weekHours, org.workHours);
+    const dates = Array.from({ length: days }, (_, index) => new Date(fromDay + index * 86400000).toISOString().slice(0, 10));
     const chairs = branches.reduce((sum, branch) => sum + branch.cabinets.length, 0);
     const appointments = await this.prisma.appointment.findMany({
       where: {
@@ -1417,16 +1418,20 @@ export class WorkspaceService {
       to: toStr,
       timezone,
       offsetMinutes: offset,
-      hours,
+      // The widest working span of the range, for grids that show several days at once.
+      hours: visibleHours(dates.map((date) => hoursOn(week, date))),
+      week,
       chairs,
-      days: Array.from({ length: days }, (_, index) => {
-        const date = new Date(fromDay + index * 86400000).toISOString().slice(0, 10);
+      days: dates.map((date) => {
         const list = byDay.get(date) ?? [];
+        const open = hoursOn(week, date);
         return {
           date,
+          hours: open,
           ...dayLoad(list.map((v) => ({ id: v.id, startsAt: v.startsAt.toISOString(), endsAt: v.endsAt.toISOString(), status: v.status })), {
             chairs,
-            ...hours,
+            opensAt: open?.opensAt ?? 0,
+            closesAt: open?.closesAt ?? 0,
             tzOffsetMinutes: offset,
           }),
         };

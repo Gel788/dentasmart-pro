@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { WEEKDAYS_SHORT, weekHoursText, type WeekHours } from '@dentasmart/shared';
 import { api } from '@/lib/api';
 import { downloadJson, downloadReport } from '@/lib/download';
 import { formatMoney } from '@/lib/format';
@@ -21,7 +22,7 @@ type ServiceRow = {
   norms: Norm[];
 };
 type Bundle = {
-  brand: Record<string, string | null>;
+  brand: Record<string, string | null> & { weekHours?: WeekHours };
   services: ServiceRow[];
   stock: { id: string; name: string; sku: string | null; unit: string; minStock: number; quantity: number; cost: number; isActive: boolean }[];
   planTemplates: { id: string; name: string; note: string | null; isArchived: boolean }[];
@@ -127,7 +128,7 @@ export function ClinicSettings() {
           {section === 'price' && <Price data={data} query={q} flash={flash} />}
           {section === 'stock' && <Stock data={data} query={q} flash={flash} />}
           {section === 'templates' && <Templates data={data} query={q} flash={flash} aiPlans={data.aiPlans !== false} />}
-          {section === 'brand' && <Brand data={data} flash={flash} />}
+          {section === 'brand' && <><Brand data={data} flash={flash} /><Hours data={data} flash={flash} /></>}
           {section === 'chairs' && <Chairs data={data} flash={flash} />}
           {section === 'security' && <Panel title="Безопасность" hint="Вход по коду из приложения-аутентификатора для вашей учётки."><TwoFactor /></Panel>}
           {section === 'staff' && <Staff data={data} query={q} flash={flash} />}
@@ -236,7 +237,7 @@ function Templates({ data, query, flash, aiPlans }: { data: Bundle; query: strin
 }
 
 const BRAND_GROUPS: { title: string; fields: [string, string][] }[] = [
-  { title: 'Клиника', fields: [['name', 'Название'], ['phone', 'Телефон'], ['email', 'Почта'], ['address', 'Адрес'], ['workHours', 'Часы работы']] },
+  { title: 'Клиника', fields: [['name', 'Название'], ['phone', 'Телефон'], ['email', 'Почта'], ['address', 'Адрес']] },
   { title: 'Юрлицо', fields: [['legalName', 'Юрлицо'], ['inn', 'ИНН'], ['ogrn', 'ОГРН'], ['bankName', 'Банк'], ['bankAccount', 'Счёт'], ['bik', 'БИК']] },
   { title: 'Оформление', fields: [['logoUrl', 'Логотип (ссылка)'], ['brandColor', 'Цвет']] },
 ];
@@ -244,15 +245,16 @@ const BRAND_GROUPS: { title: string; fields: [string, string][] }[] = [
 function Brand({ data, flash }: { data: Bundle; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
   const [form, setForm] = useState(data.brand);
   const dirty = BRAND_GROUPS.some((group) => group.fields.some(([key]) => (form[key] ?? '') !== (data.brand[key] ?? '')));
+  const fieldsOnly = () => Object.fromEntries(BRAND_GROUPS.flatMap((group) => group.fields.map(([key]) => [key, form[key] ?? ''])));
   return (
-    <Panel title="Клиника" hint="Реквизиты печатаются в планах лечения, счетах и согласиях; часы работы задают сетку расписания.">
-      <form className="cfg-brand" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/brand', { method: 'POST', body: JSON.stringify(form) })); }}>
+    <Panel title="Клиника" hint="Реквизиты печатаются в планах лечения, счетах и согласиях.">
+      <form className="cfg-brand" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/brand', { method: 'POST', body: JSON.stringify(fieldsOnly()) })); }}>
         {BRAND_GROUPS.map((group) => (
           <fieldset key={group.title}>
             <legend>{group.title}</legend>
             {group.fields.map(([key, label]) => (
               <label key={key}>{label}
-                <input className="sd-input" value={form[key] ?? ''} placeholder={key === 'workHours' ? '09:00–20:00' : undefined} onChange={(event) => setForm({ ...form, [key]: event.target.value })} />
+                <input className="sd-input" value={form[key] ?? ''} onChange={(event) => setForm({ ...form, [key]: event.target.value })} />
               </label>
             ))}
           </fieldset>
@@ -260,6 +262,63 @@ function Brand({ data, flash }: { data: Bundle; flash: (work: () => Promise<unkn
         <div className="cfg-save">
           <button className="sd-btn" type="submit" disabled={!dirty}>Сохранить</button>
           {dirty && <button className="sd-btn-ghost" type="button" onClick={() => setForm(data.brand)}>Отменить</button>}
+        </div>
+      </form>
+    </Panel>
+  );
+}
+
+const toTime = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+const fromTime = (value: string) => {
+  const [h, m] = value.split(':').map(Number);
+  return Number.isFinite(h) ? h * 60 + (Number.isFinite(m) ? m : 0) : 0;
+};
+const DAY_NAMES = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
+
+/** Opening hours per weekday: the calendar shows only these, the rest opens on request. */
+function Hours({ data, flash }: { data: Bundle; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
+  const initial = data.brand.weekHours ?? Array.from({ length: 7 }, () => ({ opensAt: 540, closesAt: 1200 }));
+  const [week, setWeek] = useState<WeekHours>(initial);
+  const [error, setError] = useState('');
+  const dirty = JSON.stringify(week) !== JSON.stringify(initial);
+  const setDay = (index: number, value: WeekHours[number]) => setWeek(week.map((day, i) => (i === index ? value : day)));
+  const copyToWeekdays = (index: number) => setWeek(week.map((day, i) => (i < 5 ? (week[index] ? { ...week[index]! } : null) : day)));
+  const bad = week.findIndex((day) => day && day.opensAt >= day.closesAt);
+
+  return (
+    <Panel title="Часы работы" hint="В расписании видно только рабочее время. Остальные часы открываются кнопкой «Всё время» — туда тоже можно записать.">
+      <form
+        className="cfg-hours"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (bad >= 0) { setError(`${DAY_NAMES[bad]}: закрытие должно быть позже открытия`); return; }
+          setError('');
+          void flash(() => api('/config/brand', { method: 'POST', body: JSON.stringify({ weekHours: week }) }));
+        }}
+      >
+        <ul>
+          {week.map((day, index) => (
+            <li key={DAY_NAMES[index]} data-closed={!day || undefined} data-bad={index === bad || undefined}>
+              <label className="cfg-hours-day">
+                <input type="checkbox" aria-label={`${DAY_NAMES[index]} — рабочий день`} checked={!!day} onChange={(event) => setDay(index, event.target.checked ? { opensAt: 540, closesAt: 1200 } : null)} />
+                <span><b>{DAY_NAMES[index]}</b><small>{day ? 'рабочий' : 'выходной'}</small></span>
+              </label>
+              {day ? (
+                <span className="cfg-hours-time">
+                  <label><span className="sr-only">{DAY_NAMES[index]}, открытие</span><input className="sd-input" type="time" step={900} value={toTime(day.opensAt)} onChange={(event) => setDay(index, { ...day, opensAt: fromTime(event.target.value) })} /></label>
+                  <span aria-hidden="true">—</span>
+                  <label><span className="sr-only">{DAY_NAMES[index]}, закрытие</span><input className="sd-input" type="time" step={900} value={toTime(day.closesAt === 1440 ? 1439 : day.closesAt)} onChange={(event) => setDay(index, { ...day, closesAt: fromTime(event.target.value) })} /></label>
+                </span>
+              ) : <span className="cfg-hours-off">не работает</span>}
+              {index === 0 && <button className="sd-btn-ghost cfg-hours-copy" type="button" onClick={() => copyToWeekdays(0)}>На все будни</button>}
+            </li>
+          ))}
+        </ul>
+        <p className="cfg-hours-sum">{weekHoursText(week)}</p>
+        {error && <p className="cfg-hours-error" role="alert">{error}</p>}
+        <div className="cfg-save">
+          <button className="sd-btn" type="submit" disabled={!dirty}>Сохранить часы</button>
+          {dirty && <button className="sd-btn-ghost" type="button" onClick={() => { setWeek(initial); setError(''); }}>Отменить</button>}
         </div>
       </form>
     </Panel>

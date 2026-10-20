@@ -42,6 +42,7 @@
   --panel-w: 320px;
   --top-h: 0px;
   --font-display: var(--font-body);
+  --font-mono: var(--font-body);
   --ok: #0b8a5f;
   --ok-soft: #e4f4ed;
   color-scheme: light;
@@ -104,7 +105,7 @@ button { cursor: pointer; }
 ::selection { background: var(--accent-soft); color: var(--text); }
 :focus-visible { outline: 2px solid var(--border-strong); outline-offset: 2px; }
 input, textarea { caret-color: var(--accent); }
-html { scrollbar-color: #b9b9b4 transparent; }
+html { scrollbar-color: var(--border) transparent; }
 .sd-num, time { font-variant-numeric: tabular-nums; }
 
 .sd-app {
@@ -1099,14 +1100,14 @@ html.dark .ai-chips button.on { color: #121212; }
 .sd-brand-text strong { font-size: 14.5px; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; }
 .sd-brand-text span { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
 .sd-brand-text span:first-letter { text-transform: uppercase; }
-.sd-search { display: flex; align-items: center; gap: 10px; height: 38px; margin: 0 0 12px; padding: 0 8px 0 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); font-size: 14px; text-align: left; transition: border-color 140ms ease; }
+.sd-search { display: flex; align-items: center; gap: 10px; height: 44px; margin: 0 0 12px; padding: 0 8px 0 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); font-size: 14px; text-align: left; transition: border-color 140ms ease; }
 .sd-search svg { width: 16px; height: 16px; flex: none; color: var(--text); }
 .sd-search-text { flex: 1; min-width: 0; }
 .sd-search:hover { border-color: var(--border-strong); }
 .sd-search kbd, kbd.sd-kbd { flex: none; margin-left: auto; border: 1px solid var(--border); padding: 0 5px; font-family: var(--font-body), sans-serif; font-size: 11.5px; color: var(--muted); background: var(--surface-solid); }
 .sd-nav-list { display: flex; flex-direction: column; gap: 1px; }
 .sd-nav-group { margin: 14px 10px 4px; color: var(--muted); font-size: 12px; font-weight: 600; }
-.sd-link { display: flex; align-items: center; gap: 11px; min-height: 38px; padding: 0 10px; border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 14px; font-weight: 500; text-decoration: none; text-align: left; transition: background 120ms ease, color 120ms ease; }
+.sd-link { display: flex; align-items: center; gap: 11px; min-height: 44px; padding: 0 10px; border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 14px; font-weight: 500; text-decoration: none; text-align: left; transition: background 120ms ease, color 120ms ease; }
 .sd-link-ico { display: grid; place-items: center; width: 18px; height: 18px; flex: none; }
 .sd-link svg { width: 17px; height: 17px; stroke-width: 1.8; }
 .sd-nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1114,12 +1115,12 @@ html.dark .ai-chips button.on { color: #121212; }
 .sd-link.active, .sd-link[aria-current='page'] { background: var(--text); color: var(--surface-solid); font-weight: 600; }
 .sd-link-more { display: none; }
 .sd-nav-foot { display: flex; flex-direction: column; gap: 1px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
-.sd-user { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 4px 0; border-top: 1px solid var(--border); }
+.sd-user { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto auto; align-items: center; gap: 2px 6px; margin-top: 8px; padding: 8px 4px 0; border-top: 1px solid var(--border); }
 .sd-avatar { display: grid; place-items: center; width: 32px; height: 32px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text); font-size: 12.5px; font-weight: 700; }
 .sd-user-text { display: flex; flex-direction: column; min-width: 0; }
 .sd-user-text b { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sd-user-text span { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sd-user-btn { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid transparent; background: transparent; color: var(--text-secondary); }
+.sd-user-btn { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid transparent; background: transparent; color: var(--text-secondary); }
 .sd-user-btn:hover { border-color: var(--border); color: var(--text); }
 .sd-user-btn svg { width: 16px; height: 16px; }
 .sd-nav :focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -1242,4 +1243,25 @@ html.dark .sd-login-submit { color: #121212; }
   .sd-login-mobile-brand .sd-mark { background: var(--rail); color: var(--rail-mint); box-shadow: none; }
   .sd-login-mobile-brand strong { font-family: var(--font-display), sans-serif; font-size: 15px; font-weight: 600; }
   .sd-login-title h2 { font-size: 28px; }
+}
+
+/* Settings: opening hours per weekday. */
+.cfg-hours ul { margin: 0 0 12px; padding: 0; list-style: none; border-top: 1px solid var(--border); }
+.cfg-hours li { display: grid; grid-template-columns: minmax(170px, 220px) auto 1fr; align-items: center; gap: 8px 16px; min-height: 56px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.cfg-hours-day { display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; }
+.cfg-hours-day input { width: 20px; height: 20px; accent-color: var(--accent); }
+.cfg-hours-day span { display: flex; flex-direction: column; }
+.cfg-hours-day b { font-weight: 600; font-size: 14.5px; }
+.cfg-hours-day small { color: var(--muted); font-size: 12.5px; }
+.cfg-hours li[data-closed] .cfg-hours-day b { color: var(--muted); }
+.cfg-hours-time { display: inline-flex; align-items: center; gap: 8px; }
+.cfg-hours-time .sd-input { width: 118px; height: 44px; font-variant-numeric: tabular-nums; }
+.cfg-hours li[data-bad] .sd-input { border-color: var(--danger); }
+.cfg-hours-off { color: var(--muted); font-size: 14px; }
+.cfg-hours-copy { justify-self: start; min-height: 40px; }
+.cfg-hours-sum { margin: 0 0 12px; color: var(--text-secondary); font-size: 14px; }
+.cfg-hours-error { margin: 0 0 12px; color: var(--danger); font-weight: 600; font-size: 14px; }
+@media (max-width: 640px) {
+  .cfg-hours li { grid-template-columns: 1fr; padding: 10px 0; }
+  .cfg-hours-copy { grid-row: auto; }
 }

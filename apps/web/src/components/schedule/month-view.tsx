@@ -28,12 +28,13 @@ export function MonthView({ days, selected, offset, onPick }: { days: RangeDay[]
             role="gridcell"
             className={styles.mday}
             data-today={date === today}
+            data-closed={day.hours === null || undefined}
             aria-current={date === selected ? 'date' : undefined}
             onClick={() => onPick(date)}
           >
             <header><b>{Number(date.slice(8))}</b><span>{day.visits ? `${percent}%` : ''}</span></header>
             <div className={styles.meter} aria-hidden="true"><i style={{ width: `${percent}%` }} /></div>
-            <p>{day.visits ? `${day.visits} ${plural(day.visits, 'визит', 'визита', 'визитов')}` : 'Свободно'}</p>
+            <p>{day.visits ? `${day.visits} ${plural(day.visits, 'визит', 'визита', 'визитов')}` : day.hours === null ? 'Выходной' : 'Свободно'}</p>
           </button>
         );
       })}

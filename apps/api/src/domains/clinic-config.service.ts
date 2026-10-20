@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@dentasmart/database';
+import { normalizeWeekHours, weekHoursOf, weekHoursText, type WeekHours } from '@dentasmart/shared';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -93,6 +94,7 @@ export class ClinicConfigService {
         bankAccount: org.bankAccount,
         bik: org.bik,
         workHours: org.workHours,
+        weekHours: weekHoursOf(org.weekHours, org.workHours),
       },
       services: services.map((service) => ({
         id: service.id,
@@ -173,14 +175,23 @@ export class ClinicConfigService {
     };
   }
 
-  async saveBrand(orgId: string, userId: string, body: Record<string, string | null | undefined>) {
+  async saveBrand(orgId: string, userId: string, body: Record<string, unknown>) {
     const data: Prisma.OrganizationUpdateInput = {};
     for (const key of ['name', 'legalName', 'phone', 'email', 'inn', 'ogrn', 'kpp', 'address', 'logoUrl', 'brandColor', 'bankName', 'bankAccount', 'bik', 'workHours'] as const) {
-      if (body[key] !== undefined) (data as Record<string, string | null>)[key] = body[key]?.trim() || null;
+      const value = body[key];
+      if (value !== undefined && value !== null && typeof value !== 'string') throw new BadRequestException('Неверное значение поля');
+      if (value !== undefined) (data as Record<string, string | null>)[key] = value?.trim() || null;
+    }
+    // The weekly schedule wins over the one-line text, which is kept as its readable summary.
+    if (body.weekHours !== undefined) {
+      let week: WeekHours;
+      try { week = normalizeWeekHours(body.weekHours); } catch (err) { throw new BadRequestException((err as Error).message); }
+      data.weekHours = week as unknown as Prisma.InputJsonValue;
+      data.workHours = weekHoursText(week);
     }
     if (typeof body.name === 'string' && body.name.trim()) data.name = body.name.trim();
     const org = await this.prisma.organization.update({ where: { id: orgId }, data });
-    await this.trail(orgId, userId, 'Organization', orgId, 'UPDATE', { name: org.name, brandColor: org.brandColor });
+    await this.trail(orgId, userId, 'Organization', orgId, 'UPDATE', { name: org.name, brandColor: org.brandColor, ...(body.weekHours !== undefined ? { workHours: org.workHours } : {}) });
     return { name: org.name, brandColor: org.brandColor };
   }
 

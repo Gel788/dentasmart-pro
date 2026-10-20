@@ -89,6 +89,81 @@ export function parseWorkHours(text: string | null | undefined) {
   return { opensAt, closesAt };
 }
 
+/** One day's opening hours in clinic-local minutes; null when the clinic is closed that day. */
+export type DayHours = { opensAt: number; closesAt: number } | null;
+/** Seven days, Monday first. */
+export type WeekHours = DayHours[];
+
+export const WEEKDAYS_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+const hhmm = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+/** Checks a weekly schedule sent by the settings screen; throws a message the clinic can act on. */
+export function normalizeWeekHours(input: unknown): WeekHours {
+  if (!Array.isArray(input) || input.length !== 7) throw new Error('Нужны часы на все семь дней недели');
+  return input.map((day, index) => {
+    if (day === null || day === undefined || day === false) return null;
+    const opensAt = Number((day as { opensAt?: unknown }).opensAt);
+    const closesAt = Number((day as { closesAt?: unknown }).closesAt);
+    const ok = Number.isInteger(opensAt) && Number.isInteger(closesAt) && opensAt >= 0 && closesAt <= 24 * 60 && opensAt < closesAt;
+    if (!ok) throw new Error(`${WEEKDAYS_SHORT[index]}: время закрытия должно быть позже открытия`);
+    return { opensAt, closesAt };
+  });
+}
+
+/** The stored weekly schedule, or the old one-line setting applied to every day. */
+export function weekHoursOf(stored: unknown, text?: string | null): WeekHours {
+  try {
+    return normalizeWeekHours(stored);
+  } catch {
+    const day = parseWorkHours(text);
+    return Array.from({ length: 7 }, () => ({ ...day }));
+  }
+}
+
+/** Hours for a clinic-local date (YYYY-MM-DD). */
+export function hoursOn(week: WeekHours, date: string): DayHours {
+  const weekday = (new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7;
+  return week[weekday] ?? null;
+}
+
+/** The weekly schedule as one readable line: «Пн–Пт 15:00–22:00, Вс 08:00–15:00». */
+export function weekHoursText(week: WeekHours) {
+  const parts: string[] = [];
+  let index = 0;
+  while (index < 7) {
+    const day = week[index];
+    let end = index;
+    while (end + 1 < 7 && sameHours(week[end + 1], day)) end += 1;
+    if (day) {
+      const days = end > index ? `${WEEKDAYS_SHORT[index]}–${WEEKDAYS_SHORT[end]}` : WEEKDAYS_SHORT[index];
+      parts.push(`${days} ${hhmm(day.opensAt)}–${hhmm(day.closesAt)}`);
+    }
+    index = end + 1;
+  }
+  return parts.length ? parts.join(', ') : 'Выходные все дни';
+}
+
+function sameHours(a: DayHours, b: DayHours) {
+  return a === b || (!!a && !!b && a.opensAt === b.opensAt && a.closesAt === b.closesAt);
+}
+
+/**
+ * The span a calendar shows: the opening hours of the visible days, widened to every visit so nothing
+ * booked outside hours is ever hidden. Days that are all closed with no visits fall back to 08–20.
+ */
+export function visibleHours(days: DayHours[], visitMinutes: { start: number; end: number }[] = []) {
+  const open = days.filter((day): day is NonNullable<DayHours> => !!day);
+  let opensAt = open.length ? Math.min(...open.map((day) => day.opensAt)) : Infinity;
+  let closesAt = open.length ? Math.max(...open.map((day) => day.closesAt)) : -Infinity;
+  for (const visit of visitMinutes) {
+    opensAt = Math.min(opensAt, visit.start);
+    closesAt = Math.max(closesAt, visit.end);
+  }
+  if (!Number.isFinite(opensAt) || !Number.isFinite(closesAt)) return { ...DEFAULT_HOURS };
+  return { opensAt: Math.floor(opensAt / 60) * 60, closesAt: Math.min(24 * 60, Math.ceil(closesAt / 60) * 60) };
+}
+
 /** Minutes the clinic's wall clock is ahead of UTC on that date; Moscow when the zone is unknown. */
 export function tzOffsetMinutes(timeZone: string, at: Date) {
   try {

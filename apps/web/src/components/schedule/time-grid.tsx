@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { layoutLanes } from '@dentasmart/shared';
+import { layoutLanes, type DayHours } from '@dentasmart/shared';
 import { clock, STATUS, todayIn, wallMinutes, type BoardVisit, type Column } from './model';
 import styles from './schedule.module.css';
 
@@ -12,6 +12,8 @@ type Props = {
   visits: BoardVisit[];
   offset: number;
   hours: { opensAt: number; closesAt: number };
+  /** Each column's opening hours; time outside them is shaded but still bookable. */
+  dayHours?: (date: string) => DayHours;
   selectedId: string | null;
   pendingIds: Set<string>;
   onSelect: (visit: BoardVisit) => void;
@@ -21,7 +23,7 @@ type Props = {
 };
 
 /** Columns × time. Card height follows the visit's length; overlapping visits share their column. */
-export function TimeGrid({ columns, visits, offset, hours, selectedId, pendingIds, onSelect, onSlot, onMove, label }: Props) {
+export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId, pendingIds, onSelect, onSlot, onMove, label }: Props) {
   const startHour = Math.floor(hours.opensAt / 60);
   const endHour = Math.ceil(hours.closesAt / 60);
   const first = startHour * 60;
@@ -95,6 +97,9 @@ export function TimeGrid({ columns, visits, offset, hours, selectedId, pendingId
               if (visit) onMove(visit, column, minutesAt(event));
             }}
           >
+            {dayHours && closedBands(dayHours(column.date), first, first + span).map((band) => (
+              <div key={band.from} className={styles.closed} style={{ top: at(band.from), height: `calc(${(band.to - band.from) / 60} * ${hourPx})` }} aria-hidden="true" />
+            ))}
             {own.map((visit) => {
               const start = wallMinutes(visit.startsAt, offset);
               const end = wallMinutes(visit.endsAt, offset);
@@ -139,4 +144,13 @@ export function TimeGrid({ columns, visits, offset, hours, selectedId, pendingId
       </div>
     </div>
   );
+}
+
+/** Stretches of the visible span outside the day's opening hours (the whole span on a day off). */
+function closedBands(day: DayHours, from: number, to: number) {
+  if (!day) return [{ from, to }];
+  const bands: { from: number; to: number }[] = [];
+  if (day.opensAt > from) bands.push({ from, to: Math.min(to, day.opensAt) });
+  if (day.closesAt < to) bands.push({ from: Math.max(from, day.closesAt), to });
+  return bands.filter((band) => band.to > band.from);
 }

@@ -49,7 +49,7 @@ describe('loadLevel', () => {
   });
 });
 
-import { parseWorkHours, tzOffsetMinutes, wallDate } from './schedule';
+import { hoursOn, normalizeWeekHours, parseWorkHours, tzOffsetMinutes, visibleHours, wallDate, weekHoursOf, weekHoursText } from './schedule';
 
 describe('часы работы и часовой пояс', () => {
   it('читает часы в разных записях и падает на 8–20', () => {
@@ -63,5 +63,40 @@ describe('часы работы и часовой пояс', () => {
     expect(tzOffsetMinutes('Europe/Moscow', new Date('2026-10-20T12:00:00Z'))).toBe(180);
     expect(wallDate('2026-10-19T22:30:00.000Z', 180)).toBe('2026-10-20');
     expect(tzOffsetMinutes('Not/AZone', new Date())).toBe(180);
+  });
+});
+
+describe('weekly hours', () => {
+  const evening = { opensAt: 15 * 60, closesAt: 22 * 60 };
+  const morning = { opensAt: 8 * 60, closesAt: 15 * 60 };
+  const week = [evening, evening, evening, evening, evening, null, morning];
+
+  it('keeps a valid week and refuses a broken day', () => {
+    expect(normalizeWeekHours(week)).toEqual(week);
+    expect(() => normalizeWeekHours([evening])).toThrow(/семь дней/);
+    expect(() => normalizeWeekHours([{ opensAt: 900, closesAt: 600 }, null, null, null, null, null, null])).toThrow(/Пн/);
+  });
+
+  it('falls back to the old one-line setting for every day', () => {
+    expect(weekHoursOf(null, '09:00–20:00')).toEqual(Array.from({ length: 7 }, () => ({ opensAt: 540, closesAt: 1200 })));
+    expect(weekHoursOf(week, '09:00–20:00')).toEqual(week);
+  });
+
+  it('finds the hours of a date by weekday', () => {
+    expect(hoursOn(week, '2026-10-19')).toEqual(evening);
+    expect(hoursOn(week, '2026-10-24')).toBeNull();
+    expect(hoursOn(week, '2026-10-25')).toEqual(morning);
+  });
+
+  it('reads as one line', () => {
+    expect(weekHoursText(week)).toBe('Пн–Пт 15:00–22:00, Вс 08:00–15:00');
+    expect(weekHoursText([null, null, null, null, null, null, null])).toBe('Выходные все дни');
+  });
+
+  it('shows working hours but never hides a visit outside them', () => {
+    expect(visibleHours([evening])).toEqual(evening);
+    expect(visibleHours([evening], [{ start: 13 * 60 + 30, end: 14 * 60 + 15 }])).toEqual({ opensAt: 13 * 60, closesAt: 22 * 60 });
+    expect(visibleHours([null])).toEqual({ opensAt: 480, closesAt: 1200 });
+    expect(visibleHours([evening, morning])).toEqual({ opensAt: 480, closesAt: 1320 });
   });
 });

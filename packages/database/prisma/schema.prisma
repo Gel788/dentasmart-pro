@@ -27,6 +27,8 @@ model Organization {
   bankAccount String?
   bik         String?
   workHours   String?
+  /// Opening hours per weekday, Monday first: [{ opensAt, closesAt } in clinic-local minutes | null when closed].
+  weekHours   Json?
   /// Whether the plan builder may draft plans from findings («Быстрый план»).
   aiPlans     Boolean  @default(true)
   isActive    Boolean  @default(true)

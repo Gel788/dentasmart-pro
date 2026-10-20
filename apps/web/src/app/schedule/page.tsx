@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import type { VisitStatus } from '@dentasmart/shared';
+import { hoursOn, visibleHours, weekHoursOf, type DayHours, type VisitStatus } from '@dentasmart/shared';
 import { Protected } from '@/components/protected';
 import { Agenda } from '@/components/schedule/agenda';
 import { MonthStrip } from '@/components/schedule/month-strip';
@@ -47,6 +47,8 @@ function Calendar() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const [tick, setTick] = useState(0);
+  // Outside opening hours stays hidden until asked for; then the whole day opens for a booking out of hours.
+  const [allHours, setAllHours] = useState(false);
 
   const offset = month?.offsetMinutes ?? 180;
 
@@ -159,7 +161,7 @@ function Calendar() {
   const book = () => {
     if (!shell || !date) return;
     const now = wallMinutes(new Date().toISOString(), offset);
-    const opens = month?.hours.opensAt ?? 480;
+    const opens = (date ? hoursOfDay(date)?.opensAt : null) ?? month?.hours.opensAt ?? 480;
     const minutes = date === todayIn(offset) ? Math.max(opens, Math.ceil(now / 15) * 15) : opens;
     const column = columns[0];
     if (column) openSlot(column, minutes);
@@ -213,6 +215,19 @@ function Calendar() {
         : `${dayTitle(weekFrom, { day: 'numeric', month: 'short' })} – ${dayTitle(addDays(weekFrom, 6), { day: 'numeric', month: 'short' })}`;
   const daySummary = month?.days.find((item) => item.date === date);
 
+  const weekHours = month?.week ?? weekHoursOf(null, null);
+  function hoursOfDay(day: string): DayHours {
+    return hoursOn(weekHours, day);
+  }
+  const shownDates = view === 'week' ? Array.from({ length: 7 }, (_, index) => addDays(weekFrom, index)) : date ? [date] : [];
+  const shownVisits = view === 'week' ? weekVisits : dayVisits;
+  const gridHours = allHours
+    ? { opensAt: 0, closesAt: 24 * 60 }
+    : visibleHours(shownDates.map(hoursOfDay), shownVisits.map((visit) => ({ start: wallMinutes(visit.startsAt, offset), end: wallMinutes(visit.endsAt, offset) })));
+  const dayOff = view === 'day' && !!date && !hoursOfDay(date);
+  const todayHours = date ? hoursOfDay(date) : null;
+  const hoursLabel = (day: DayHours) => (day ? `${clock(day.opensAt)}–${clock(day.closesAt)}` : 'выходной');
+
   return (
     <div className={styles.page}>
       <div className={styles.bar}>
@@ -260,14 +275,28 @@ function Calendar() {
       {shell && month && week && (
         <div className={styles.body} data-view={view}>
           <div className={styles.work}>
-            {view === 'day' && (
+            {(view === 'day' || view === 'week') && (
+              <div className={styles.hoursBar}>
+                <b>{view === 'day' ? `Часы работы: ${hoursLabel(todayHours)}` : 'Рабочие часы по графику'}</b>
+                <span>{allHours ? 'Показано всё время; нерабочее заштриховано, туда тоже можно записать.' : 'Нерабочее время скрыто.'}</span>
+                <button type="button" className="sd-btn-ghost" aria-pressed={allHours} onClick={() => setAllHours((on) => !on)}>{allHours ? 'Только рабочие часы' : 'Всё время'}</button>
+              </div>
+            )}
+            {view === 'day' && dayOff && !allHours && dayVisits.length === 0 && (
+              <div className={styles.dayOff}>
+                <h2>Выходной по графику</h2>
+                <p>В этот день клиника не работает. Если нужно принять пациента, откройте всё время и запишите в свободный час.</p>
+                <button type="button" className="sd-btn" onClick={() => setAllHours(true)}>Показать всё время</button>
+              </div>
+            )}
+            {view === 'day' && !(dayOff && !allHours && dayVisits.length === 0) && (
               columns.length ? (
-                <TimeGrid label="День по креслам" columns={columns} visits={dayVisits} offset={offset} hours={month.hours} selectedId={selectedId} pendingIds={pending}
+                <TimeGrid label="День по креслам" columns={columns} visits={dayVisits} offset={offset} hours={gridHours} dayHours={hoursOfDay} selectedId={selectedId} pendingIds={pending}
                   onSelect={(visit) => setSelectedId(visit.id)} onSlot={openSlot} onMove={move} />
               ) : <p className={styles.empty}>В клинике пока нет кресел. Добавьте их в настройках, чтобы записывать пациентов.</p>
             )}
             {view === 'week' && (
-              <TimeGrid label="Неделя" columns={columns} visits={weekVisits} offset={offset} hours={month.hours} selectedId={selectedId} pendingIds={pending}
+              <TimeGrid label="Неделя" columns={columns} visits={weekVisits} offset={offset} hours={gridHours} dayHours={hoursOfDay} selectedId={selectedId} pendingIds={pending}
                 onSelect={(visit) => setSelectedId(visit.id)} onSlot={openSlot} onMove={move} />
             )}
             {view === 'month' && <MonthView days={month.days} selected={date} offset={offset} onPick={pick} />}

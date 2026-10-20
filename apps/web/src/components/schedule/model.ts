@@ -1,4 +1,4 @@
-import type { VisitStatus } from '@dentasmart/shared';
+import type { DayHours, VisitStatus } from '@dentasmart/shared';
 
 export type BoardVisit = {
   id: string;
@@ -22,13 +22,14 @@ export type DayShell = {
   appointments: BoardVisit[];
 };
 
-export type RangeDay = { date: string; bookedMinutes: number; capacityMinutes: number; ratio: number; visits: number };
+export type RangeDay = { date: string; bookedMinutes: number; capacityMinutes: number; ratio: number; visits: number; hours?: DayHours };
 
 export type RangePayload = {
   from: string;
   to: string;
   offsetMinutes: number;
   hours: { opensAt: number; closesAt: number };
+  week?: DayHours[];
   chairs: number;
   days: RangeDay[];
   appointments: BoardVisit[];
