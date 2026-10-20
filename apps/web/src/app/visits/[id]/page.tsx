@@ -218,7 +218,7 @@ function Chair() {
             {live && medicalWrite && (
               <button type="button" className="sd-btn" disabled={!!busy} onClick={() => setClosing(true)}>Завершить визит</button>
             )}
-            {closed && <Link className="sd-btn-ghost" href="/finance">Счета и оплата</Link>}
+            {closed && <Link className="sd-btn-ghost" href={`/finance?patient=${encodeURIComponent(visit.patient.lastName)}`}>К оплате</Link>}
           </div>
         </div>
       </header>
@@ -375,7 +375,7 @@ function Chair() {
           <p>{doneHere.length ? `Выполнено: ${doneHere.map((line) => `${line.title}${line.toothNum ? ` (${line.toothNum})` : ''}`).join(', ')}.` : 'Услуги из плана на этом визите не отмечены.'}</p>
           <p>{visit.debt > 0 ? `К оплате у пациента: ${formatMoney(visit.debt)}.` : 'Долгов у пациента нет.'} Материалы списаны по нормам услуг.</p>
           <div>
-            <Link className="sd-btn" href="/finance">Принять оплату</Link>
+            <Link className="sd-btn" href={`/finance?patient=${encodeURIComponent(visit.patient.lastName)}`}>Принять оплату</Link>
             <button type="button" className="sd-btn-ghost" onClick={() => window.print()}>Распечатать протокол</button>
           </div>
         </section>

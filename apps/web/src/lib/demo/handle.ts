@@ -228,6 +228,7 @@ function read(path: string, token: string): unknown {
   const prefixed = Object.keys(bag.gets).find((key) => key.startsWith(`${pathname}?`));
   if (prefixed) return bag.gets[prefixed];
 
+  if (pathname === '/finance/desk') return demoDesk(bag);
   if (pathname === '/finance/cash-shift/current') {
     const key = Object.keys(bag.gets).find((item) => item.startsWith('/finance/cash-shift/current'));
     return key ? bag.gets[key] : null;
@@ -533,12 +534,21 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
   if (stockDone) return finishInventory(bag);
   const closeShift = pathname.match(/^\/finance\/cash-shift\/([^/]+)\/close$/);
   if (closeShift) {
+    let result: AnyRec | null = null;
     for (const key of Object.keys(bag.gets)) {
       if (!key.startsWith('/finance/cash-shift/current')) continue;
       const shift = bag.gets[key] as AnyRec | null;
-      if (shift?.id === closeShift[1]) bag.gets[key] = { ...shift, status: 'CLOSED', closingCash: String(data.closingCash ?? 0) };
+      if (shift?.id !== closeShift[1] || shift.status !== 'OPEN') continue;
+      const cash = ((bag.gets['/finance/payments'] ?? []) as AnyRec[])
+        .filter((row) => row.method === 'CASH' && String(row.paidAt) >= String(shift.openedAt))
+        .reduce((acc, row) => acc + kopecks(row.amount), 0);
+      const expected = kopecks(shift.openingCash) + cash;
+      const counted = kopecks(data.closingCash ?? 0);
+      result = { ...shift, status: 'CLOSED', closingCash: fromKopecks(counted), expectedCash: fromKopecks(expected), difference: fromKopecks(counted - expected) };
+      bag.gets[key] = result;
     }
-    return { ok: true };
+    if (!result) throw new ApiError('Смену уже закрыли', 400, {});
+    return result;
   }
   if (pathname === '/finance/cash-shift/open') {
     const opened = { id: uid(), status: 'OPEN', openingCash: String(data.openingCash ?? data.amount ?? 0), openedAt: anchorNow() };
@@ -2041,6 +2051,51 @@ function addPayment(bag: Bag, data: AnyRec) {
     summary.paymentCount = Number(summary.paymentCount ?? 0) + 1;
   }
   return row;
+}
+
+/** Mirrors FinanceService.desk on the demo's anchored dates. */
+function demoDesk(bag: Bag) {
+  const now = anchorNow();
+  const day = now.slice(0, 10);
+  const invoices = (bag.gets['/finance/invoices'] ?? []) as AnyRec[];
+  const payments = (bag.gets['/finance/payments'] ?? []) as AnyRec[];
+  const visitToday = new Map(bag.appointments.filter((row) => wallDate(row.startsAt, 180) === day && !['CANCELLED', 'NO_SHOW'].includes(row.status)).map((row) => [row.patientId, row]));
+  const due = invoices
+    .filter((row) => ['ISSUED', 'PARTIAL'].includes(row.status))
+    .map((row) => {
+      const left = Math.max(0, kopecks(row.totalAmount) - kopecks(row.discountAmount) - kopecks(row.paidAmount));
+      const patient = findPatient(bag, row.patientId);
+      const today = visitToday.get(row.patientId);
+      return {
+        invoiceId: row.id, number: row.number, createdAt: row.createdAt ?? now, dueDate: row.dueDate ?? null, promiseNote: row.promiseNote ?? null,
+        patient: { id: row.patientId, name: personName(patient ?? row.patient), phone: patient?.phone ?? null },
+        total: fromKopecks(kopecks(row.totalAmount)), discount: fromKopecks(kopecks(row.discountAmount)), paid: fromKopecks(kopecks(row.paidAmount)), due: fromKopecks(left), left,
+        visitToday: today ? { startsAt: today.startsAt, status: today.status } : null,
+      };
+    })
+    .filter((row) => row.left > 0)
+    .sort((a, b) => Number(!!b.visitToday) - Number(!!a.visitToday) || String(b.createdAt).localeCompare(String(a.createdAt)));
+  const todays = payments.filter((row) => wallDate(row.paidAt, 180) === day);
+  const sum = (rows: AnyRec[]) => rows.reduce((acc, row) => acc + kopecks(row.amount), 0);
+  return {
+    day, timezone: 'Europe/Moscow', branchId: null,
+    totals: {
+      revenueToday: fromKopecks(sum(todays)),
+      cashToday: fromKopecks(sum(todays.filter((row) => row.method === 'CASH'))),
+      otherToday: fromKopecks(sum(todays.filter((row) => row.method !== 'CASH'))),
+      receivable: fromKopecks(due.reduce((acc, row) => acc + row.left, 0)),
+      openInvoices: due.length,
+      dueToday: fromKopecks(due.filter((row) => row.visitToday).reduce((acc, row) => acc + row.left, 0)),
+    },
+    due: due.map(({ left: _left, ...row }) => row),
+    payments: todays.map((row) => {
+      const amount = kopecks(row.amount);
+      const refunded = Math.abs(sum(payments.filter((other) => other.refundOfId === row.id)));
+      const patient = findPatient(bag, row.patientId);
+      const invoice = invoices.find((item) => item.id === row.invoiceId);
+      return { id: row.id, paidAt: row.paidAt, amount: fromKopecks(amount), method: row.method, isRefund: amount < 0, refundable: amount > 0 ? fromKopecks(Math.max(0, amount - refunded)) : '0.00', patient: { id: row.patientId, name: personName(patient) }, invoiceNumber: invoice?.number ?? null };
+    }),
+  };
 }
 
 function discountInvoice(bag: Bag, id: string, discountAmount: number) {
