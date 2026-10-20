@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { isDemo } from '@/lib/demo/mode';
@@ -23,6 +24,7 @@ export default function LoginPage() {
   const [pending, setPending] = useState(false);
   const [needCode, setNeedCode] = useState(false);
   const [code, setCode] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const enter = async (nextEmail: string) => {
     setEmail(nextEmail);
@@ -67,36 +69,57 @@ export default function LoginPage() {
   return (
     <main className="sd-login">
       <section className="sd-login-hero">
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <div className="sd-mark">С</div>
-          <div>
-            <strong style={{ display: 'block', letterSpacing: '-0.04em' }}>Седракович Дент</strong>
-            <span style={{ color: '#9fd8cf', fontSize: 12 }}>Sedrakovich Dent</span>
-          </div>
+        <div className="sd-login-brand">
+          <span className="sd-mark" aria-hidden>С</span>
+          <span>
+            <strong>Седракович Дент</strong>
+            <small>стоматология</small>
+          </span>
         </div>
-        <div>
-          <h1>Карта, формула и три плана на одном экране.</h1>
-          <p style={{ color: '#c3d2cf', maxWidth: 420 }}>
-            {demo ? 'Демо-клиника в Москве. Пароль для всех ролей — demo12345.' : 'Войдите рабочей почтой и паролем клиники.'}
-          </p>
+        <div className="sd-login-copy">
+          <h1>Карта, формула и&nbsp;план лечения на одном экране.</h1>
+          <p>{demo ? 'Демо-клиника в Москве. Пароль для всех ролей — demo12345.' : 'Рабочее место врачей и администраторов клиники.'}</p>
         </div>
+        <Formula />
       </section>
       <section className="sd-login-panel">
-        <form onSubmit={onSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <h2 style={{ margin: '0 0 8px', letterSpacing: '-0.04em', fontSize: 28 }}>Войти</h2>
-          {demo && ROLES.map((role) => (
-            <button key={role.role} className="sd-btn-ghost sd-role" type="button" disabled={pending} onClick={() => enter(role.email)}>
-              <b>{role.title}</b>
-              <div className="sd-muted">{role.text}</div>
-            </button>
-          ))}
-          <label className="sd-field"><span>Почта</span><input className="sd-input" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-          <label className="sd-field"><span>Пароль</span><input className="sd-input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+        <form className="sd-login-form" onSubmit={onSubmit}>
+          <div className="sd-login-mobile-brand">
+            <span className="sd-mark" aria-hidden>С</span>
+            <strong>Седракович Дент</strong>
+          </div>
+          <div className="sd-login-title">
+            <h2>Вход</h2>
+            <p>{needCode ? 'Введите шестизначный код из приложения-аутентификатора.' : 'Рабочая почта и пароль клиники.'}</p>
+          </div>
+          {demo && (
+            <div className="sd-login-roles">
+              {ROLES.map((role) => (
+                <button key={role.role} className="sd-role" type="button" disabled={pending} onClick={() => enter(role.email)}>
+                  <b>{role.title}</b>
+                  <span>{role.text}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <label className="sd-login-field">
+            <span>Почта</span>
+            <input type="email" inputMode="email" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@clinic.ru" />
+          </label>
+          <label className="sd-login-field">
+            <span>Пароль</span>
+            <span className="sd-login-pass">
+              <input type={showPassword ? 'text' : 'password'} autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+              <button type="button" onClick={() => setShowPassword((on) => !on)} aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'} aria-pressed={showPassword}>
+                {showPassword ? <EyeOff /> : <Eye />}
+              </button>
+            </span>
+          </label>
           {needCode && (
-            <label className="sd-field">
+            <label className="sd-login-field">
               <span>Код из приложения</span>
               <input
-                className="sd-input"
+                className="sd-login-code"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 pattern="\d{6}"
@@ -108,10 +131,34 @@ export default function LoginPage() {
               />
             </label>
           )}
-          {error && <p role="alert" className="sd-chip danger">{error}</p>}
-          <button className="sd-btn" disabled={pending} type="submit">{pending ? 'Входим…' : 'Продолжить'}</button>
+          {error && <p role="alert" className="sd-login-error">{error}</p>}
+          <button className="sd-login-submit" disabled={pending} type="submit">
+            {pending ? 'Входим…' : needCode ? 'Подтвердить' : 'Войти'}
+            {!pending && <ArrowRight />}
+          </button>
+          <p className="sd-login-help">Нет доступа или забыли пароль — попросите администратора клиники.</p>
         </form>
       </section>
     </main>
+  );
+}
+
+const UPPER = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
+const LOWER = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
+const MARKED: Record<number, 'done' | 'plan'> = { 16: 'done', 26: 'plan', 36: 'plan', 46: 'done', 11: 'done', 24: 'plan' };
+
+/** The dental chart as the clinic knows it: FDI numbers, two jaws, a few teeth treated and planned. */
+function Formula() {
+  const row = (teeth: number[]) => (
+    <div className="sd-formula-row">
+      {teeth.map((tooth) => <span key={tooth} data-mark={MARKED[tooth]}>{tooth}</span>)}
+    </div>
+  );
+  return (
+    <figure className="sd-formula" aria-hidden>
+      {row(UPPER)}
+      {row(LOWER)}
+      <figcaption><i data-mark="done" />вылечено<i data-mark="plan" />в плане</figcaption>
+    </figure>
   );
 }

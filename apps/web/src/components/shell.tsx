@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Activity, Calendar, CalendarRange, ClipboardCheck, FlaskConical, Moon, Package, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users, Wallet } from 'lucide-react';
+import { Activity, Calendar, ChevronDown, LayoutGrid, LogOut, PanelRight, CalendarRange, ClipboardCheck, FlaskConical, Moon, Package, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users, Wallet } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
 import { useFocus } from '@/lib/focus';
@@ -13,8 +13,8 @@ import { ContextPanel } from './studio/panels';
 const PRIMARY = [
   { href: '/', label: 'Сегодня', icon: Calendar, perm: 'patient.read' },
   { href: '/patients', label: 'Пациенты', icon: Users, perm: 'patient.read' },
-  { href: '/schedule', label: 'Расписание', icon: CalendarRange, perm: 'schedule.read' },
-  { href: '/supply', label: 'Снабжение', icon: Package, perm: 'warehouse.read' },
+  { href: '/schedule', label: 'Расписание', short: 'Запись', icon: CalendarRange, perm: 'schedule.read' },
+  { href: '/supply', label: 'Снабжение', short: 'Склад', icon: Package, perm: 'warehouse.read' },
   { href: '/money', label: 'Деньги', icon: Wallet, perm: 'finance.read' },
 ];
 
@@ -58,11 +58,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [cursor, setCursor] = useState(0);
   const [density, setDensity] = useState<'compact' | 'comfort'>('compact');
   const [moreOpen, setMoreOpen] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  // Set after mount so the server render and the browser agree on the date.
+  const [today, setToday] = useState('');
+  useEffect(() => { setToday(new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' }).format(new Date())); }, []);
 
   const allowed = (item: (typeof NAV)[number]) => user?.permissions.includes(item.perm);
   const primary = PRIMARY.filter(allowed);
   const more = MORE.filter(allowed);
   const settings = allowed(SETTINGS) ? SETTINGS : null;
+  const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
+  const sheetActive = [...more, ...(settings ? [settings] : [])].some((link) => isActive(link.href));
+  const fullName = user?.employee ? `${user.employee.lastName} ${user.employee.firstName}` : user?.email ?? '';
+  const initials = user?.employee ? `${user.employee.firstName[0] ?? ''}${user.employee.lastName[0] ?? ''}` : (user?.email[0] ?? '').toUpperCase();
   const links = [...primary, ...more, ...(settings ? [settings] : []), ...HIDDEN.filter(allowed)];
 
   useEffect(() => {
@@ -75,13 +83,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
     if (here) setMoreOpen(true);
   }, [pathname, user]);
 
+  useEffect(() => { setSheet(false); }, [pathname]);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setPalette((open) => !open);
       }
-      if (event.key === 'Escape') setPalette(false);
+      if (event.key === 'Escape') { setPalette(false); setSheet(false); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -132,60 +142,101 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={`sd-app${panelOpen ? ' with-panel' : ''}`}>
-      <aside className="sd-nav">
-        <div className="sd-brand">
-          <div className="sd-mark">С</div>
-          <div className="sd-brand-text">
+      <aside className="sd-nav" aria-label="Разделы">
+        <Link href="/" className="sd-brand" aria-label="Седракович Дент — сегодня">
+          <span className="sd-mark" aria-hidden>С</span>
+          <span className="sd-brand-text">
             <strong>Седракович Дент</strong>
-            <span>Sedrakovich Dent</span>
-          </div>
-        </div>
-        {[primary, moreOpen ? more : []].flat().map((link) => {
-          const Icon = link.icon;
-          const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href);
-          return (
-            <Link key={link.href} href={link.href} className={`sd-link ${active ? 'active' : ''}`}>
-              <Icon />
-              <span className="sd-nav-label">{link.label}</span>
-            </Link>
-          );
-        })}
-        {more.length > 0 && (
-          <button className="sd-more" type="button" onClick={() => setMoreOpen((open) => !open)}>
-            {moreOpen ? 'Меньше' : `Ещё ${more.length}`}
-          </button>
-        )}
-        {settings && (
-          <Link href={settings.href} className={`sd-link sd-link-settings ${pathname.startsWith(settings.href) ? 'active' : ''}`}>
-            <Settings />
-            <span className="sd-nav-label">{settings.label}</span>
-          </Link>
-        )}
+            <span>стоматология</span>
+          </span>
+        </Link>
+        <nav className="sd-nav-list">
+          {primary.map((link) => <NavLink key={link.href} link={link} active={isActive(link.href)} />)}
+          {more.length > 0 && (
+            <>
+              <button className="sd-more" type="button" aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)} title="Ещё разделы">
+                <span className="sd-nav-label">Ещё разделы</span>
+                <ChevronDown className="sd-more-chev" />
+              </button>
+              {moreOpen && more.map((link) => <NavLink key={link.href} link={link} active={isActive(link.href)} extra />)}
+            </>
+          )}
+        </nav>
+        <button className="sd-link sd-link-phone-more" type="button" onClick={() => setSheet(true)} aria-current={sheetActive ? 'page' : undefined}>
+          <span className="sd-link-ico"><LayoutGrid /></span>
+          <span className="sd-nav-label">Ещё</span>
+        </button>
         <div className="sd-nav-foot">
-          <button className="sd-icon-btn" type="button" onClick={toggle} aria-label="Тема">
-            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
+          {settings && <NavLink link={settings} active={isActive(settings.href)} />}
           <div className="sd-user">
-            <b>{user?.employee ? `${user.employee.lastName} ${user.employee.firstName}` : user?.email}</b>
-            <span>{user?.organization.name}</span>
+            <span className="sd-avatar" aria-hidden>{initials}</span>
+            <span className="sd-user-text">
+              <b>{fullName}</b>
+              <span>{user?.organization.name}</span>
+            </span>
           </div>
-          <button className="sd-btn-ghost" type="button" onClick={logout}>Выйти</button>
+          <div className="sd-foot-actions">
+            <button className="sd-foot-btn" type="button" onClick={toggle} title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}>
+              {theme === 'dark' ? <Sun /> : <Moon />}
+              <span className="sd-nav-label">{theme === 'dark' ? 'Светлая' : 'Тёмная'}</span>
+            </button>
+            <button className="sd-foot-btn" type="button" onClick={logout} title="Выйти">
+              <LogOut />
+              <span className="sd-nav-label">Выйти</span>
+            </button>
+          </div>
         </div>
       </aside>
       <div className="sd-main">
         <header className="sd-top">
+          <Link href="/" className="sd-top-mark" aria-label="Сегодня"><span className="sd-mark" aria-hidden>С</span></Link>
           <button className="sd-search" type="button" onClick={() => setPalette(true)}>
-            <Search size={15} />
-            Поиск пациента и команды
+            <Search />
+            <span className="sd-search-text">Поиск пациента и команды</span>
             <kbd>⌘K</kbd>
           </button>
-          <button className="sd-btn-ghost sd-panel-toggle" type="button" onClick={() => setPanelOpen(!panelOpen)}>{panelOpen ? 'Скрыть' : 'Контекст'}</button>
+          <span className="sd-today">{today}</span>
+          <button
+            className={`sd-top-btn sd-panel-toggle${panelOpen ? ' on' : ''}`}
+            type="button"
+            aria-pressed={panelOpen}
+            onClick={() => setPanelOpen(!panelOpen)}
+            title={panelOpen ? 'Скрыть контекст' : 'Показать контекст'}
+          >
+            <PanelRight />
+            <span>Контекст</span>
+          </button>
         </header>
         <div className="sd-workspace">{children}</div>
       </div>
       <aside className={`sd-panel ${panelOpen ? 'open' : ''}`}>
         <ContextPanel />
       </aside>
+      {sheet && (
+        <div className="sd-more-sheet-back" onClick={() => setSheet(false)}>
+          <div className="sd-more-sheet" role="dialog" aria-label="Все разделы" onClick={(event) => event.stopPropagation()}>
+            <div className="sd-more-sheet-user">
+              <span className="sd-avatar" aria-hidden>{initials}</span>
+              <span className="sd-user-text"><b>{fullName}</b><span>{user?.organization.name}</span></span>
+            </div>
+            <div className="sd-more-sheet-grid">
+              {[...more, ...(settings ? [settings] : [])].map((link) => {
+                const Icon = link.icon;
+                return (
+                  <Link key={link.href} href={link.href} className={`sd-tile${isActive(link.href) ? ' active' : ''}`} onClick={() => setSheet(false)}>
+                    <Icon />
+                    <span>{link.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+            <div className="sd-more-sheet-actions">
+              <button className="sd-btn-ghost" type="button" onClick={toggle}>{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}{theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</button>
+              <button className="sd-btn-ghost" type="button" onClick={logout}><LogOut size={16} />Выйти</button>
+            </div>
+          </div>
+        </div>
+      )}
       {palette && (
         <div className="sd-palette" onMouseDown={() => setPalette(false)}>
           <div className="sd-palette-box" onMouseDown={(event) => event.stopPropagation()}>
@@ -210,5 +261,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
       )}
     </div>
+  );
+}
+
+type NavItem = { href: string; label: string; short?: string; icon: React.ComponentType; perm: string };
+
+function NavLink({ link, active, extra }: { link: NavItem; active: boolean; extra?: boolean }) {
+  const Icon = link.icon;
+  return (
+    <Link href={link.href} className={`sd-link${active ? ' active' : ''}${extra ? ' is-extra' : ''}`} aria-current={active ? 'page' : undefined} title={link.label}>
+      <span className="sd-link-ico"><Icon /></span>
+      <span className="sd-nav-label" data-short={link.short}>{link.label}</span>
+    </Link>
   );
 }
