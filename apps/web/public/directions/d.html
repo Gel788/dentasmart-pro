@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex">
+<title>D · Упаковка и сетка</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600;700;800&display=swap">
+<style>
+/* A + C: the dense mosaic of ruled modules (C) set in the pharma pack language (A):
+   big light figures, heavy names, a code square per state, one cobalt band on the patient in the chair. */
+:root{--white:#fff;--paper:#f2f3f5;--ink:#15191e;--ink2:#424a54;--muted:#646c76;--line:#dadde1;--cobalt:#1f4ed8;--orange:#c65410;--green:#0b8a5f;--magenta:#c2185b;--font:'Onest',system-ui,sans-serif}
+*{box-sizing:border-box}html,body{margin:0}body{background:var(--paper);color:var(--ink);font:14px/1.4 var(--font);-webkit-font-smoothing:antialiased}
+.num{font-variant-numeric:tabular-nums}
+i.k{display:inline-block;width:11px;height:11px;flex:none;vertical-align:-1px}
+.k.cb{background:var(--cobalt)}.k.or{background:var(--orange)}.k.gr{background:var(--green)}.k.mg{background:var(--magenta)}.k.ok{border:2px solid var(--ink)}.k.wt{border:2px dashed var(--magenta)}
+/* Shell: one black bar, sections as tabs. */
+.bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:18px;height:52px;padding:0 max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left));background:var(--ink);color:#fff}
+.brand{display:flex;align-items:center;gap:9px;font-weight:800;white-space:nowrap}
+.brand i{display:grid;place-items:center;width:28px;height:28px;background:#fff;color:var(--ink);font-style:normal;font-weight:800}
+.bar nav{display:flex;height:100%}
+.bar nav a{display:flex;align-items:center;padding:0 13px;color:#b9bec5;font-weight:600;text-decoration:none}
+.bar nav a.on{color:#fff;box-shadow:inset 0 -3px 0 #fff}
+.bar .s{margin-left:auto;display:flex;align-items:center;width:320px;height:34px;padding:0 12px;background:#262b31;color:#a3a9b1}
+.bar .cta{height:34px;padding:0 14px;border:0;background:#fff;color:var(--ink);font:700 14px var(--font)}
+/* Mosaic. */
+.grid{max-width:1440px;margin:0 auto;padding:10px max(10px,env(safe-area-inset-right)) 100px max(10px,env(safe-area-inset-left));display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px}
+.m{background:var(--white);border:1px solid var(--line);min-width:0;display:flex;flex-direction:column}
+.m>h3{display:flex;align-items:center;gap:8px;margin:0;height:36px;padding:0 12px;border-bottom:1px solid var(--line);font-size:13px;font-weight:700}
+.m>h3 em{margin-left:auto;font-style:normal;color:var(--muted);font-weight:500}
+.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}.c7{grid-column:span 7}.c8{grid-column:span 8}.c9{grid-column:span 9}.c12{grid-column:span 12}
+.date{padding:12px 14px}.date b{display:block;font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.1}.date span{color:var(--muted)}
+.wk{display:grid;grid-template-columns:repeat(7,1fr);flex:1}
+.wk a{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 2px;border-right:1px solid var(--line);color:inherit;text-decoration:none}
+.wk a:last-child{border:0}.wk small{color:var(--muted);font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.wk b{font-size:20px;font-weight:300}.wk em{font-style:normal;font-size:12px;color:var(--ink2)}
+.wk a.on{box-shadow:inset 0 -4px 0 var(--cobalt)}.wk a.on b{font-weight:700}.wk a.on small{color:var(--cobalt)}
+.kpi{display:grid;grid-template-columns:repeat(4,1fr);flex:1}
+.kpi div{padding:10px 12px;border-right:1px solid var(--line)}.kpi div:last-child{border:0}
+.kpi small{display:block;color:var(--muted);font-size:12px}.kpi b{font-size:22px;font-weight:300;letter-spacing:-.02em}
+/* The patient in the chair as a pack face: band, name, dose (time), facts table. */
+.pack{grid-column:span 5}
+.pack .band{height:12px;background:var(--cobalt)}
+.face{padding:14px 16px 16px;display:flex;flex-direction:column;gap:4px}
+.code{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--cobalt)}
+.face h2{margin:2px 0 0;font-size:34px;font-weight:800;letter-spacing:-.03em;line-height:1.02}
+.face .sub{color:var(--muted)}
+.dose{font-size:44px;font-weight:300;letter-spacing:-.03em;line-height:1;margin-top:8px}.dose small{font-size:15px;font-weight:500;color:var(--muted);letter-spacing:0;margin-left:8px}
+.facts{margin:0;display:grid;grid-template-columns:110px 1fr;font-size:13.5px;border-top:1px solid var(--line)}
+.facts dt,.facts dd{margin:0;padding:8px 14px;border-bottom:1px solid var(--line)}
+.facts dt{color:var(--muted);background:var(--paper)}.facts dd b{color:var(--magenta)}
+.acts{display:flex;flex-wrap:wrap;gap:8px;padding:14px 16px}
+.btn{height:44px;padding:0 18px;display:inline-flex;align-items:center;font-weight:700;border:1.5px solid var(--ink);background:var(--white)}
+.btn.main{background:var(--cobalt);border-color:var(--cobalt);color:#fff}
+/* Cabinets: the day as lanes, each visit coloured by its code. */
+.lanes{padding:10px 12px 14px;display:grid;grid-template-columns:72px 1fr;gap:10px 10px;align-items:center}
+.lanes .lb{font-weight:600;color:var(--ink2)}
+.lane{position:relative;height:34px;background:repeating-linear-gradient(90deg,var(--paper) 0 calc(10% - 1px),var(--line) calc(10% - 1px) 10%)}
+.lane i{position:absolute;top:3px;bottom:3px;display:flex;align-items:center;padding:0 6px;font-style:normal;font-size:12px;font-weight:600;color:#fff;overflow:hidden;white-space:nowrap}
+.hrs{grid-column:2;display:flex;justify-content:space-between;color:var(--muted);font-size:11.5px}
+.nowl{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink)}
+/* Visits table. */
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-weight:600;color:var(--muted);font-size:12px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--paper)}
+td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+td.t{font-size:20px;font-weight:300;letter-spacing:-.02em;white-space:nowrap;width:80px}
+td.p b{display:block;font-weight:700;font-size:15px}td.p span{color:var(--muted);font-size:12.5px}
+td.st{white-space:nowrap;font-weight:600;font-size:13px}td.st i{margin-right:6px}
+td.a{text-align:right}td.a span{display:inline-flex;align-items:center;height:34px;padding:0 12px;border:1.5px solid var(--ink);font-weight:700;font-size:13px}
+tr.past td{color:var(--muted)}tr.past td.p b{color:var(--ink2)}
+tr.cur td{background:#eef2fd}tr.cur td.t{font-weight:600;color:var(--cobalt)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;padding:10px 12px;color:var(--muted);font-size:12px;margin-top:auto}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.lst{margin:0;padding:0;list-style:none}
+.lst li{display:flex;align-items:baseline;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line)}.lst li:last-child{border:0}
+.lst li span{margin-left:auto;color:var(--muted);white-space:nowrap}.lst li small{display:block;color:var(--muted)}
+.tabbar{display:none}
+@media(max-width:1100px){.c3,.c4{grid-column:span 6}.c5,.pack,.c7,.c8,.c9{grid-column:span 12}.bar .s{width:220px}}
+@media(max-width:820px){.bar nav,.bar .s{display:none}.bar .cta{margin-left:auto}}
+@media(max-width:640px){
+ .c3,.c4{grid-column:span 12}.grid{gap:8px;padding-left:8px;padding-right:8px}
+ .face h2{font-size:30px}.dose{font-size:38px}.facts{grid-template-columns:96px 1fr}
+ .hide-s{display:none}
+ .pack{order:-1}.kpi{grid-template-columns:repeat(2,1fr)}.kpi div:nth-child(2){border-right:0}.kpi div:nth-child(-n+2){border-bottom:1px solid var(--line)}
+ table,tbody{display:block}tr:first-child{display:none}
+ tr{display:grid;grid-template-columns:66px minmax(0,1fr) auto;grid-template-areas:'t p a' 't s a';border-bottom:1px solid var(--line)}
+ td{border:0;padding:4px 10px}td.t{grid-area:t;font-size:17px;width:auto;padding:10px 0 10px 12px}td.p{grid-area:p;padding-top:10px}td.st{grid-area:s;padding-bottom:10px;font-size:12.5px}td.a{grid-area:a;align-self:center}td.a span{padding:0 10px}tr.cur{background:#eef2fd}tr.cur td{background:transparent}
+ .lanes{grid-template-columns:56px 1fr}
+ .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--ink);padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
+ .tabbar a{flex:1;text-align:center;color:#b9bec5;font-size:11px;font-weight:600;padding:6px 0;text-decoration:none}.tabbar a.on{color:#fff;box-shadow:inset 0 3px 0 #fff}
+}
+</style></head><body>
+<header class="bar"><div class="brand"><i>С</i>Седракович Дент</div>
+<nav><a class="on">Сегодня</a><a>Пациенты</a><a>Расписание</a><a>Склад</a><a>Лаборатория</a><a>Деньги</a><a>Ещё</a></nav>
+<div class="s">Пациент, телефон или запись · ⌘K</div><button class="cta">+ Записать</button></header>
+<div class="grid">
+<section class="m c3"><h3>Сегодня</h3><div class="date"><b>Вт, 20 октября</b><span class="num">7 пациентов · 2 кабинета · занято 64%</span></div></section>
+<section class="m c5"><h3>Неделя <em>октябрь 2026</em></h3><div class="wk"><a><small>пн</small><b class="num">19</b><em>9</em></a><a class="on"><small>вт</small><b class="num">20</b><em>7</em></a><a><small>ср</small><b class="num">21</b><em>4</em></a><a><small>чт</small><b class="num">22</b><em>5</em></a><a><small>пт</small><b class="num">23</b><em>3</em></a><a><small>сб</small><b class="num">24</b><em>1</em></a><a><small>вс</small><b class="num">25</b><em>—</em></a></div></section>
+<section class="m c4"><h3>Деньги дня <em>касса открыта</em></h3><div class="kpi"><div><small>Оплачено</small><b class="num">18 200</b></div><div><small>Ждём</small><b class="num">4 500</b></div><div><small>Ср. чек</small><b class="num">6 070</b></div><div><small>Неявки</small><b class="num">0</b></div></div></section>
+
+<article class="m pack"><div class="band"></div>
+<div class="face"><span class="code"><i class="k cb"></i>В кресле · кабинет 1</span><h2>Абрамян Лилит</h2><span class="sub">34 года · лечение кариеса 26, 27</span>
+<div class="dose num">24 мин<small>из 60 · 12:00–13:00</small></div></div>
+<dl class="facts"><dt>Аллергия</dt><dd><b>Лидокаин</b></dd><dt>Анамнез</dt><dd>Подтверждён 17 октября</dd><dt>Сегодня</dt><dd class="num">2 услуги · 11 000 ₽</dd><dt>Дальше</dt><dd>Коронка 26 — ноябрь</dd><dt>Долг</dt><dd class="num">0 ₽</dd></dl>
+<div class="acts"><span class="btn main">Завершить приём</span><span class="btn">+ Услуга</span><span class="btn">Формула</span></div></article>
+
+<section class="m c7"><h3>Записи <em>7 · 2 приняты</em></h3>
+<table><tr><th>Время</th><th>Пациент</th><th class="hide-s">Кабинет</th><th>Статус</th><th></th></tr>
+<tr class="past"><td class="t num">09:00</td><td class="p"><b>Орлова Вера</b><span>Кариес 16</span></td><td class="hide-s">1</td><td class="st"><i class="k gr"></i>оплачено</td><td class="a"></td></tr>
+<tr class="past"><td class="t num">10:30</td><td class="p"><b>Ким Артур</b><span>Консультация</span></td><td class="hide-s">1</td><td class="st"><i class="k mg"></i>долг 4 500 ₽</td><td class="a"><span>К оплате</span></td></tr>
+<tr class="cur"><td class="t num">12:00</td><td class="p"><b>Абрамян Лилит</b><span>Кариес 26, 27</span></td><td class="hide-s">1</td><td class="st"><i class="k cb"></i>в кресле</td><td class="a"><span>К приёму</span></td></tr>
+<tr><td class="t num">13:30</td><td class="p"><b>Ветров Павел</b><span>Чистка и фторирование</span></td><td class="hide-s">2</td><td class="st"><i class="k or"></i>пришёл</td><td class="a"><span>Принять</span></td></tr>
+<tr><td class="t num">15:00</td><td class="p"><b>Новикова Ирина</b><span>Эндодонтия 36</span></td><td class="hide-s">1</td><td class="st"><i class="k ok"></i>подтвердила</td><td class="a"></td></tr>
+<tr><td class="t num">16:30</td><td class="p"><b>Шубин Глеб</b><span>Осмотр импланта</span></td><td class="hide-s">1</td><td class="st"><i class="k wt"></i>нет ответа</td><td class="a"><span>Позвонить</span></td></tr></table>
+<div class="legend"><span><i class="k cb"></i>в кресле</span><span><i class="k or"></i>пришёл</span><span><i class="k gr"></i>оплачено</span><span><i class="k mg"></i>долг</span><span><i class="k ok"></i>подтвердил</span><span><i class="k wt"></i>нет ответа</span></div></section>
+
+<section class="m c12"><h3>Кабинеты <em>08:00–18:00 · сейчас 12:24</em></h3>
+<div class="lanes"><span class="lb">Каб. 1</span><div class="lane"><i style="left:10%;width:10%;background:var(--green)">Орлова</i><i style="left:25%;width:5%;background:var(--magenta)">Ким</i><i style="left:40%;width:10%;background:var(--cobalt)">Абрамян</i><i style="left:70%;width:10%;background:var(--ink2)">Новикова</i><i style="left:85%;width:5%;background:var(--ink2)">Шубин</i><b class="nowl" style="left:44%"></b></div>
+<span class="lb">Каб. 2</span><div class="lane"><i style="left:55%;width:10%;background:var(--orange)">Ветров</i><b class="nowl" style="left:44%"></b></div>
+<div class="hrs num"><span>08</span><span>10</span><span>12</span><span>14</span><span>16</span><span>18</span></div></div></section>
+
+<section class="m c3"><h3>Требует внимания <em>3</em></h3><ul class="lst"><li><i class="k wt"></i><div>Шубин Глеб не подтвердил 16:30<small>позвонить до 14:00</small></div></li><li><i class="k mg"></i><div>Ким Артур ушёл с долгом<small>4 500 ₽ · консультация</small></div></li><li><i class="k or"></i><div>План Орловой ждёт 12 дней<small>3 варианта, от 96 000 ₽</small></div></li></ul></section>
+<section class="m c3"><h3>Склад <em>заканчивается</em></h3><ul class="lst"><li>Filtek Z550, A2<span class="num">2 шприца</span></li><li>Убистезин форте<span class="num">5 карпул</span></li><li>Перчатки M<span class="num">1 коробка</span></li></ul></section>
+<section class="m c3"><h3>Лаборатория</h3><ul class="lst"><li>Коронка 26 · Абрамян<span>к 6 ноября</span></li><li>Каппа · Ким<span>в работе</span></li></ul></section>
+<section class="m c3"><h3>Завтра <em>ср, 21 октября</em></h3><ul class="lst"><li>4 пациента<span>первый в 09:00</span></li><li><i class="k wt"></i>2 не подтвердили<span>напомнить</span></li></ul></section>
+</div>
+<nav class="tabbar"><a class="on">Сегодня</a><a>Пациенты</a><a>Запись</a><a>Деньги</a><a>Ещё</a></nav>
+</body></html>
