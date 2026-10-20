@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+const LAB_STATUSES = ['WAITING_IMPRESSION', 'RECEIVED', 'IN_PROGRESS', 'READY', 'DELIVERED', 'REJECTED'];
+
 @Injectable()
 export class LabService {
   constructor(private readonly prisma: PrismaService) {}
@@ -47,8 +49,11 @@ export class LabService {
     });
   }
 
-  updateStatus(id: string, status: string) {
-    return this.prisma.labOrder.update({ where: { id }, data: { status: status as never } });
+  async updateStatus(orgId: string, id: string, status: string) {
+    if (!LAB_STATUSES.includes(status)) throw new BadRequestException('Неизвестный статус заказа');
+    const moved = await this.prisma.labOrder.updateMany({ where: { id, organizationId: orgId }, data: { status: status as never } });
+    if (!moved.count) throw new NotFoundException('Заказ не найден');
+    return this.prisma.labOrder.findUniqueOrThrow({ where: { id } });
   }
 
   async updateOrder(

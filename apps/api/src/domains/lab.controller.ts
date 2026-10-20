@@ -40,8 +40,8 @@ export class LabController {
 
   @Patch('orders/:id/status')
   @RequirePermissions('medical.write')
-  status(@Param('id') id: string, @Body() body: { status: string }) {
-    return this.svc.updateStatus(id, body.status);
+  status(@OrgId() orgId: string, @Param('id') id: string, @Body() body: { status: string }) {
+    return this.svc.updateStatus(orgId, id, body.status);
   }
 
   @Patch('orders/:id/scan')

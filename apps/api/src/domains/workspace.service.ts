@@ -3,6 +3,7 @@ import { Prisma, ToothCondition, ToothFormulaType } from '@dentasmart/database';
 import { dayLoad, kopecks, medicalReviewDue, parseWorkHours, tzOffsetMinutes, wallDate } from '@dentasmart/shared';
 import { medicalView } from '../patients/patients.service';
 import { clinicianWhere } from './clinicians';
+import { assertPlace } from '../common/clinic-place';
 import { PrismaService } from '../prisma/prisma.service';
 import { openLabOrders, reserveForPlan } from '../route/route-chain';
 import { ClinicConfigService } from './clinic-config.service';
@@ -1384,6 +1385,7 @@ export class WorkspaceService {
     if (Number.isNaN(+startsAt)) throw new BadRequestException('Некорректное время');
     const minutes = body.durationMin && body.durationMin > 0 ? body.durationMin : 30;
     const endsAt = new Date(startsAt.getTime() + minutes * 60_000);
+    await assertPlace(this.prisma, orgId, { doctorId: body.doctorId, cabinetId: body.cabinetId, serviceId: body.serviceId });
     const patient = await this.prisma.patient.findFirst({ where: { id: body.patientId, organizationId: orgId } });
     if (!patient) throw new NotFoundException('Пациент не найден');
     if (body.doctorId) {

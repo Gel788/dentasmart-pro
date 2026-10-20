@@ -141,13 +141,13 @@ export class FlowController {
 
   @Post('annotations/:id/accept')
   @RequirePermissions('medical.write')
-  acceptMark(@Param('id') id: string) {
-    return this.flow.acceptMark(id);
+  acceptMark(@OrgId() orgId: string, @Param('id') id: string) {
+    return this.flow.acceptMark(orgId, id);
   }
 
   @Post('annotations/:id/hide')
   @RequirePermissions('medical.write')
-  hideMark(@Param('id') id: string) {
-    return this.flow.hideMark(id);
+  hideMark(@OrgId() orgId: string, @Param('id') id: string) {
+    return this.flow.hideMark(orgId, id);
   }
 }

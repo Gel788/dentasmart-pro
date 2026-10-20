@@ -511,12 +511,20 @@ export class FlowService {
     return { ok: true };
   }
 
-  async acceptMark(id: string) {
+  private async markOf(orgId: string, id: string) {
+    const mark = await this.prisma.imagingAnnotation.findFirst({ where: { id, study: { patient: { organizationId: orgId } } } });
+    if (!mark) throw new NotFoundException('Отметка не найдена');
+    return mark;
+  }
+
+  async acceptMark(orgId: string, id: string) {
+    await this.markOf(orgId, id);
     await this.prisma.imagingAnnotation.update({ where: { id }, data: { source: 'CLINICIAN' } });
     return { ok: true };
   }
 
-  async hideMark(id: string) {
+  async hideMark(orgId: string, id: string) {
+    await this.markOf(orgId, id);
     await this.prisma.imagingAnnotation.delete({ where: { id } });
     return { ok: true };
   }

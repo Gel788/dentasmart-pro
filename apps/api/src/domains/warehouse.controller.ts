@@ -85,8 +85,8 @@ export class WarehouseController {
 
   @Patch('inventory/lines/:lineId')
   @RequirePermissions('warehouse.write')
-  updateLine(@Param('lineId') lineId: string, @Body() body: { actualQty: number }) {
-    return this.svc.updateCountLine(lineId, body.actualQty);
+  updateLine(@OrgId() orgId: string, @Param('lineId') lineId: string, @Body() body: { actualQty: number }) {
+    return this.svc.updateCountLine(orgId, lineId, body.actualQty);
   }
 
   @Post('inventory/:sessionId/complete')

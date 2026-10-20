@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { AuthUser, canMoveVisit, isVisitClosed, isVisitStatus, medicalReviewDue, visitMoveError, type VisitStatus } from '@dentasmart/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertPlace } from '../common/clinic-place';
 import { consumeStock } from '../domains/stock-consume';
 import { consumeForVisit, moveLabDeadlines } from '../route/route-chain';
 import { AuditService } from '../common/audit.service';
@@ -58,6 +59,7 @@ export class AppointmentsService {
       where: { id: dto.branchId, organizationId: user.organizationId },
     });
     if (!branch) throw new NotFoundException('Филиал не найден');
+    await assertPlace(this.prisma, user.organizationId, { branchId: dto.branchId, doctorId: dto.doctorId, cabinetId: dto.cabinetId, serviceId: dto.serviceId });
 
     await this.assertSlot({
       branchId: dto.branchId,
@@ -113,6 +115,7 @@ export class AppointmentsService {
     const doctorId =
       dto.doctorId !== undefined ? (dto.doctorId ? dto.doctorId : null) : appt.doctorId;
     const cabinetId = dto.cabinetId !== undefined ? dto.cabinetId : appt.cabinetId;
+    await assertPlace(this.prisma, orgId, { branchId, doctorId, cabinetId, serviceId: dto.serviceId });
 
     await this.assertSlot({
       branchId,

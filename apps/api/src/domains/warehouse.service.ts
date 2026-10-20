@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveBranchId } from '../common/resolve-branch';
 import { consumeStock } from './stock-consume';
@@ -156,9 +156,10 @@ export class WarehouseService {
     });
   }
 
-  updateCountLine(lineId: string, actualQty: number) {
-    return this.prisma.inventoryCountLine.findUnique({ where: { id: lineId } }).then(async (line) => {
-      if (!line) return null;
+  updateCountLine(orgId: string, lineId: string, actualQty: number) {
+    if (!Number.isFinite(Number(actualQty)) || Number(actualQty) < 0) throw new BadRequestException('Количество не может быть отрицательным');
+    return this.prisma.inventoryCountLine.findFirst({ where: { id: lineId, session: { organizationId: orgId } } }).then(async (line) => {
+      if (!line) throw new NotFoundException('Строка инвентаризации не найдена');
       const diff = actualQty - Number(line.expectedQty);
       return this.prisma.inventoryCountLine.update({
         where: { id: lineId },
