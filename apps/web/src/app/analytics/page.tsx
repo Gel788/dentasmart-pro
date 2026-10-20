@@ -140,17 +140,17 @@ export default function AnalyticsPage() {
       {practice && (
         <div className="mt-6 space-y-4">
           <div className="grid gap-4 sm:grid-cols-3">
-            <div className="ds-card p-5">
+            <div className="ds-card ds-stat p-5">
               <p className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--muted)]">Явка за месяц</p>
               <p className="ds-display mt-2 text-[1.7rem] leading-none text-[var(--blue)]">{practice.completedRate}%</p>
               <p className="mt-2 text-xs text-[var(--muted)]">{practice.completed} из {practice.visits} без отменённых</p>
             </div>
-            <div className="ds-card p-5">
+            <div className="ds-card ds-stat p-5">
               <p className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--muted)]">Неявки</p>
               <p className="ds-display mt-2 text-[1.7rem] leading-none text-[var(--danger)]">{practice.noShowRate}%</p>
               <p className="mt-2 text-xs text-[var(--muted)]">{practice.noShow} визитов</p>
             </div>
-            <div className="ds-card p-5">
+            <div className="ds-card ds-stat p-5">
               <p className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--muted)]">Собираемость</p>
               <p className="ds-display mt-2 text-[1.7rem] leading-none text-[var(--success)]">{practice.collectionRate}%</p>
               <p className="mt-2 text-xs text-[var(--muted)]">{formatMoney(practice.collections)} оплат / {formatMoney(practice.production)} счетов месяца</p>

@@ -22,7 +22,7 @@ export function StatCard({
   tone?: keyof typeof tones;
 }) {
   return (
-    <div className="ds-card flex items-start justify-between gap-4 p-5">
+    <div className="ds-card ds-stat flex items-start justify-between gap-4 p-5">
       <div className="min-w-0">
         <p className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--muted)]">{label}</p>
         <p className="ds-display mt-2 text-[1.7rem] leading-none text-[var(--text)]">{value}</p>

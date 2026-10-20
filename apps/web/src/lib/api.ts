@@ -123,7 +123,9 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
     throw new ApiError(message ?? 'Сервер не ответил. Попробуйте ещё раз', res.status, err);
   }
 
-  return res.json();
+  // A route that answers null (no open shift, nothing found) sends an empty body: that is «no data».
+  const text = await res.text();
+  return (text ? JSON.parse(text) : null) as T;
 }
 
 export async function uploadFile(file: File): Promise<string> {

@@ -190,8 +190,8 @@ function FinancePageContent() {
 
       <PageHeader
         badge="Финансы"
-        title="Касса и учёт"
-        description="Счета, оплаты, депозиты и рассрочки"
+        title="Другие операции"
+        description="Счета вручную, депозиты, рассрочки, ДМС, семьи и промокоды. Приём оплат и смена — в кассе."
         action={
           <>
             <Button variant="ghost" onClick={() => setDepositModal(true)}>Депозит</Button>
@@ -202,56 +202,6 @@ function FinancePageContent() {
         }
       />
 
-      <Card className="mb-6">
-        <CardHeader title="Кассовая смена" description="Внутренний учёт наличных по филиалу" />
-        {shift?.status === 'OPEN' ? (
-          <div className="flex flex-wrap items-end gap-3 border-t border-[var(--border)] pt-4">
-            <p className="min-w-[240px] flex-1 text-sm text-[var(--muted)]">
-              Открыта с {new Date(shift.openedAt).toLocaleString('ru-RU')} · в кассе: {formatMoney(shift.openingCash)}
-            </p>
-            <Input placeholder="Сумма в кассе при закрытии" type="number" value={closeCash} onChange={(e) => setCloseCash(e.target.value)} className="max-w-xs" />
-            <Button
-              variant="danger"
-              onClick={async () => {
-                await api(`/finance/cash-shift/${shift.id}/close`, {
-                  method: 'POST',
-                  body: JSON.stringify({ closingCash: +closeCash }),
-                });
-                load();
-              }}
-            >
-              Закрыть смену
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-end gap-3 border-t border-[var(--border)] pt-4">
-            <div className="min-w-[220px] flex-1">
-              <Label>Наличные в кассе</Label>
-              <Input
-                type="number"
-                min={0}
-                placeholder="0"
-                value={openingCash}
-                onChange={(e) => setOpeningCash(e.target.value)}
-                aria-label="Наличные при открытии смены"
-              />
-            </div>
-            <Button
-              disabled={openingCash === '' || Number(openingCash) < 0}
-              onClick={async () => {
-                await api('/finance/cash-shift/open', {
-                  method: 'POST',
-                  body: JSON.stringify({ branchId, openingCash: Number(openingCash) }),
-                });
-                setOpeningCash('');
-                load();
-              }}
-            >
-              Открыть смену
-            </Button>
-          </div>
-        )}
-      </Card>
 
       <TabBar
         tabs={[
@@ -262,14 +212,6 @@ function FinancePageContent() {
         onChange={setFinanceTab}
       />
 
-      {summary && (
-        <div className="mb-6 mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Дебиторка" value={formatMoney(summary.receivable)} icon={Wallet} tone="amber" />
-          <StatCard label="Выручка сегодня" value={formatMoney(summary.revenueToday ?? 0)} icon={CreditCard} tone="teal" />
-          <StatCard label="Открытых счетов" value={summary.openInvoices} icon={Receipt} tone="blue" />
-          <StatCard label="Всего оплат" value={formatMoney(summary.totalPayments)} icon={CreditCard} tone="teal" />
-        </div>
-      )}
 
       {financeTab === 'main' && (
       <div className="grid gap-6 xl:grid-cols-2">

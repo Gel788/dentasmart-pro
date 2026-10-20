@@ -330,7 +330,7 @@ export default function QueuesPage() {
 function Stat({ label: name, value, tone }: { label: string; value: string; tone: 'danger' | 'warning' | 'accent' }) {
   const color = tone === 'danger' ? 'var(--danger)' : tone === 'warning' ? 'var(--warning)' : 'var(--accent)';
   return (
-    <div className="ds-card p-5">
+    <div className="ds-card ds-stat p-5">
       <p className="ds-display text-2xl" style={{ color }}>{value}</p>
       <p className="mt-1 text-sm text-[var(--muted)]">{name}</p>
     </div>

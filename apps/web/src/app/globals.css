@@ -1151,7 +1151,7 @@ html.dark .ai-chips button.on { color: #042f2e; }
   .sd-link .sd-nav-label { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sd-link svg { width: 20px; height: 20px; }
   .sd-workspace { padding: 16px max(16px, env(safe-area-inset-right, 0px)) calc(84px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
-  .sd-top { padding: 0 12px; gap: 8px; }
+  .sd-top { padding: env(safe-area-inset-top, 0px) max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px)); gap: 8px; height: calc(var(--top-h) + env(safe-area-inset-top, 0px)); box-sizing: border-box; }
   .sd-search { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sd-search kbd { display: none; }
   .sd-panel, .sd-panel.open { left: 0; bottom: calc(62px + env(safe-area-inset-bottom, 0px)); }
@@ -1168,4 +1168,21 @@ html.dark .ai-chips button.on { color: #042f2e; }
 /* The plan total rides above the phone menu bar instead of under it. */
 @media (max-width: 720px) {
   .jn-dock { bottom: calc(76px + env(safe-area-inset-bottom)); }
+}
+
+/* Tabs used on older screens (TabBar): a segmented row with a sliding highlight. */
+.t-tabs { position: relative; display: inline-flex; gap: 2px; max-width: 100%; padding: 3px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); overflow-x: auto; scrollbar-width: none; }
+.t-tabs::-webkit-scrollbar { display: none; }
+.t-tabs-pill { position: absolute; top: 3px; bottom: 3px; left: 0; border-radius: 9px; background: var(--surface-solid); box-shadow: 0 1px 2px rgba(16, 32, 31, 0.08); transition: transform 200ms cubic-bezier(.2,.8,.2,1), width 200ms cubic-bezier(.2,.8,.2,1); }
+.t-tab { position: relative; z-index: 1; flex: 0 0 auto; min-height: 38px; padding: 0 14px; border: 0; border-radius: 9px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 14px; white-space: nowrap; }
+.t-tab[aria-selected='true'] { color: var(--text); font-weight: 600; }
+
+/* Phones: number cards on older screens sit two to a row and stay compact instead of one huge card per number.
+   Only grids made of stat cards (.ds-stat); content cards keep one per row. */
+@media (max-width: 640px) {
+  .grid:has(> .ds-stat):not(:has(> :not(.ds-stat))) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .grid:has(> .ds-stat):not(:has(> :not(.ds-stat))) > .ds-card { padding: 12px 14px; gap: 8px; }
+  .grid:has(> .ds-stat):not(:has(> :not(.ds-stat))) > .ds-card .ds-display { font-size: 1.25rem; line-height: 1.15; overflow-wrap: anywhere; }
+  .grid:has(> .ds-stat):not(:has(> :not(.ds-stat))) > .ds-card p.uppercase { font-size: 10.5px; letter-spacing: 0.06em; }
+  .grid:has(> .ds-stat):not(:has(> :not(.ds-stat))) > .ds-stat.justify-between > div:last-child { display: none; }
 }

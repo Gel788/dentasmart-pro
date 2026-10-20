@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { IBM_Plex_Mono } from 'next/font/google';
 import localFont from 'next/font/local';
 import { AuthProvider } from '@/lib/auth-context';
@@ -18,13 +18,25 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: 'Седракович Дент' },
 };
 
+/**
+ * maximumScale stops iPhone Safari from zooming into a field on tap and staying zoomed (which cut the
+ * right edge off every screen); iOS still lets people pinch-zoom, so nothing is lost for accessibility.
+ * viewport-fit=cover lets the bottom menu sit above the home bar using the safe-area insets.
+ */
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#0b6e66',
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // The inline script below sets the theme class and density before React hydrates.
     <html lang="ru" className={`${body.variable} ${display.variable} ${mono.variable}`} suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#0b6e66" />
         <script
           dangerouslySetInnerHTML={{
             __html: `try{var t=localStorage.getItem('dsp_theme');if(t==='dark')document.documentElement.classList.add('dark');var d=localStorage.getItem('sd_density')||'compact';document.documentElement.dataset.density=d}catch(e){}`,
