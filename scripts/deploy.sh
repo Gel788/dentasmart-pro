@@ -25,17 +25,18 @@ ls -t /root/dentasmart-backups/*.dump | head -1
 echo "== code"
 tar -xf "/tmp/dentasmart-$REV.tar" && rm -f "/tmp/dentasmart-$REV.tar"
 
-set -a; . ./.env; set +a
-
 echo "== dependencies"
-# The first install after unpacking can purge the workspace node_modules and still report "Done".
+# Build tools (prisma, tsc, nest) are devDependencies: install them even though the app runs with
+# NODE_ENV=production, or pnpm prunes them and the build has nothing to build with.
 for attempt in 1 2 3; do
-  CI=true nice pnpm install --frozen-lockfile --config.confirmModulesPurge=false >/tmp/dentasmart-install.log 2>&1 || true
+  env -u NODE_ENV CI=true nice pnpm install --frozen-lockfile --prod=false --config.confirmModulesPurge=false >/tmp/dentasmart-install.log 2>&1 || true
   if [ -x packages/database/node_modules/.bin/prisma ] && [ -d apps/api/node_modules ] && [ -d apps/web/node_modules ]; then
     echo "installed (attempt $attempt)"; break
   fi
   if [ "$attempt" = 3 ]; then tail -20 /tmp/dentasmart-install.log; echo "install failed; nothing restarted" >&2; exit 1; fi
 done
+
+set -a; . ./.env; set +a
 
 echo "== database"
 ( cd packages/database \
