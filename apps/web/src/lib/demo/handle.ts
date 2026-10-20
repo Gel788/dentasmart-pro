@@ -1,7 +1,7 @@
 import { phoneDigits } from '../phone';
 import { PLAN_TEMPLATES, composeFamily, lineTotal, type Mark } from '../plan-engine';
 import { resultFor, serviceKit, surfacesFor } from '../service-kit';
-import { canMoveVisit, dayLoad, fromKopecks, invoiceStatus, isVisitClosed, isVisitStatus, kopecks, labDueAt, MEDICAL_KEYS, medicalDiff, medicalReviewDue, normalizeMedical, hoursOn, normalizeWeekHours, patientSegments, visibleHours, weekHoursOf, weekHoursText, phoneMatches, searchTerms, SEGMENTS, visitMoveError, wallDate, type MedicalFields, type PatientSegment, type VisitStatus } from '@dentasmart/shared';
+import { canMoveVisit, dayLoad, fromKopecks, invoiceStatus, isVisitClosed, isVisitStatus, kopecks, labDueAt, MEDICAL_KEYS, medicalDiff, medicalReviewDue, normalizeMedical, employeeWeek, hoursOn, normalizeWeekHours, patientSegments, scheduleRows, visibleHours, weekHoursOf, weekHoursText, phoneMatches, searchTerms, SEGMENTS, visitMoveError, wallDate, type MedicalFields, type PatientSegment, type VisitStatus } from '@dentasmart/shared';
 import { ApiError } from '../api';
 import snapshot from './snapshot.json';
 import { demoLabWork, demoRoute, reserveDemoLines, type DemoReservation } from './route';
@@ -937,7 +937,14 @@ function saveEmployee(bag: Bag, data: AnyRec) {
     commission: data.commission ?? row.commission ?? 0,
     status: data.status ?? row.status ?? 'ACTIVE',
   });
+  if (data.weekHours !== undefined) {
+    if (data.weekHours === null) row.schedule = [];
+    else {
+      try { row.schedule = scheduleRows(normalizeWeekHours(data.weekHours)); } catch (err) { throw new Error((err as Error).message); }
+    }
+  }
   if (!Array.isArray(row.schedule)) row.schedule = [];
+  row.weekHours = employeeWeek(row.schedule);
   syncStaff(bag, row);
   return row;
 }
@@ -962,8 +969,8 @@ function syncStaff(bag: Bag, row: AnyRec) {
   const name = personName(row);
   const existing = doctors.find((item) => item.id === row.id);
   if (row.status === 'INACTIVE') schedule.doctors = doctors.filter((item) => item.id !== row.id);
-  else if (existing) existing.name = name;
-  else doctors.push({ id: row.id, name });
+  else if (existing) Object.assign(existing, { name, weekHours: row.weekHours ?? null });
+  else doctors.push({ id: row.id, name, weekHours: row.weekHours ?? null });
 }
 
 function addShift(bag: Bag, data: AnyRec) {

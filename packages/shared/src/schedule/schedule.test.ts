@@ -49,7 +49,7 @@ describe('loadLevel', () => {
   });
 });
 
-import { hoursOn, normalizeWeekHours, parseWorkHours, tzOffsetMinutes, visibleHours, wallDate, weekHoursOf, weekHoursText } from './schedule';
+import { employeeWeek, hoursOn, normalizeWeekHours, scheduleRows, parseWorkHours, tzOffsetMinutes, visibleHours, wallDate, weekHoursOf, weekHoursText } from './schedule';
 
 describe('часы работы и часовой пояс', () => {
   it('читает часы в разных записях и падает на 8–20', () => {
@@ -98,5 +98,21 @@ describe('weekly hours', () => {
     expect(visibleHours([evening], [{ start: 13 * 60 + 30, end: 14 * 60 + 15 }])).toEqual({ opensAt: 13 * 60, closesAt: 22 * 60 });
     expect(visibleHours([null])).toEqual({ opensAt: 480, closesAt: 1200 });
     expect(visibleHours([evening, morning])).toEqual({ opensAt: 480, closesAt: 1320 });
+  });
+});
+
+describe('employee week', () => {
+  it('reads schedule rows Monday first and round-trips', () => {
+    const rows = [{ dayOfWeek: 1, startsAt: '15:00', endsAt: '22:00' }, { dayOfWeek: 7, startsAt: '08:00', endsAt: '15:00' }];
+    const week = employeeWeek(rows)!;
+    expect(week[0]).toEqual({ opensAt: 900, closesAt: 1320 });
+    expect(week[1]).toBeNull();
+    expect(week[6]).toEqual({ opensAt: 480, closesAt: 900 });
+    expect(scheduleRows(week)).toEqual(rows);
+    expect(employeeWeek([{ dayOfWeek: 0, startsAt: '10:00', endsAt: '12:00' }])![6]).toEqual({ opensAt: 600, closesAt: 720 });
+  });
+
+  it('no rows means the clinic hours', () => {
+    expect(employeeWeek([])).toBeNull();
   });
 });

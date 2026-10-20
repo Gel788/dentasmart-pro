@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { WEEKDAYS_SHORT, weekHoursText, type WeekHours } from '@dentasmart/shared';
+import { employeeWeek, weekHoursOf, weekHoursText, type ScheduleRow, type WeekHours } from '@dentasmart/shared';
 import { api } from '@/lib/api';
 import { downloadJson, downloadReport } from '@/lib/download';
 import { formatMoney } from '@/lib/format';
@@ -28,7 +28,7 @@ type Bundle = {
   planTemplates: { id: string; name: string; note: string | null; isArchived: boolean }[];
   visitTemplates: { id: string; name: string; icd10: string | null; complaints: string; diagnosis: string; treatment: string; recommendations: string; isArchived: boolean }[];
   documents: { id: string; kind: string; name: string; body: string; isArchived: boolean }[];
-  employees: { id: string; firstName: string; lastName: string; specialization: string | null; phone: string | null; email: string; commission: number; status?: string; canLogin?: boolean; roles?: { code: string; name: string }[]; schedule: { dayOfWeek: number }[] }[];
+  employees: { id: string; firstName: string; lastName: string; specialization: string | null; phone: string | null; email: string; commission: number; status?: string; canLogin?: boolean; roles?: { code: string; name: string }[]; schedule: ScheduleRow[]; weekHours?: WeekHours | null }[];
   cabinets: { id: string; name: string; isActive: boolean }[];
   roles: { id: string; name: string; code: string; seeCost: boolean; maxDiscountPercent: number; editClosedVisits: boolean; editPrice: boolean; seeAllFinance: boolean; canExport: boolean; permissions: string[] }[];
   permissions: { code: string; description: string | null }[];
@@ -273,11 +273,24 @@ const fromTime = (value: string) => {
   const [h, m] = value.split(':').map(Number);
   return Number.isFinite(h) ? h * 60 + (Number.isFinite(m) ? m : 0) : 0;
 };
+function staffWeekLabel(row: { schedule: ScheduleRow[]; weekHours?: WeekHours | null }) {
+  const own = row.weekHours !== undefined ? row.weekHours : employeeWeek(row.schedule);
+  return own ? `график: ${weekHoursText(own)}` : 'по часам клиники';
+}
 const DAY_NAMES = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
 
 /** Opening hours per weekday: the calendar shows only these, the rest opens on request. */
 function Hours({ data, flash }: { data: Bundle; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
-  const initial = data.brand.weekHours ?? Array.from({ length: 7 }, () => ({ opensAt: 540, closesAt: 1200 }));
+  const initial = weekHoursOf(data.brand.weekHours, data.brand.workHours);
+  return (
+    <Panel title="Часы работы" hint="В расписании видно только рабочее время. Остальные часы открываются кнопкой «Всё время» — туда тоже можно записать.">
+      <WeekEditor initial={initial} saveLabel="Сохранить часы" onSave={(week) => flash(() => api('/config/brand', { method: 'POST', body: JSON.stringify({ weekHours: week }) }))} />
+    </Panel>
+  );
+}
+
+/** Seven days with a day-off switch and open/close times; refuses a day that closes before it opens. */
+function WeekEditor({ initial, saveLabel, onSave, onCancel }: { initial: WeekHours; saveLabel: string; onSave: (week: WeekHours) => Promise<boolean>; onCancel?: () => void }) {
   const [week, setWeek] = useState<WeekHours>(initial);
   const [error, setError] = useState('');
   const dirty = JSON.stringify(week) !== JSON.stringify(initial);
@@ -286,42 +299,69 @@ function Hours({ data, flash }: { data: Bundle; flash: (work: () => Promise<unkn
   const bad = week.findIndex((day) => day && day.opensAt >= day.closesAt);
 
   return (
-    <Panel title="Часы работы" hint="В расписании видно только рабочее время. Остальные часы открываются кнопкой «Всё время» — туда тоже можно записать.">
-      <form
-        className="cfg-hours"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (bad >= 0) { setError(`${DAY_NAMES[bad]}: закрытие должно быть позже открытия`); return; }
-          setError('');
-          void flash(() => api('/config/brand', { method: 'POST', body: JSON.stringify({ weekHours: week }) }));
-        }}
-      >
-        <ul>
-          {week.map((day, index) => (
-            <li key={DAY_NAMES[index]} data-closed={!day || undefined} data-bad={index === bad || undefined}>
-              <label className="cfg-hours-day">
-                <input type="checkbox" aria-label={`${DAY_NAMES[index]} — рабочий день`} checked={!!day} onChange={(event) => setDay(index, event.target.checked ? { opensAt: 540, closesAt: 1200 } : null)} />
-                <span><b>{DAY_NAMES[index]}</b><small>{day ? 'рабочий' : 'выходной'}</small></span>
-              </label>
-              {day ? (
-                <span className="cfg-hours-time">
-                  <label><span className="sr-only">{DAY_NAMES[index]}, открытие</span><input className="sd-input" type="time" step={900} value={toTime(day.opensAt)} onChange={(event) => setDay(index, { ...day, opensAt: fromTime(event.target.value) })} /></label>
-                  <span aria-hidden="true">—</span>
-                  <label><span className="sr-only">{DAY_NAMES[index]}, закрытие</span><input className="sd-input" type="time" step={900} value={toTime(day.closesAt === 1440 ? 1439 : day.closesAt)} onChange={(event) => setDay(index, { ...day, closesAt: fromTime(event.target.value) })} /></label>
-                </span>
-              ) : <span className="cfg-hours-off">не работает</span>}
-              {index === 0 && <button className="sd-btn-ghost cfg-hours-copy" type="button" onClick={() => copyToWeekdays(0)}>На все будни</button>}
-            </li>
-          ))}
-        </ul>
-        <p className="cfg-hours-sum">{weekHoursText(week)}</p>
-        {error && <p className="cfg-hours-error" role="alert">{error}</p>}
-        <div className="cfg-save">
-          <button className="sd-btn" type="submit" disabled={!dirty}>Сохранить часы</button>
-          {dirty && <button className="sd-btn-ghost" type="button" onClick={() => { setWeek(initial); setError(''); }}>Отменить</button>}
+    <form
+      className="cfg-hours"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (bad >= 0) { setError(`${DAY_NAMES[bad]}: закрытие должно быть позже открытия`); return; }
+        setError('');
+        void onSave(week);
+      }}
+    >
+      <ul>
+        {week.map((day, index) => (
+          <li key={DAY_NAMES[index]} data-closed={!day || undefined} data-bad={index === bad || undefined}>
+            <label className="cfg-hours-day">
+              <input type="checkbox" aria-label={`${DAY_NAMES[index]} — рабочий день`} checked={!!day} onChange={(event) => setDay(index, event.target.checked ? { opensAt: 540, closesAt: 1200 } : null)} />
+              <span><b>{DAY_NAMES[index]}</b><small>{day ? 'рабочий' : 'выходной'}</small></span>
+            </label>
+            {day ? (
+              <span className="cfg-hours-time">
+                <label><span className="sr-only">{DAY_NAMES[index]}, начало</span><input className="sd-input" type="time" step={900} value={toTime(day.opensAt)} onChange={(event) => setDay(index, { ...day, opensAt: fromTime(event.target.value) })} /></label>
+                <span aria-hidden="true">—</span>
+                <label><span className="sr-only">{DAY_NAMES[index]}, конец</span><input className="sd-input" type="time" step={900} value={toTime(day.closesAt === 1440 ? 1439 : day.closesAt)} onChange={(event) => setDay(index, { ...day, closesAt: fromTime(event.target.value) })} /></label>
+              </span>
+            ) : <span className="cfg-hours-off">не работает</span>}
+            {index === 0 && <button className="sd-btn-ghost cfg-hours-copy" type="button" onClick={() => copyToWeekdays(0)}>На все будни</button>}
+          </li>
+        ))}
+      </ul>
+      <p className="cfg-hours-sum">{weekHoursText(week)}</p>
+      {error && <p className="cfg-hours-error" role="alert">{error}</p>}
+      <div className="cfg-save">
+        <button className="sd-btn" type="submit" disabled={!dirty && !onCancel}>{saveLabel}</button>
+        {dirty && <button className="sd-btn-ghost" type="button" onClick={() => { setWeek(initial); setError(''); }}>Сбросить</button>}
+        {onCancel && <button className="sd-btn-ghost" type="button" onClick={onCancel}>Закрыть</button>}
+      </div>
+    </form>
+  );
+}
+
+/** An employee's own week, or the clinic's hours. */
+function StaffHours({ data, row, flash, onClose }: { data: Bundle; row: Bundle['employees'][number]; flash: (work: () => Promise<unknown>) => Promise<boolean>; onClose: () => void }) {
+  const clinic = weekHoursOf(data.brand.weekHours, data.brand.workHours);
+  const own = row.weekHours !== undefined ? row.weekHours : employeeWeek(row.schedule);
+  const [custom, setCustom] = useState(!!own);
+  const save = (weekHours: WeekHours | null) =>
+    flash(() => api('/config/employees', { method: 'POST', body: JSON.stringify({ id: row.id, firstName: row.firstName, lastName: row.lastName, specialization: row.specialization, email: row.email, commission: row.commission, weekHours }) })).then((ok) => { if (ok) onClose(); return ok; });
+  return (
+    <div className="cfg-staff-hours">
+      <div className="sd-seg" role="radiogroup" aria-label={`График: ${row.lastName} ${row.firstName}`}>
+        <button type="button" role="radio" aria-checked={!custom} className={!custom ? 'on' : ''} onClick={() => setCustom(false)}>По часам клиники</button>
+        <button type="button" role="radio" aria-checked={custom} className={custom ? 'on' : ''} onClick={() => setCustom(true)}>Свой график</button>
+      </div>
+      {custom ? (
+        <WeekEditor initial={own ?? clinic} saveLabel="Сохранить график" onSave={(week) => save(week)} onCancel={onClose} />
+      ) : (
+        <div className="cfg-staff-hours-clinic">
+          <p>Работает по часам клиники: {weekHoursText(clinic)}.</p>
+          <div className="cfg-save">
+            {own ? <button className="sd-btn" type="button" onClick={() => void save(null)}>Перевести на часы клиники</button> : null}
+            <button className="sd-btn-ghost" type="button" onClick={onClose}>Закрыть</button>
+          </div>
         </div>
-      </form>
-    </Panel>
+      )}
+    </div>
   );
 }
 
@@ -353,6 +393,7 @@ function Staff({ data, query, flash }: { data: Bundle; query: string; flash: (wo
   const blank = { firstName: '', lastName: '', email: '', specialization: '', roleCode: 'doctor', commission: 0 };
   const [form, setForm] = useState(blank);
   const [editing, setEditing] = useState<string | null>(null);
+  const [hoursFor, setHoursFor] = useState<string | null>(null);
   const [draft, setDraft] = useState({ firstName: '', lastName: '', specialization: '', phone: '', commission: 0 });
   const [issued, setIssued] = useState<{ email: string; password: string } | null>(null);
   const off = (status?: string) => status === 'INACTIVE' || status === 'TERMINATED';
@@ -362,8 +403,8 @@ function Staff({ data, query, flash }: { data: Bundle; query: string; flash: (wo
       <form className="cfg-new cfg-staff" onSubmit={(event) => {
         event.preventDefault();
         void flash(async () => {
-          const doctor = form.roleCode === 'doctor' || form.roleCode === 'assistant';
-          const created = await api<{ id: string; email?: string; password?: string }>('/config/employees', { method: 'POST', body: JSON.stringify({ ...form, ...(doctor ? { days: [1, 2, 3, 4, 5], startsAt: '09:00', endsAt: '18:00' } : {}) }) });
+          // A new employee works by the clinic's hours until a week of their own is set.
+          const created = await api<{ id: string; email?: string; password?: string }>('/config/employees', { method: 'POST', body: JSON.stringify(form) });
           if (created.password && created.email) setIssued({ email: created.email, password: created.password });
         }).then((ok) => { if (ok) setForm(blank); });
       }}>
@@ -404,13 +445,15 @@ function Staff({ data, query, flash }: { data: Bundle; query: string; flash: (wo
                   <b>{row.lastName} {row.firstName}</b>
                   <small>{[(row.roles ?? []).map((role) => role.name).join(', '), row.specialization, row.email].filter(Boolean).join(' · ')}</small>
                 </span>
-                <span className="cfg-state" data-off={off(row.status) || undefined}>{off(row.status) ? 'в архиве, вход закрыт' : `работает${row.schedule.length ? ` · смен в неделю ${row.schedule.length}` : ''}${row.commission ? ` · ${row.commission}%` : ''}`}</span>
+                <span className="cfg-state" data-off={off(row.status) || undefined}>{off(row.status) ? 'в архиве, вход закрыт' : `${staffWeekLabel(row)}${row.commission ? ` · ${row.commission}%` : ''}`}</span>
                 <span className="cfg-actions">
+                  <button className="sd-btn-ghost" type="button" aria-expanded={hoursFor === row.id} onClick={() => setHoursFor(hoursFor === row.id ? null : row.id)}>График</button>
                   <button className="sd-btn-ghost" type="button" onClick={() => { setEditing(row.id); setDraft({ firstName: row.firstName, lastName: row.lastName, specialization: row.specialization ?? '', phone: row.phone ?? '', commission: row.commission }); }}>Изменить</button>
                   <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api('/config/employees', { method: 'POST', body: JSON.stringify({ id: row.id, firstName: row.firstName, lastName: row.lastName, specialization: row.specialization, email: row.email, commission: row.commission, status: off(row.status) ? 'ACTIVE' : 'INACTIVE' }) }))}>{off(row.status) ? 'Вернуть' : 'В архив'}</button>
                 </span>
               </>
             )}
+            {hoursFor === row.id && editing !== row.id && <StaffHours data={data} row={row} flash={flash} onClose={() => setHoursFor(null)} />}
           </li>
         ))}
       </ul>

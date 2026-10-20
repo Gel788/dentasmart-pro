@@ -18,7 +18,7 @@ export type BoardVisit = {
 export type DayShell = {
   date: string;
   branches: { id: string; name: string; cabinets: { id: string; name: string }[] }[];
-  doctors: { id: string; name: string }[];
+  doctors: { id: string; name: string; weekHours?: DayHours[] | null }[];
   appointments: BoardVisit[];
 };
 

@@ -148,6 +148,35 @@ function sameHours(a: DayHours, b: DayHours) {
   return a === b || (!!a && !!b && a.opensAt === b.opensAt && a.closesAt === b.closesAt);
 }
 
+export type ScheduleRow = { dayOfWeek: number; startsAt: string; endsAt: string };
+
+const minutesOf = (text: string) => {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(text.trim());
+  return match ? Number(match[1]) * 60 + Number(match[2]) : NaN;
+};
+
+/**
+ * An employee's week from their schedule rows (day 1 = Monday … 7 = Sunday, 0 also read as Sunday).
+ * No rows means the employee follows the clinic's hours: null.
+ */
+export function employeeWeek(rows: ScheduleRow[]): WeekHours | null {
+  if (!rows.length) return null;
+  const week: WeekHours = Array.from({ length: 7 }, () => null);
+  for (const row of rows) {
+    const index = row.dayOfWeek === 0 ? 6 : row.dayOfWeek - 1;
+    const opensAt = minutesOf(row.startsAt);
+    const closesAt = row.endsAt === '24:00' ? 24 * 60 : minutesOf(row.endsAt);
+    if (index < 0 || index > 6 || !(opensAt < closesAt)) continue;
+    week[index] = { opensAt, closesAt };
+  }
+  return week;
+}
+
+/** Schedule rows for a week, one per working day. */
+export function scheduleRows(week: WeekHours): ScheduleRow[] {
+  return week.flatMap((day, index) => (day ? [{ dayOfWeek: index + 1, startsAt: hhmm(day.opensAt), endsAt: day.closesAt === 24 * 60 ? '24:00' : hhmm(day.closesAt) }] : []));
+}
+
 /**
  * The span a calendar shows: the opening hours of the visible days, widened to every visit so nothing
  * booked outside hours is ever hidden. Days that are all closed with no visits fall back to 08–20.

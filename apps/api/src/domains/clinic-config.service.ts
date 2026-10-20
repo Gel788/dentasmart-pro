@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@dentasmart/database';
-import { normalizeWeekHours, weekHoursOf, weekHoursText, type WeekHours } from '@dentasmart/shared';
+import { employeeWeek, normalizeWeekHours, scheduleRows, weekHoursOf, weekHoursText, type WeekHours } from '@dentasmart/shared';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -140,6 +140,8 @@ export class ClinicConfigService {
         canLogin: employee.user.isActive,
         roles: employee.user.userRoles.map((link) => ({ code: link.role.code, name: link.role.name })),
         schedule: employee.schedules.map((row) => ({ dayOfWeek: row.dayOfWeek, startsAt: row.startsAt, endsAt: row.endsAt })),
+        // null: works by the clinic's hours.
+        weekHours: employeeWeek(employee.schedules.filter((row) => row.isActive)),
         commission: num((employee.payrollRules.find((rule) => rule.isActive)?.paramsJson as { percent?: number } | null)?.percent),
       })),
       cabinets: cabinets.map((cabinet) => ({ id: cabinet.id, name: cabinet.name, isActive: cabinet.isActive })),
@@ -375,7 +377,7 @@ export class ClinicConfigService {
     return { id: row.id };
   }
 
-  async saveEmployee(orgId: string, userId: string, body: { id?: string; firstName: string; lastName: string; email?: string; phone?: string; specialization?: string; commission?: number; days?: number[]; startsAt?: string; endsAt?: string; status?: string; roleCode?: string }) {
+  async saveEmployee(orgId: string, userId: string, body: { id?: string; firstName: string; lastName: string; email?: string; phone?: string; specialization?: string; commission?: number; days?: number[]; startsAt?: string; endsAt?: string; status?: string; roleCode?: string; weekHours?: WeekHours | null }) {
     if (!body.firstName?.trim() || !body.lastName?.trim()) throw new BadRequestException('Нужны имя и фамилия');
     let employeeId = body.id;
     // A new login gets a random one-time password, shown once to whoever created it.
@@ -420,7 +422,20 @@ export class ClinicConfigService {
         if (archived) await this.prisma.refreshToken.deleteMany({ where: { userId: own.userId } });
       }
     }
-    if (body.days?.length) {
+    // A week of their own, or null to follow the clinic's hours again.
+    if (body.weekHours !== undefined) {
+      let week: WeekHours | null = null;
+      if (body.weekHours !== null) {
+        try { week = normalizeWeekHours(body.weekHours); } catch (err) { throw new BadRequestException((err as Error).message); }
+      }
+      const branch = await this.prisma.branch.findFirst({ where: { organizationId: orgId, isActive: true } });
+      await this.prisma.$transaction([
+        this.prisma.employeeSchedule.deleteMany({ where: { employeeId } }),
+        ...(week && branch
+          ? [this.prisma.employeeSchedule.createMany({ data: scheduleRows(week).map((row) => ({ organizationId: orgId, employeeId: employeeId!, branchId: branch.id, ...row })) })]
+          : []),
+      ]);
+    } else if (body.days?.length) {
       const branch = await this.prisma.branch.findFirst({ where: { organizationId: orgId, isActive: true } });
       if (branch) {
         await this.prisma.employeeSchedule.deleteMany({ where: { employeeId } });

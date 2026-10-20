@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ToothCondition, ToothFormulaType } from '@dentasmart/database';
-import { dayLoad, hoursOn, kopecks, medicalReviewDue, tzOffsetMinutes, visibleHours, wallDate, weekHoursOf } from '@dentasmart/shared';
+import { dayLoad, employeeWeek, hoursOn, kopecks, medicalReviewDue, tzOffsetMinutes, visibleHours, wallDate, weekHoursOf } from '@dentasmart/shared';
 import { medicalView } from '../patients/patients.service';
 import { clinicianWhere } from './clinicians';
 import { assertPlace } from '../common/clinic-place';
@@ -1362,6 +1362,7 @@ export class WorkspaceService {
     ]);
     const doctors = await this.prisma.employee.findMany({
       where: clinicianWhere(orgId),
+      include: { schedules: { where: { isActive: true } } },
       orderBy: { lastName: 'asc' },
     });
     return {
@@ -1371,7 +1372,8 @@ export class WorkspaceService {
         name: b.name,
         cabinets: b.cabinets.map((c) => ({ id: c.id, name: c.name })),
       })),
-      doctors: doctors.map((d) => ({ id: d.id, name: `${d.lastName} ${d.firstName}` })),
+      // weekHours null: the doctor works by the clinic's hours.
+      doctors: doctors.map((d) => ({ id: d.id, name: `${d.lastName} ${d.firstName}`, weekHours: employeeWeek(d.schedules) })),
       appointments: appointments.map(boardVisit),
     };
   }

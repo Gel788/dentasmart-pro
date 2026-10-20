@@ -13,7 +13,7 @@ type Props = {
   offset: number;
   hours: { opensAt: number; closesAt: number };
   /** Each column's opening hours; time outside them is shaded but still bookable. */
-  dayHours?: (date: string) => DayHours;
+  dayHours?: (column: Column) => DayHours;
   selectedId: string | null;
   pendingIds: Set<string>;
   onSelect: (visit: BoardVisit) => void;
@@ -97,7 +97,7 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
               if (visit) onMove(visit, column, minutesAt(event));
             }}
           >
-            {dayHours && closedBands(dayHours(column.date), first, first + span).map((band) => (
+            {dayHours && closedBands(dayHours(column), first, first + span).map((band) => (
               <div key={band.from} className={styles.closed} style={{ top: at(band.from), height: `calc(${(band.to - band.from) / 60} * ${hourPx})` }} aria-hidden="true" />
             ))}
             {own.map((visit) => {

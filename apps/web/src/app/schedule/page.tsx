@@ -154,7 +154,7 @@ function Calendar() {
       startsAt: instantAt(column.date, minutes, offset),
       cabinetId: column.move.cabinetId ?? (axis === 'chair' ? undefined : shell.branches[0]?.cabinets[0]?.id),
       doctorId: column.move.doctorId ?? (doctor || shell.doctors[0]?.id),
-      label: `${column.label} · ${clock(minutes)}`,
+      label: `${column.label} · ${clock(minutes)}${outsideHours(column, minutes) ? ' · вне графика' : ''}`,
     });
   };
 
@@ -221,9 +221,20 @@ function Calendar() {
   }
   const shownDates = view === 'week' ? Array.from({ length: 7 }, (_, index) => addDays(weekFrom, index)) : date ? [date] : [];
   const shownVisits = view === 'week' ? weekVisits : dayVisits;
+  // A doctor column follows that doctor's own week when one is set; chairs follow the clinic.
+  const weekOf = (doctorId: string | undefined) => shell?.doctors.find((item) => item.id === doctorId)?.weekHours ?? weekHours;
+  const columnHours = (column: Column): DayHours => {
+    if (view === 'day' && axis === 'doctor') return hoursOn(weekOf(column.id), column.date);
+    if (view === 'week' && doctor) return hoursOn(weekOf(doctor), column.date);
+    return hoursOfDay(column.date);
+  };
+  function outsideHours(column: Column, minutes: number) {
+    const hours = columnHours(column);
+    return !hours || minutes < hours.opensAt || minutes >= hours.closesAt;
+  }
   const gridHours = allHours
     ? { opensAt: 0, closesAt: 24 * 60 }
-    : visibleHours(shownDates.map(hoursOfDay), shownVisits.map((visit) => ({ start: wallMinutes(visit.startsAt, offset), end: wallMinutes(visit.endsAt, offset) })));
+    : visibleHours([...shownDates.map(hoursOfDay), ...columns.map(columnHours)], shownVisits.map((visit) => ({ start: wallMinutes(visit.startsAt, offset), end: wallMinutes(visit.endsAt, offset) })));
   const dayOff = view === 'day' && !!date && !hoursOfDay(date);
   const todayHours = date ? hoursOfDay(date) : null;
   const hoursLabel = (day: DayHours) => (day ? `${clock(day.opensAt)}–${clock(day.closesAt)}` : 'выходной');
@@ -278,7 +289,7 @@ function Calendar() {
             {(view === 'day' || view === 'week') && (
               <div className={styles.hoursBar}>
                 <b>{view === 'day' ? `Часы работы: ${hoursLabel(todayHours)}` : 'Рабочие часы по графику'}</b>
-                <span>{allHours ? 'Показано всё время; нерабочее заштриховано, туда тоже можно записать.' : 'Нерабочее время скрыто.'}</span>
+                <span>{allHours ? 'Показано всё время; нерабочее заштриховано, туда тоже можно записать.' : 'Нерабочее время скрыто.'}{(view === 'day' && axis === 'doctor') || (view === 'week' && doctor) ? ' Колонки врачей — по их личным графикам.' : ''}</span>
                 <button type="button" className="sd-btn-ghost" aria-pressed={allHours} onClick={() => setAllHours((on) => !on)}>{allHours ? 'Только рабочие часы' : 'Всё время'}</button>
               </div>
             )}
@@ -291,12 +302,12 @@ function Calendar() {
             )}
             {view === 'day' && !(dayOff && !allHours && dayVisits.length === 0) && (
               columns.length ? (
-                <TimeGrid label="День по креслам" columns={columns} visits={dayVisits} offset={offset} hours={gridHours} dayHours={hoursOfDay} selectedId={selectedId} pendingIds={pending}
+                <TimeGrid label="День по креслам" columns={columns} visits={dayVisits} offset={offset} hours={gridHours} dayHours={columnHours} selectedId={selectedId} pendingIds={pending}
                   onSelect={(visit) => setSelectedId(visit.id)} onSlot={openSlot} onMove={move} />
               ) : <p className={styles.empty}>В клинике пока нет кресел. Добавьте их в настройках, чтобы записывать пациентов.</p>
             )}
             {view === 'week' && (
-              <TimeGrid label="Неделя" columns={columns} visits={weekVisits} offset={offset} hours={gridHours} dayHours={hoursOfDay} selectedId={selectedId} pendingIds={pending}
+              <TimeGrid label="Неделя" columns={columns} visits={weekVisits} offset={offset} hours={gridHours} dayHours={columnHours} selectedId={selectedId} pendingIds={pending}
                 onSelect={(visit) => setSelectedId(visit.id)} onSlot={openSlot} onMove={move} />
             )}
             {view === 'month' && <MonthView days={month.days} selected={date} offset={offset} onPick={pick} />}

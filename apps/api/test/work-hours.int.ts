@@ -39,10 +39,26 @@ async function main() {
 
     await assert.rejects(config.saveBrand(clinic.id, user.id, { weekHours: [{ opensAt: 900, closesAt: 600 }, null, null, null, null, null, null] }), /Пн/);
     await assert.rejects(config.saveBrand(clinic.id, user.id, { weekHours: [evening] }), /семь дней/);
+    // An employee's own week, shown on their doctor column; null again follows the clinic.
+    const role = await prisma.role.create({ data: { organizationId: clinic.id, code: 'doctor', name: 'Врач' } });
+    const doc = await prisma.user.create({ data: { organizationId: clinic.id, email: `doc-${stamp}@t.local`, passwordHash: 'x', userRoles: { create: { roleId: role.id } } } });
+    const employee = await prisma.employee.create({ data: { userId: doc.id, firstName: 'Завен', lastName: 'Седракович' } });
+    await config.saveEmployee(clinic.id, user.id, { id: employee.id, firstName: 'Завен', lastName: 'Седракович', weekHours: [morning, morning, null, null, null, null, evening] });
+    const rows = await prisma.employeeSchedule.findMany({ where: { employeeId: employee.id }, orderBy: { dayOfWeek: 'asc' } });
+    assert.deepEqual(rows.map((row) => [row.dayOfWeek, row.startsAt, row.endsAt]), [[1, '08:00', '15:00'], [2, '08:00', '15:00'], [7, '15:00', '22:00']]);
+    const bundle = await config.bundle(clinic.id);
+    assert.deepEqual(bundle.employees.find((row) => row.id === employee.id)?.weekHours?.[6], evening, 'график виден в карточке');
+    await assert.rejects(config.saveEmployee(clinic.id, user.id, { id: employee.id, firstName: 'Завен', lastName: 'Седракович', weekHours: [evening] }), /семь дней/);
+    await config.saveEmployee(clinic.id, user.id, { id: employee.id, firstName: 'Завен', lastName: 'Седракович', weekHours: null });
+    assert.equal(await prisma.employeeSchedule.count({ where: { employeeId: employee.id } }), 0, 'без своего графика — по часам клиники');
     console.log('work hours ok');
   } finally {
     const org = clinic.id;
     await prisma.auditLog.deleteMany({ where: { organizationId: org } }).catch(() => undefined);
+    await prisma.employeeSchedule.deleteMany({ where: { organizationId: org } });
+    await prisma.employee.deleteMany({ where: { user: { organizationId: org } } });
+    await prisma.userRole.deleteMany({ where: { user: { organizationId: org } } });
+    await prisma.role.deleteMany({ where: { organizationId: org } }).catch(() => undefined);
     await prisma.cabinet.deleteMany({ where: { branch: { organizationId: org } } });
     await prisma.branch.deleteMany({ where: { organizationId: org } });
     await prisma.user.deleteMany({ where: { organizationId: org } });
