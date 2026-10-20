@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Activity, Calendar, ChevronDown, LayoutGrid, LogOut, PanelRight, CalendarRange, ClipboardCheck, FlaskConical, Moon, Package, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users, Wallet } from 'lucide-react';
+import { Activity, Calendar, LayoutGrid, LogOut, PanelRight, CalendarRange, ClipboardCheck, FlaskConical, Moon, Package, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users, Wallet } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
 import { useFocus } from '@/lib/focus';
@@ -57,7 +57,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [hits, setHits] = useState<Hit[]>([]);
   const [cursor, setCursor] = useState(0);
   const [density, setDensity] = useState<'compact' | 'comfort'>('compact');
-  const [moreOpen, setMoreOpen] = useState(false);
   const [sheet, setSheet] = useState(false);
   // Set after mount so the server render and the browser agree on the date.
   const [today, setToday] = useState('');
@@ -77,11 +76,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
     const stored = localStorage.getItem('sd_density');
     if (stored === 'comfort' || stored === 'compact') setDensity(stored);
   }, []);
-
-  useEffect(() => {
-    const here = MORE.some((item) => user?.permissions.includes(item.perm) && pathname.startsWith(item.href));
-    if (here) setMoreOpen(true);
-  }, [pathname, user]);
 
   useEffect(() => { setSheet(false); }, [pathname]);
 
@@ -145,47 +139,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <aside className="sd-nav" aria-label="Разделы">
         <Link href="/" className="sd-brand" aria-label="Седракович Дент — сегодня">
           <span className="sd-mark" aria-hidden>С</span>
-          <span className="sd-brand-text">
-            <strong>Седракович Дент</strong>
-            <span>стоматология</span>
-          </span>
         </Link>
         <nav className="sd-nav-list">
           {primary.map((link) => <NavLink key={link.href} link={link} active={isActive(link.href)} />)}
-          {more.length > 0 && (
-            <>
-              <button className="sd-more" type="button" aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)} title="Ещё разделы">
-                <span className="sd-nav-label">Ещё разделы</span>
-                <ChevronDown className="sd-more-chev" />
-              </button>
-              {moreOpen && more.map((link) => <NavLink key={link.href} link={link} active={isActive(link.href)} extra />)}
-            </>
-          )}
         </nav>
-        <button className="sd-link sd-link-phone-more" type="button" onClick={() => setSheet(true)} aria-current={sheetActive ? 'page' : undefined}>
+        <button className={`sd-link sd-link-more${sheet ? ' open' : ''}`} type="button" onClick={() => setSheet((open) => !open)} aria-expanded={sheet} aria-current={sheetActive ? 'page' : undefined}>
           <span className="sd-link-ico"><LayoutGrid /></span>
           <span className="sd-nav-label">Ещё</span>
         </button>
-        <div className="sd-nav-foot">
-          {settings && <NavLink link={settings} active={isActive(settings.href)} />}
-          <div className="sd-user">
-            <span className="sd-avatar" aria-hidden>{initials}</span>
-            <span className="sd-user-text">
-              <b>{fullName}</b>
-              <span>{user?.organization.name}</span>
-            </span>
-          </div>
-          <div className="sd-foot-actions">
-            <button className="sd-foot-btn" type="button" onClick={toggle} title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}>
-              {theme === 'dark' ? <Sun /> : <Moon />}
-              <span className="sd-nav-label">{theme === 'dark' ? 'Светлая' : 'Тёмная'}</span>
-            </button>
-            <button className="sd-foot-btn" type="button" onClick={logout} title="Выйти">
-              <LogOut />
-              <span className="sd-nav-label">Выйти</span>
-            </button>
-          </div>
-        </div>
+        <button className="sd-nav-foot" type="button" onClick={() => setSheet(true)} title={fullName}>
+          <span className="sd-avatar" aria-hidden>{initials}</span>
+          <span className="sr-only">{fullName}, меню аккаунта</span>
+        </button>
       </aside>
       <div className="sd-main">
         <header className="sd-top">
@@ -195,7 +160,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <span className="sd-search-text">Поиск пациента и команды</span>
             <kbd>⌘K</kbd>
           </button>
-          <span className="sd-today">{today}</span>
+          {pathname !== '/' && <span className="sd-today">{today}</span>}
           <button
             className={`sd-top-btn sd-panel-toggle${panelOpen ? ' on' : ''}`}
             type="button"

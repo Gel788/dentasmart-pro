@@ -1,14 +1,13 @@
 import type { Metadata, Viewport } from 'next';
-import { IBM_Plex_Mono } from 'next/font/google';
-import localFont from 'next/font/local';
+import { IBM_Plex_Mono, Jost, Onest } from 'next/font/google';
 import { AuthProvider } from '@/lib/auth-context';
 import { BranchProvider } from '@/lib/branch-context';
 import { ThemeProvider } from '@/lib/theme-context';
 import { PwaRegister } from '@/components/pwa-register';
 import './globals.css';
 
-const body = localFont({ src: '../fonts/GolosText.ttf', weight: '400 900', display: 'swap', variable: '--font-body' });
-const display = localFont({ src: '../fonts/Unbounded.ttf', weight: '200 900', display: 'swap', variable: '--font-display' });
+const body = Onest({ subsets: ['cyrillic', 'latin'], weight: ['400', '500', '600', '700'], display: 'swap', variable: '--font-body' });
+const display = Jost({ subsets: ['cyrillic', 'latin'], weight: ['400', '500', '600', '700'], display: 'swap', variable: '--font-display' });
 const mono = IBM_Plex_Mono({ subsets: ['cyrillic', 'latin'], weight: ['500'], display: 'swap', variable: '--font-mono' });
 
 export const metadata: Metadata = {
@@ -28,7 +27,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: 'cover',
-  themeColor: '#0b6e66',
+  themeColor: '#141414',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
