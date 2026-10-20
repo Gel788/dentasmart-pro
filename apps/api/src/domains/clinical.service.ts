@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@dentasmart/database';
 import { PrismaService } from '../prisma/prisma.service';
 import { consumeStock } from './stock-consume';
 import { resolveBranchId } from '../common/resolve-branch';
@@ -875,6 +876,66 @@ export class ClinicalService {
       },
     });
     return record;
+  }
+
+  /**
+   * Adds a saved template's phases to a plan: each phase joins the plan's phase of the same title or
+   * becomes a new one; each line is matched to the clinic's price list by code or exact name and priced
+   * from it, so a template never carries an old price into a new plan.
+   */
+  async applyTemplate(orgId: string, planId: string, templateId: string, toothNum?: number | null) {
+    await this.ownPlan(orgId, planId);
+    const template = await this.prisma.planTemplate.findFirst({ where: { id: templateId, organizationId: orgId, isArchived: false } });
+    if (!template) throw new NotFoundException('Шаблон не найден');
+    const phases = (Array.isArray(template.phasesJson) ? template.phasesJson : []) as {
+      title?: string; specialty?: string; healingDays?: number; items?: (string | { title?: string; code?: string; toothNum?: number | null })[];
+    }[];
+    if (!phases.length) throw new BadRequestException('В шаблоне нет этапов');
+    const services = await this.prisma.service.findMany({ where: { organizationId: orgId, isActive: true } });
+    const byCode = new Map(services.filter((row) => row.code).map((row) => [String(row.code).toUpperCase(), row]));
+    const byName = new Map(services.map((row) => [row.name.trim().toLowerCase(), row]));
+    const existing = await this.prisma.planPhase.findMany({ where: { planId }, orderBy: { sortOrder: 'asc' } });
+    let added = 0;
+    const missing: string[] = [];
+    for (const phase of phases) {
+      const title = String(phase.title ?? 'Этап').slice(0, 80);
+      let host = existing.find((row) => row.title === title);
+      if (!host) {
+        host = await this.prisma.planPhase.create({
+          data: { planId, title, sortOrder: existing.length, specialty: phase.specialty ?? null, healingDays: Math.max(0, Math.round(Number(phase.healingDays) || 0)) },
+        });
+        existing.push(host);
+      }
+      for (const raw of phase.items ?? []) {
+        const line = typeof raw === 'string' ? { title: raw } : raw;
+        const service = (line.code && byCode.get(String(line.code).toUpperCase())) || byName.get(String(line.title ?? '').trim().toLowerCase());
+        if (!service) { missing.push(String(line.title ?? line.code ?? '')); continue; }
+        await this.addPlanItem(orgId, planId, { serviceId: service.id, phaseId: host.id, toothNum: line.toothNum ?? toothNum ?? undefined });
+        added += 1;
+      }
+    }
+    if (!added) throw new BadRequestException(missing.length ? `В прайсе нет услуг из шаблона: ${missing.join(', ')}` : 'В шаблоне нет услуг');
+    return { added, missing };
+  }
+
+  /** Saves a plan's phases and lines as a template for the next similar case. */
+  async saveAsTemplate(orgId: string, planId: string, name: string) {
+    const title = name?.trim();
+    if (!title) throw new BadRequestException('Назовите шаблон');
+    await this.ownPlan(orgId, planId);
+    const plan = await this.prisma.treatmentPlan.findUniqueOrThrow({
+      where: { id: planId },
+      include: { phases: { orderBy: { sortOrder: 'asc' } }, items: { include: { service: true }, orderBy: { sortOrder: 'asc' } } },
+    });
+    const line = (item: (typeof plan.items)[number]) => ({ title: item.title, code: item.service?.code ?? null, toothNum: item.toothNum });
+    const phases = plan.phases.length
+      ? plan.phases.map((phase) => ({ title: phase.title, specialty: phase.specialty, healingDays: phase.healingDays, items: plan.items.filter((item) => item.phaseId === phase.id).map(line) }))
+      : [{ title: 'Позиции', items: plan.items.map(line) }];
+    const loose = plan.phases.length ? plan.items.filter((item) => !item.phaseId).map(line) : [];
+    if (loose.length) phases.push({ title: 'Позиции', specialty: null, healingDays: 0, items: loose });
+    if (!phases.some((phase) => phase.items.length)) throw new BadRequestException('В плане нет услуг — сохранять нечего');
+    const row = await this.prisma.planTemplate.create({ data: { organizationId: orgId, name: title.slice(0, 120), note: 'Свой шаблон', phasesJson: phases as unknown as Prisma.InputJsonValue } });
+    return { id: row.id, name: row.name };
   }
 
   /** The plan, if it is this clinic's; every plan route goes through it first. */

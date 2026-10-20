@@ -124,7 +124,7 @@ export class ClinicConfigService {
         quantity: item.batches.reduce((sum, batch) => sum + num(batch.quantity), 0),
         cost: num(item.batches.find((batch) => num(batch.quantity) > 0)?.costPrice),
       })),
-      planTemplates: plans,
+      planTemplates: plans.map((plan) => ({ ...plan, phases: Array.isArray(plan.phasesJson) ? plan.phasesJson : [] })),
       visitTemplates: visits,
       documents,
       employees: employees.map((employee) => ({

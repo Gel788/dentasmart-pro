@@ -69,6 +69,18 @@ export class WorkspaceController {
     return this.workspace.setDisclosure(orgId, planId, body.showBreakdown !== false);
   }
 
+  @Post('plans/:planId/apply-template')
+  @RequirePermissions('medical.write')
+  applyTemplate(@OrgId() orgId: string, @Param('planId') planId: string, @Body() body: { templateId: string; toothNum?: number | null }) {
+    return this.clinical.applyTemplate(orgId, planId, body.templateId, body.toothNum ?? null);
+  }
+
+  @Post('plans/:planId/template')
+  @RequirePermissions('medical.write')
+  saveTemplate(@OrgId() orgId: string, @Param('planId') planId: string, @Body() body: { name: string }) {
+    return this.clinical.saveAsTemplate(orgId, planId, body.name);
+  }
+
   @Post('plans/:planId/installment')
   @RequirePermissions('medical.write')
   installment(@OrgId() orgId: string, @Param('planId') planId: string, @Body() body: { months?: number }) {

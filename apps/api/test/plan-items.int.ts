@@ -72,12 +72,28 @@ async function main() {
       /В прайсе нет услуги/,
     );
     await assert.rejects(workspace.compose(other.id, patient.id, undefined, { patientId: patient.id, plans: [] }), /не найден/, 'чужому пациенту план не собрать');
+    // Templates: save a plan, lay it into a fresh plan at today's prices, names from settings work too.
+    const template = await clinical.saveAsTemplate(clinic.id, plan.id, 'Две пломбы');
+    await prisma.service.update({ where: { id: filling.id }, data: { basePrice: '5000' } });
+    const fresh = await clinical.createPlan(clinic.id, { patientId: patient.id, title: 'Новый' });
+    const applied = await clinical.applyTemplate(clinic.id, fresh.id, template.id, 26);
+    assert.equal(applied.added, 2);
+    const freshItems = await prisma.treatmentPlanItem.findMany({ where: { planId: fresh.id } });
+    assert.deepEqual(freshItems.map((item) => Number(item.price)), [5000, 5000], 'цены из текущего прайса, не из шаблона');
+    assert.ok(freshItems.some((item) => item.toothNum === 16), 'зуб из шаблона сохранился');
+    assert.ok(freshItems.some((item) => item.toothNum === 26), 'строка без зуба получила выбранный зуб');
+    const named = await prisma.planTemplate.create({ data: { organizationId: clinic.id, name: 'Из настроек', phasesJson: [{ title: 'Санация', items: ['Пломба светового отверждения', 'Несуществующая'] }] } });
+    const fromSettings = await clinical.applyTemplate(clinic.id, fresh.id, named.id, null);
+    assert.equal(fromSettings.added, 1);
+    assert.deepEqual(fromSettings.missing, ['Несуществующая'], 'чего нет в прайсе — в отчёт');
+    await assert.rejects(clinical.applyTemplate(other.id, fresh.id, template.id, null), /План не найден/, 'чужой план');
     console.log('plan items ok');
   } finally {
     for (const org of [clinic.id, other.id]) {
       await prisma.treatmentPlanItem.deleteMany({ where: { plan: { organizationId: org } } });
       await prisma.planPhase.deleteMany({ where: { plan: { organizationId: org } } });
       await prisma.treatmentPlan.deleteMany({ where: { organizationId: org } });
+      await prisma.planTemplate.deleteMany({ where: { organizationId: org } });
       await prisma.service.deleteMany({ where: { organizationId: org } });
       await prisma.patient.deleteMany({ where: { organizationId: org } });
       await prisma.organization.delete({ where: { id: org } });

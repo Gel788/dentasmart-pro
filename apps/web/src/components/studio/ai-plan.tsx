@@ -183,7 +183,12 @@ export function AiPlan({
     }
     setBusy(true);
     try {
-      if (!planId) {
+      if (!planId && (template.phases as unknown[] | undefined)?.length) {
+        // A saved template with phases: start an empty plan, then lay the template into it.
+        const plan = await api<{ id: string }>(`/workspace/patients/${patientId}/plans`, { method: 'POST', body: '{}' });
+        await api(`/workspace/plans/${plan.id}/apply-template`, { method: 'POST', body: JSON.stringify({ templateId: template.id, toothNum: tooth }) });
+        await onDone(plan.id);
+      } else if (!planId) {
         const marksForPlan = (template.marks ?? []).map((mark) => ({ ...mark, tooth: mark.tooth ?? tooth }));
         const family = composeFamily(marksForPlan, services);
         if (!family) throw new Error('Шаблон пустой');
