@@ -106,6 +106,12 @@ export class ClinicConfigController {
     return this.config.saveEmployee(orgId, user.id, body);
   }
 
+  @Post('ai')
+  @RequirePermissions('org.manage')
+  ai(@OrgId() orgId: string, @Body() body: { enabled?: boolean }) {
+    return this.config.setAiPlans(orgId, body.enabled !== false);
+  }
+
   @Post('cabinets')
   @RequirePermissions('org.manage')
   cabinet(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Body() body: { id?: string; name: string; isActive?: boolean }) {

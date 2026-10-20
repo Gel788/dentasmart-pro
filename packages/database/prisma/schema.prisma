@@ -27,6 +27,8 @@ model Organization {
   bankAccount String?
   bik         String?
   workHours   String?
+  /// Whether the plan builder may draft plans from findings («Быстрый план»).
+  aiPlans     Boolean  @default(true)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

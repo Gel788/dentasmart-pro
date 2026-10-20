@@ -231,12 +231,17 @@ function Staff({ data, query, flash }: { data: Bundle; query: string; flash: (wo
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', specialization: 'Терапевт', commission: 30 });
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState({ firstName: '', lastName: '', specialization: '', phone: '', commission: 0 });
+  const [issued, setIssued] = useState<{ email: string; password: string } | null>(null);
+  const off = (status?: string) => status === 'INACTIVE' || status === 'TERMINATED';
   const rows = data.employees.filter((row) => !query || `${row.lastName} ${row.firstName}`.toLowerCase().includes(query));
   return (
     <section className="sd-stack">
       <form className="cfg-new" onSubmit={(event) => {
         event.preventDefault();
-        void flash(() => api('/config/employees', { method: 'POST', body: JSON.stringify({ ...form, days: [1, 2, 3, 4, 5], startsAt: '09:00', endsAt: '18:00' }) })).then((ok) => { if (!ok) return;
+        void flash(async () => {
+          const created = await api<{ id: string; email?: string; password?: string }>('/config/employees', { method: 'POST', body: JSON.stringify({ ...form, days: [1, 2, 3, 4, 5], startsAt: '09:00', endsAt: '18:00' }) });
+          if (created.password && created.email) setIssued({ email: created.email, password: created.password });
+        }).then((ok) => { if (!ok) return;
           setForm({ firstName: '', lastName: '', email: '', specialization: 'Терапевт', commission: 30 });
         });
       }}>
@@ -245,8 +250,14 @@ function Staff({ data, query, flash }: { data: Bundle; query: string; flash: (wo
         <label>Почта<input className="sd-input" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
         <button className="sd-btn" type="submit">Врач, пн–пт</button>
       </form>
+      {issued && (
+        <p className="sd-chip info" role="status">
+          Вход для {issued.email}: пароль <b className="sd-mono">{issued.password}</b>. Он показан один раз — передайте его сотруднику, после входа пароль лучше сменить.
+          <button className="sd-btn-ghost" type="button" onClick={() => setIssued(null)}>Скрыть</button>
+        </p>
+      )}
       {rows.map((row) => (
-        <article key={row.id} className={`cfg-row${row.status === 'INACTIVE' ? ' off' : ''}`}>
+        <article key={row.id} className={`cfg-row${off(row.status) ? ' off' : ''}`}>
           {editing === row.id ? (
             <form className="cfg-new" onSubmit={(event) => { event.preventDefault(); void flash(() => api('/config/employees', { method: 'POST', body: JSON.stringify({ id: row.id, ...draft, email: row.email }) })).then((ok) => { if (ok) setEditing(null); }); }}>
               <label>Фамилия<input className="sd-input" value={draft.lastName} onChange={(event) => setDraft({ ...draft, lastName: event.target.value })} required /></label>
@@ -259,9 +270,9 @@ function Staff({ data, query, flash }: { data: Bundle; query: string; flash: (wo
           ) : (
             <>
               <b>{row.lastName} {row.firstName}</b>
-              <span>{row.specialization} · {row.email} · {row.commission}% · смен {row.schedule.length}{row.status === 'INACTIVE' ? ' · архив' : ''}</span>
+              <span>{row.specialization} · {row.email} · {row.commission}% · смен {row.schedule.length}{off(row.status) ? ' · в архиве, вход закрыт' : ''}</span>
               <button className="sd-btn-ghost" type="button" onClick={() => { setEditing(row.id); setDraft({ firstName: row.firstName, lastName: row.lastName, specialization: row.specialization ?? '', phone: row.phone ?? '', commission: row.commission }); }}>Изменить</button>
-              <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api('/config/employees', { method: 'POST', body: JSON.stringify({ id: row.id, firstName: row.firstName, lastName: row.lastName, specialization: row.specialization, email: row.email, commission: row.commission, status: row.status === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE' }) }))}>{row.status === 'INACTIVE' ? 'Вернуть' : 'В архив'}</button>
+              <button className="sd-btn-ghost" type="button" onClick={() => void flash(() => api('/config/employees', { method: 'POST', body: JSON.stringify({ id: row.id, firstName: row.firstName, lastName: row.lastName, specialization: row.specialization, email: row.email, commission: row.commission, status: off(row.status) ? 'ACTIVE' : 'INACTIVE' }) }))}>{off(row.status) ? 'Вернуть' : 'В архив'}</button>
             </>
           )}
         </article>

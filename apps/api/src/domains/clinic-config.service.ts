@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@dentasmart/database';
 import * as bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
 const num = (value: { toString(): string } | number | null | undefined) => Number(value ?? 0);
@@ -8,6 +9,18 @@ const num = (value: { toString(): string } | number | null | undefined) => Numbe
 @Injectable()
 export class ClinicConfigService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /** The id, if that record belongs to this clinic; otherwise «не найдено» — never another clinic's row. */
+  private async mine(
+    kind: 'inventoryItem' | 'planTemplate' | 'visitTemplate' | 'documentTemplate' | 'cabinet' | 'role' | 'promoCode' | 'reminderRule',
+    id: string,
+    orgId: string,
+  ) {
+    const where = kind === 'cabinet' ? { id, branch: { organizationId: orgId } } : { id, organizationId: orgId };
+    const found = await (this.prisma[kind] as unknown as { count: (args: { where: object }) => Promise<number> }).count({ where });
+    if (!found) throw new NotFoundException('Запись не найдена');
+    return id;
+  }
 
   async policy(userId: string) {
     const links = await this.prisma.userRole.findMany({
@@ -64,6 +77,7 @@ export class ClinicConfigService {
     ]);
     if (!org) throw new NotFoundException('Клиника не найдена');
     return {
+      aiPlans: org.aiPlans,
       brand: {
         name: org.name,
         legalName: org.legalName,
@@ -283,7 +297,7 @@ export class ClinicConfigService {
     if (!body.name?.trim()) throw new BadRequestException('Нужно название');
     const item = body.id
       ? await this.prisma.inventoryItem.update({
-        where: { id: body.id },
+        where: { id: await this.mine('inventoryItem', body.id, orgId) },
         data: { name: body.name.trim(), sku: body.sku?.trim() || null, unit: body.unit?.trim() || 'шт', minStock: body.minStock ?? 0 },
       })
       : await this.prisma.inventoryItem.create({
@@ -311,7 +325,7 @@ export class ClinicConfigService {
   async savePlanTemplate(orgId: string, userId: string, body: { id?: string; name: string; note?: string; phasesJson: Prisma.InputJsonValue; isArchived?: boolean }) {
     if (!body.name?.trim()) throw new BadRequestException('Нужно название');
     const row = body.id
-      ? await this.prisma.planTemplate.update({ where: { id: body.id }, data: { name: body.name.trim(), note: body.note ?? null, phasesJson: body.phasesJson, isArchived: Boolean(body.isArchived) } })
+      ? await this.prisma.planTemplate.update({ where: { id: await this.mine('planTemplate', body.id, orgId) }, data: { name: body.name.trim(), note: body.note ?? null, phasesJson: body.phasesJson, isArchived: Boolean(body.isArchived) } })
       : await this.prisma.planTemplate.create({ data: { organizationId: orgId, name: body.name.trim(), note: body.note ?? null, phasesJson: body.phasesJson } });
     await this.trail(orgId, userId, 'PlanTemplate', row.id, body.id ? 'UPDATE' : 'CREATE', { name: row.name });
     return { id: row.id };
@@ -329,7 +343,7 @@ export class ClinicConfigService {
       isArchived: Boolean(body.isArchived),
     };
     const row = body.id
-      ? await this.prisma.visitTemplate.update({ where: { id: body.id }, data })
+      ? await this.prisma.visitTemplate.update({ where: { id: await this.mine('visitTemplate', body.id, orgId) }, data })
       : await this.prisma.visitTemplate.create({ data: { ...data, organizationId: orgId, isArchived: false } });
     await this.trail(orgId, userId, 'VisitTemplate', row.id, body.id ? 'UPDATE' : 'CREATE', { name: row.name });
     return { id: row.id };
@@ -342,18 +356,21 @@ export class ClinicConfigService {
   async saveDocument(orgId: string, userId: string, body: { id?: string; kind: string; name: string; body: string; isArchived?: boolean }) {
     if (!body.name?.trim() || !body.body?.trim()) throw new BadRequestException('Нужны название и текст');
     const row = body.id
-      ? await this.prisma.documentTemplate.update({ where: { id: body.id }, data: { kind: body.kind, name: body.name.trim(), body: body.body, isArchived: Boolean(body.isArchived) } })
+      ? await this.prisma.documentTemplate.update({ where: { id: await this.mine('documentTemplate', body.id, orgId) }, data: { kind: body.kind, name: body.name.trim(), body: body.body, isArchived: Boolean(body.isArchived) } })
       : await this.prisma.documentTemplate.create({ data: { organizationId: orgId, kind: body.kind || 'CONSENT', name: body.name.trim(), body: body.body } });
     await this.trail(orgId, userId, 'DocumentTemplate', row.id, body.id ? 'UPDATE' : 'CREATE', { name: row.name });
     return { id: row.id };
   }
 
-  async saveEmployee(orgId: string, userId: string, body: { id?: string; firstName: string; lastName: string; email?: string; phone?: string; specialization?: string; commission?: number; days?: number[]; startsAt?: string; endsAt?: string }) {
+  async saveEmployee(orgId: string, userId: string, body: { id?: string; firstName: string; lastName: string; email?: string; phone?: string; specialization?: string; commission?: number; days?: number[]; startsAt?: string; endsAt?: string; status?: string }) {
     if (!body.firstName?.trim() || !body.lastName?.trim()) throw new BadRequestException('Нужны имя и фамилия');
     let employeeId = body.id;
+    // A new login gets a random one-time password, shown once to whoever created it.
+    let password: string | null = null;
     if (!employeeId) {
       if (!body.email?.includes('@')) throw new BadRequestException('Для нового врача нужна почта');
-      const passwordHash = await bcrypt.hash('demo12345', 10);
+      password = randomBytes(9).toString('base64url');
+      const passwordHash = await bcrypt.hash(password, 10);
       const user = await this.prisma.user.create({
         data: { organizationId: orgId, email: body.email.trim().toLowerCase(), passwordHash },
       });
@@ -366,10 +383,26 @@ export class ClinicConfigService {
       if (branch) await this.prisma.employeeBranch.create({ data: { employeeId: employee.id, branchId: branch.id, isPrimary: true } });
       employeeId = employee.id;
     } else {
+      const own = await this.prisma.employee.findFirst({ where: { id: employeeId, user: { organizationId: orgId } } });
+      if (!own) throw new NotFoundException('Сотрудник не найден');
+      // Archive closes the login and ends sessions; bringing back reopens it. History stays.
+      const archived = body.status === 'INACTIVE' || body.status === 'TERMINATED';
+      const restored = body.status === 'ACTIVE';
+      if (archived && own.userId === userId) throw new BadRequestException('Свою учётку в архив не убрать');
       await this.prisma.employee.update({
         where: { id: employeeId },
-        data: { firstName: body.firstName.trim(), lastName: body.lastName.trim(), phone: body.phone ?? null, specialization: body.specialization ?? null },
+        data: {
+          firstName: body.firstName.trim(),
+          lastName: body.lastName.trim(),
+          phone: body.phone ?? null,
+          specialization: body.specialization ?? null,
+          ...(archived ? { status: 'TERMINATED' } : restored ? { status: 'ACTIVE' } : {}),
+        },
       });
+      if (archived || restored) {
+        await this.prisma.user.update({ where: { id: own.userId }, data: { isActive: restored } });
+        if (archived) await this.prisma.refreshToken.deleteMany({ where: { userId: own.userId } });
+      }
     }
     if (body.days?.length) {
       const branch = await this.prisma.branch.findFirst({ where: { organizationId: orgId, isActive: true } });
@@ -394,13 +427,18 @@ export class ClinicConfigService {
       else await this.prisma.payrollRule.create({ data: { organizationId: orgId, employeeId, name: 'Процент с выручки', ruleType: 'PERCENT_REVENUE', paramsJson: params } });
     }
     await this.trail(orgId, userId, 'Employee', employeeId, body.id ? 'UPDATE' : 'CREATE', { name: `${body.lastName} ${body.firstName}` });
-    return { id: employeeId };
+    return { id: employeeId, ...(password ? { password, email: body.email!.trim().toLowerCase() } : {}) };
+  }
+
+  async setAiPlans(orgId: string, enabled: boolean) {
+    await this.prisma.organization.update({ where: { id: orgId }, data: { aiPlans: enabled } });
+    return { aiPlans: enabled };
   }
 
   async saveCabinet(orgId: string, userId: string, body: { id?: string; name: string; isActive?: boolean }) {
     if (!body.name?.trim()) throw new BadRequestException('Нужно название кресла');
     if (body.id) {
-      const cabinet = await this.prisma.cabinet.update({ where: { id: body.id }, data: { name: body.name.trim(), isActive: body.isActive !== false } });
+      const cabinet = await this.prisma.cabinet.update({ where: { id: await this.mine('cabinet', body.id, orgId) }, data: { name: body.name.trim(), isActive: body.isActive !== false } });
       await this.trail(orgId, userId, 'Cabinet', cabinet.id, 'UPDATE', { name: cabinet.name });
       return { id: cabinet.id };
     }
@@ -415,7 +453,7 @@ export class ClinicConfigService {
     if (!body.name?.trim()) throw new BadRequestException('Нужно название роли');
     const role = id
       ? await this.prisma.role.update({
-        where: { id },
+        where: { id: await this.mine('role', id, orgId) },
         data: {
           name: body.name.trim(),
           seeCost: Boolean(body.seeCost),
@@ -453,7 +491,7 @@ export class ClinicConfigService {
   async savePromo(orgId: string, userId: string, body: { id?: string; code: string; discountPct: number; isActive?: boolean }) {
     if (!body.code?.trim()) throw new BadRequestException('Нужен код акции');
     const row = body.id
-      ? await this.prisma.promoCode.update({ where: { id: body.id }, data: { code: body.code.trim().toUpperCase(), discountPct: body.discountPct, isActive: body.isActive !== false } })
+      ? await this.prisma.promoCode.update({ where: { id: await this.mine('promoCode', body.id, orgId) }, data: { code: body.code.trim().toUpperCase(), discountPct: body.discountPct, isActive: body.isActive !== false } })
       : await this.prisma.promoCode.create({ data: { organizationId: orgId, code: body.code.trim().toUpperCase(), discountPct: body.discountPct } });
     await this.trail(orgId, userId, 'PromoCode', row.id, body.id ? 'UPDATE' : 'CREATE', { code: row.code });
     return { id: row.id };
@@ -463,7 +501,7 @@ export class ClinicConfigService {
     if (!body.name?.trim() || !body.body?.trim()) throw new BadRequestException('Нужны название и текст');
     const data = { name: body.name.trim(), trigger: body.trigger, channel: body.channel ?? 'WHATSAPP' as const, body: body.body.trim(), isActive: body.isActive !== false };
     const row = body.id
-      ? await this.prisma.reminderRule.update({ where: { id: body.id }, data })
+      ? await this.prisma.reminderRule.update({ where: { id: await this.mine('reminderRule', body.id, orgId) }, data })
       : await this.prisma.reminderRule.create({ data: { ...data, organizationId: orgId } });
     await this.trail(orgId, userId, 'ReminderRule', row.id, body.id ? 'UPDATE' : 'CREATE', { name: row.name });
     return { id: row.id };
