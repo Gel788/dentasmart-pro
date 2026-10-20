@@ -1,0 +1,82 @@
+/* Today: the day's patients in time order with one next step each; what needs attention beside it. */
+
+.page { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.failed { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-solid); }
+.failed p { margin: 0; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+.title { margin: 0 auto 0 0; font-family: var(--font-display), sans-serif; font-weight: 600; font-size: clamp(22px, 1.8vw + 10px, 30px); letter-spacing: -0.01em; }
+.title small { display: block; font-family: var(--font-body), sans-serif; font-size: 13.5px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+.title small::first-letter { text-transform: uppercase; }
+.bar > :global(.sd-btn) { min-height: 44px; }
+.summary { margin: 0; color: var(--text-secondary); font-size: 14.5px; }
+.error { margin: 0; padding: 10px 14px; border-radius: 12px; background: var(--danger-soft); color: var(--danger); font-size: 14px; }
+.none { margin: 0; color: var(--muted); font-size: 14px; }
+
+.body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); gap: 14px; align-items: start; }
+.day { min-width: 0; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-solid); overflow: hidden; }
+.empty { display: flex; flex-direction: column; gap: 12px; padding: 22px 18px; color: var(--text-secondary); }
+.empty p { margin: 0; max-width: 60ch; }
+.empty div { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.visits { margin: 0; padding: 0; list-style: none; }
+.visit { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto auto; align-items: center; gap: 4px 14px; min-height: 68px; padding: 10px 16px; border-top: 1px solid var(--border); }
+.visits > li:first-child { border-top: 0; }
+.visit time { display: flex; flex-direction: column; font-family: var(--font-mono), monospace; font-size: 16px; font-variant-numeric: tabular-nums; color: var(--text); }
+.visit time small { font-size: 12px; color: var(--muted); }
+.visit[data-status='COMPLETED'], .visit[data-status='NO_SHOW'] { background: var(--surface-2); }
+.visit[data-status='COMPLETED'] .name, .visit[data-status='NO_SHOW'] .name { color: var(--text-secondary); }
+.visit[data-status='NO_SHOW'] .name { text-decoration: line-through; text-decoration-color: var(--muted); }
+.visit[data-status='IN_PROGRESS'] { box-shadow: inset 3px 0 0 var(--accent); background: var(--accent-soft); }
+.visit[data-status='WAITING'] { box-shadow: inset 3px 0 0 var(--info); }
+.what { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.name { font-weight: 600; font-size: 15px; color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
+.name:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
+.sub { color: var(--muted); font-size: 13px; }
+.flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.flags span { padding: 1px 7px; border-radius: 6px; font-size: 12px; line-height: 18px; }
+.flags [data-tone='alert'] { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+.flags [data-tone='warn'] { background: var(--warning-soft); color: var(--warning); }
+.flags [data-tone='money'] { background: var(--surface-2); color: var(--text-secondary); }
+.status { color: var(--text-secondary); font-size: 13px; white-space: nowrap; }
+.visit[data-status='IN_PROGRESS'] .status { color: var(--accent-ink); font-weight: 600; }
+.visit[data-status='WAITING'] .status { color: var(--info); font-weight: 600; }
+.act { display: flex; justify-content: flex-end; min-width: 104px; }
+.act > * { min-height: 40px; }
+.done { color: var(--ok); }
+.now { display: flex; align-items: center; gap: 8px; height: 22px; padding: 0 16px; border-top: 1px solid var(--border); }
+.now::after { content: ''; flex: 1; height: 2px; border-radius: 2px; background: var(--danger); }
+.now span { padding: 0 6px; border-radius: 4px; background: var(--danger); color: #fff; font-family: var(--font-mono), monospace; font-size: 11.5px; line-height: 18px; }
+.visits > li.now:first-child { border-top: 0; }
+
+.side { display: flex; flex-direction: column; gap: 12px; position: sticky; top: calc(var(--top-h) + 12px); }
+.attention, .money, .month { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-solid); }
+.side h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.attention ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.attention a { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--border); color: var(--text); text-decoration: none; }
+.attention li:first-child a { border-top: 0; padding-top: 0; }
+.attention a svg { flex: 0 0 auto; margin-top: 2px; color: var(--muted); }
+.attention a[data-kind='review'] svg { color: var(--warning); }
+.attention a[data-kind='pay'] svg { color: var(--accent); }
+.attention a span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.attention a b { font-weight: 500; font-size: 14px; }
+.attention a small { color: var(--muted); font-size: 12.5px; }
+.attention a:hover b { color: var(--accent-ink); }
+.money dl { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.money dl > div { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.money dt { color: var(--text-secondary); font-size: 13.5px; }
+.money dd { margin: 0; font-family: var(--font-mono), monospace; font-size: 16px; font-variant-numeric: tabular-nums; }
+.money dd[data-tone='warn'] { color: var(--warning); }
+.month p { margin: 0; color: var(--text-secondary); font-size: 13.5px; line-height: 1.5; }
+.link { color: var(--accent-ink); font-size: 13.5px; }
+
+@media (max-width: 1099px) {
+  .body { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; }
+}
+@media (max-width: 720px) {
+  .visit { grid-template-columns: 52px minmax(0, 1fr) auto; grid-template-areas: 'time what act' 'time status act'; padding: 10px 12px; }
+  .visit time { grid-area: time; font-size: 15px; }
+  .what { grid-area: what; }
+  .status { grid-area: status; }
+  .act { grid-area: act; min-width: 0; }
+}

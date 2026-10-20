@@ -229,6 +229,7 @@ function read(path: string, token: string): unknown {
   if (prefixed) return bag.gets[prefixed];
 
   if (pathname === '/finance/desk') return demoDesk(bag);
+  if (pathname === '/workspace/today') return demoToday(bag, token);
   if (pathname === '/finance/cash-shift/current') {
     const key = Object.keys(bag.gets).find((item) => item.startsWith('/finance/cash-shift/current'));
     return key ? bag.gets[key] : null;
@@ -2051,6 +2052,59 @@ function addPayment(bag: Bag, data: AnyRec) {
     summary.paymentCount = Number(summary.paymentCount ?? 0) + 1;
   }
   return row;
+}
+
+/** Mirrors WorkspaceService.today on the demo's anchored dates. */
+function demoToday(bag: Bag, token: string) {
+  const now = anchorNow();
+  const day = now.slice(0, 10);
+  const tomorrow = new Date(Date.parse(`${day}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  const role = roleOf(token);
+  const seeMoney = role !== 'doctor';
+  const invoices = (bag.gets['/finance/invoices'] ?? []) as AnyRec[];
+  const debtOf = (patientId: string) => invoices
+    .filter((row) => row.patientId === patientId && ['ISSUED', 'PARTIAL'].includes(row.status))
+    .reduce((acc, row) => acc + Math.max(0, kopecks(row.totalAmount) - kopecks(row.discountAmount) - kopecks(row.paidAmount)), 0) / 100;
+  const visits = bag.appointments
+    .filter((row) => wallDate(row.startsAt, 180) === day && row.status !== 'CANCELLED')
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+    .map((row) => {
+      const status = row.status === 'ARRIVED' ? 'WAITING' : row.status;
+      const patient = findPatient(bag, row.patientId);
+      const debt = debtOf(row.patientId);
+      const reviewDue = medicalReviewDue(patient?.medicalConfirmedAt ?? null, new Date(now));
+      const next = ['SCHEDULED', 'CONFIRMED'].includes(status) ? 'check-in' : status === 'WAITING' ? 'start' : status === 'IN_PROGRESS' ? 'continue' : status === 'COMPLETED' && debt > 0 ? 'pay' : null;
+      const alerts = [
+        ...((patient?.allergies ?? []) as string[]).map((item) => `Аллергия: ${item}`),
+        ...(patient?.anticoagulant ? ['Антикоагулянты'] : []),
+        ...(patient?.contraindications ? [String(patient.contraindications)] : []),
+      ];
+      return { id: row.id, startsAt: row.startsAt, endsAt: row.endsAt, status, patientId: row.patientId, patient: row.patient, phone: patient?.phone ?? null, service: row.service, doctor: row.doctor, cabinet: row.cabinet, alerts, reviewDue, debt: seeMoney ? debt : null, next };
+    });
+  const live = visits.filter((row) => !['COMPLETED', 'NO_SHOW'].includes(row.status));
+  const attention = [
+    ...bag.appointments
+      .filter((row) => wallDate(row.startsAt, 180) === tomorrow && row.status === 'SCHEDULED')
+      .map((row) => ({ kind: 'confirm', title: `Подтвердить завтрашний визит: ${row.patient}`, detail: new Date(row.startsAt).toISOString().slice(11, 16), href: `/visits/${row.id}`, patientId: row.patientId })),
+    ...live.filter((row) => row.reviewDue).map((row) => ({ kind: 'review', title: `Уточнить анамнез: ${row.patient}`, detail: 'перед приёмом сегодня', href: `/visits/${row.id}`, patientId: row.patientId })),
+    ...(seeMoney ? visits.filter((row) => row.status === 'COMPLETED' && (row.debt ?? 0) > 0).map((row) => ({ kind: 'pay', title: `Принять оплату: ${row.patient}`, detail: `осталось ${Math.round(row.debt ?? 0).toLocaleString('ru-RU')} ₽`, href: `/finance?patient=${encodeURIComponent(String(row.patient).split(' ')[0])}`, patientId: row.patientId })) : []),
+  ];
+  const payments = ((bag.gets['/finance/payments'] ?? []) as AnyRec[]).filter((row) => wallDate(row.paidAt, 180) === day);
+  return {
+    day,
+    now,
+    visits,
+    counts: {
+      total: visits.filter((row) => row.status !== 'NO_SHOW').length,
+      done: visits.filter((row) => row.status === 'COMPLETED').length,
+      waiting: visits.filter((row) => row.status === 'WAITING').length,
+      inChair: visits.filter((row) => row.status === 'IN_PROGRESS').length,
+      noShow: visits.filter((row) => row.status === 'NO_SHOW').length,
+    },
+    attention,
+    money: seeMoney ? { revenueToday: payments.reduce((acc, row) => acc + kopecks(row.amount), 0) / 100, dueToday: visits.reduce((acc, row) => acc + (row.debt ?? 0), 0) } : null,
+    tomorrow: attention.filter((item) => item.kind === 'confirm').length,
+  };
 }
 
 /** Mirrors FinanceService.desk on the demo's anchored dates. */

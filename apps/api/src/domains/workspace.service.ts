@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ToothCondition, ToothFormulaType } from '@dentasmart/database';
-import { dayLoad, parseWorkHours, tzOffsetMinutes, wallDate } from '@dentasmart/shared';
+import { dayLoad, kopecks, medicalReviewDue, parseWorkHours, tzOffsetMinutes, wallDate } from '@dentasmart/shared';
 import { medicalView } from '../patients/patients.service';
 import { clinicianWhere } from './clinicians';
 import { PrismaService } from '../prisma/prisma.service';
@@ -60,6 +60,125 @@ export class WorkspaceService {
     if (permissions.includes('analytics.read')) return 'owner';
     if (permissions.includes('medical.write')) return 'doctor';
     return 'reception';
+  }
+
+  /**
+   * The working day in one call: today's patients in time order with what to watch for and the next
+   * step, what needs attention (tomorrow's unconfirmed visits, histories to re-confirm, today's debts,
+   * plans waiting for an answer), and money only for those allowed to see it.
+   */
+  async today(orgId: string, permissions: string[], employeeId?: string) {
+    const branch = await this.prisma.branch.findFirst({ where: { organizationId: orgId, isActive: true }, orderBy: { createdAt: 'asc' } });
+    const now = new Date();
+    const offset = tzOffsetMinutes(branch?.timezone ?? 'Europe/Moscow', now);
+    const wall = new Date(now.getTime() + offset * 60000);
+    const start = new Date(Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate()) - offset * 60000);
+    const end = new Date(start.getTime() + 86400000);
+    const tomorrowEnd = new Date(end.getTime() + 86400000);
+    const doctorOnly = this.roleOf(permissions) === 'doctor' && employeeId ? { doctorId: employeeId } : {};
+    const seeMoney = permissions.includes('finance.read');
+
+    const [visits, tomorrow, waitingPlans] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: { organizationId: orgId, startsAt: { gte: start, lt: end }, status: { not: 'CANCELLED' }, ...doctorOnly },
+        include: { patient: true, doctor: true, cabinet: true, service: true },
+        orderBy: { startsAt: 'asc' },
+      }),
+      this.prisma.appointment.findMany({
+        where: { organizationId: orgId, startsAt: { gte: end, lt: tomorrowEnd }, status: 'SCHEDULED', ...doctorOnly },
+        include: { patient: { select: { id: true, firstName: true, lastName: true, phone: true } } },
+        orderBy: { startsAt: 'asc' },
+      }),
+      this.prisma.treatmentPlan.findMany({
+        where: { organizationId: orgId, status: 'PROPOSED', signedAt: null, abandonedAt: null, presentedAt: { lt: new Date(now.getTime() - 3 * 86400000) } },
+        include: { patient: { select: { id: true, firstName: true, lastName: true } } },
+        orderBy: { presentedAt: 'asc' },
+        take: 40,
+      }),
+    ]);
+    const patientIds = [...new Set(visits.map((visit) => visit.patientId))];
+    const debts = new Map<string, number>();
+    if (patientIds.length) {
+      const open = await this.prisma.invoice.findMany({ where: { organizationId: orgId, patientId: { in: patientIds }, status: { in: ['ISSUED', 'PARTIAL'] } } });
+      for (const invoice of open) {
+        const left = Math.max(0, kopecks(invoice.totalAmount) - kopecks(invoice.discountAmount) - kopecks(invoice.paidAmount));
+        debts.set(invoice.patientId, (debts.get(invoice.patientId) ?? 0) + left);
+      }
+    }
+    const name = (row: { lastName: string; firstName: string }) => `${row.lastName} ${row.firstName === '—' ? '' : row.firstName}`.trim();
+    const day = visits.map((visit) => {
+      const debt = (debts.get(visit.patientId) ?? 0) / 100;
+      const reviewDue = medicalReviewDue(visit.patient.medicalConfirmedAt, now);
+      const next =
+        ['SCHEDULED', 'CONFIRMED'].includes(visit.status) ? 'check-in'
+        : visit.status === 'WAITING' ? 'start'
+        : visit.status === 'IN_PROGRESS' ? 'continue'
+        : visit.status === 'COMPLETED' && debt > 0 ? 'pay'
+        : null;
+      return {
+        id: visit.id,
+        startsAt: visit.startsAt,
+        endsAt: visit.endsAt,
+        status: visit.status,
+        patientId: visit.patientId,
+        patient: name(visit.patient),
+        phone: visit.patient.phone,
+        service: visit.service?.name ?? 'Приём',
+        doctor: visit.doctor ? `${visit.doctor.lastName} ${visit.doctor.firstName}` : null,
+        cabinet: visit.cabinet?.name ?? null,
+        alerts: this.alerts(visit.patient, 0).filter((alert) => alert.tone === 'danger').map((alert) => alert.text),
+        reviewDue,
+        debt: seeMoney ? debt : null,
+        next,
+      };
+    });
+
+    const live = day.filter((visit) => !['COMPLETED', 'NO_SHOW', 'CANCELLED'].includes(visit.status));
+    const attention: { kind: string; title: string; detail: string; href: string; patientId?: string }[] = [];
+    for (const visit of tomorrow) {
+      attention.push({
+        kind: 'confirm',
+        title: `Подтвердить завтрашний визит: ${name(visit.patient)}`,
+        detail: `${new Date(visit.startsAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: branch?.timezone ?? 'Europe/Moscow' })}${visit.patient.phone ? ` · ${visit.patient.phone}` : ''}`,
+        href: `/visits/${visit.id}`,
+        patientId: visit.patient.id,
+      });
+    }
+    for (const visit of live.filter((row) => row.reviewDue)) {
+      attention.push({ kind: 'review', title: `Уточнить анамнез: ${visit.patient}`, detail: 'перед приёмом сегодня', href: `/visits/${visit.id}`, patientId: visit.patientId });
+    }
+    if (seeMoney) {
+      for (const visit of day.filter((row) => row.status === 'COMPLETED' && (row.debt ?? 0) > 0)) {
+        attention.push({ kind: 'pay', title: `Принять оплату: ${visit.patient}`, detail: `осталось ${Math.round(visit.debt ?? 0).toLocaleString('ru-RU')} ₽`, href: `/finance?patient=${encodeURIComponent(visit.patient.split(' ')[0])}`, patientId: visit.patientId });
+      }
+    }
+    for (const plan of waitingPlans.slice(0, 5)) {
+      attention.push({ kind: 'plan', title: `План ждёт ответа: ${name(plan.patient)}`, detail: `предложен ${plan.presentedAt?.toLocaleDateString('ru-RU') ?? ''}`, href: `/patients/${plan.patient.id}`, patientId: plan.patient.id });
+    }
+
+    let money: { revenueToday: number; dueToday: number } | null = null;
+    if (seeMoney) {
+      const paid = await this.prisma.payment.aggregate({ where: { organizationId: orgId, paidAt: { gte: start, lt: end } }, _sum: { amount: true } });
+      money = {
+        revenueToday: Number(paid._sum.amount ?? 0),
+        dueToday: day.reduce((sum, visit) => sum + (visit.debt ?? 0), 0),
+      };
+    }
+    return {
+      day: new Date(start.getTime() + offset * 60000).toISOString().slice(0, 10),
+      now,
+      visits: day,
+      counts: {
+        total: day.filter((visit) => visit.status !== 'NO_SHOW').length,
+        done: day.filter((visit) => visit.status === 'COMPLETED').length,
+        waiting: day.filter((visit) => visit.status === 'WAITING').length,
+        inChair: day.filter((visit) => visit.status === 'IN_PROGRESS').length,
+        noShow: day.filter((visit) => visit.status === 'NO_SHOW').length,
+      },
+      attention,
+      money,
+      tomorrow: tomorrow.length,
+    };
   }
 
   async home(orgId: string, permissions: string[], employeeId?: string) {
@@ -1497,11 +1616,12 @@ export class WorkspaceService {
     return rows.reduce((s, r) => s + Math.max(0, (r.endsAt.getTime() - r.startsAt.getTime()) / 60000), 0);
   }
 
+  /** What the patient owes: issued invoices less discount and payments, the same rule as the cash desk. */
   private async debtOf(patientId: string) {
     const invoices = await this.prisma.invoice.findMany({
-      where: { patientId, status: { in: ['ISSUED', 'PARTIAL', 'DRAFT'] } },
+      where: { patientId, status: { in: ['ISSUED', 'PARTIAL'] } },
     });
-    return invoices.reduce((s, i) => s + Math.max(0, Number(i.totalAmount) - Number(i.paidAmount)), 0);
+    return invoices.reduce((s, i) => s + Math.max(0, kopecks(i.totalAmount) - kopecks(i.discountAmount) - kopecks(i.paidAmount)), 0) / 100;
   }
 
   private async debts(ids: string[]) {

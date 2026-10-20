@@ -81,6 +81,12 @@ export class WorkspaceController {
     return this.patientImport.run(orgId, body);
   }
 
+  @Get('today')
+  @RequirePermissions('patient.read')
+  today(@OrgId() orgId: string, @CurrentUser() user: AuthUser) {
+    return this.workspace.today(orgId, user.permissions, user.employee?.id);
+  }
+
   @Get('home')
   @RequirePermissions('patient.read')
   home(@OrgId() orgId: string, @CurrentUser() user: AuthUser) {
