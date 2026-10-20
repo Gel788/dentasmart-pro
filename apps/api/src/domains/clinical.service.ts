@@ -877,7 +877,14 @@ export class ClinicalService {
     return record;
   }
 
-  private async ownPatient(orgId: string, patientId: string) {
+  /** The plan, if it is this clinic's; every plan route goes through it first. */
+  async ownPlan(orgId: string, planId: string) {
+    const plan = await this.prisma.treatmentPlan.findFirst({ where: { id: planId, organizationId: orgId } });
+    if (!plan) throw new NotFoundException('План не найден');
+    return plan;
+  }
+
+  async ownPatient(orgId: string, patientId: string) {
     const patient = await this.prisma.patient.findFirst({ where: { id: patientId, organizationId: orgId } });
     if (!patient) throw new NotFoundException('Пациент не найден');
     return patient;

@@ -36,6 +36,8 @@ async function main() {
     assert.equal(Number((await prisma.treatmentPlan.findUniqueOrThrow({ where: { id: plan.id } })).totalPrice), 8500, 'правка строки меняет сумму');
 
     await assert.rejects(clinical.addPlanItem(other.id, plan.id, { serviceId: filling.id }), /План не найден/, 'в чужой план не добавить');
+    await assert.rejects(clinical.ownPlan(other.id, plan.id), /План не найден/, 'чужой план не открыть и не изменить');
+    await assert.rejects(clinical.ownPatient(other.id, patient.id), /Пациент не найден/, 'чужую формулу и снимки не открыть');
     await assert.rejects(clinical.updatePlanItem(other.id, line.id, { price: 1 }), /не найдена/, 'чужую строку не изменить');
     await assert.rejects(clinical.addPlanItem(clinic.id, plan.id, { toothNum: 16 }), /Укажите услугу/, 'без услуги строка не создаётся');
     await assert.rejects(clinical.addPlanItem(clinic.id, plan.id, { serviceId: filling.id, toothNum: 99 }), /FDI/);

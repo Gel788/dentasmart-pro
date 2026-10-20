@@ -39,7 +39,8 @@ export class ClinicalController {
 
   @Get('patients/:patientId/imaging')
   @RequirePermissions('medical.read')
-  imaging(@Param('patientId') patientId: string) {
+  async imaging(@OrgId() orgId: string, @Param('patientId') patientId: string) {
+    await this.svc.ownPatient(orgId, patientId);
     return this.svc.listImaging(patientId);
   }
 
@@ -51,22 +52,26 @@ export class ClinicalController {
 
   @Get('patients/:patientId/teeth')
   @RequirePermissions('medical.read')
-  teeth(@Param('patientId') patientId: string) {
+  async teeth(@OrgId() orgId: string, @Param('patientId') patientId: string) {
+    await this.svc.ownPatient(orgId, patientId);
     return this.svc.getToothChart(patientId);
   }
 
   @Get('patients/:patientId/chart')
   @RequirePermissions('medical.read')
-  chart(@Param('patientId') patientId: string) {
+  async chart(@OrgId() orgId: string, @Param('patientId') patientId: string) {
+    await this.svc.ownPatient(orgId, patientId);
     return this.svc.chartBundle(patientId);
   }
 
   @Post('patients/:patientId/teeth')
   @RequirePermissions('medical.write')
-  upsertTooth(
+  async upsertTooth(
+    @OrgId() orgId: string,
     @Param('patientId') patientId: string,
     @Body() body: { toothNum: number; formula: 'ADULT' | 'CHILD'; condition: string; diagnosis?: string; surfaces?: string[]; layer?: string },
   ) {
+    await this.svc.ownPatient(orgId, patientId);
     return this.svc.upsertTooth(patientId, body);
   }
 
@@ -92,13 +97,15 @@ export class ClinicalController {
 
   @Post('treatment-plans/:planId/diary')
   @RequirePermissions('medical.write')
-  diary(@Param('planId') planId: string, @Body() body: { notes: string; toothNum?: number }) {
+  async diary(@OrgId() orgId: string, @Param('planId') planId: string, @Body() body: { notes: string; toothNum?: number }) {
+    await this.svc.ownPlan(orgId, planId);
     return this.svc.addDiaryEntry(planId, body.notes, body.toothNum);
   }
 
   @Post('patients/:patientId/imaging')
   @RequirePermissions('medical.write')
-  addImaging(@Param('patientId') patientId: string, @Body() body: { type: string; fileUrl: string; title?: string; toothNum?: number }) {
+  async addImaging(@OrgId() orgId: string, @Param('patientId') patientId: string, @Body() body: { type: string; fileUrl: string; title?: string; toothNum?: number }) {
+    await this.svc.ownPatient(orgId, patientId);
     return this.svc.addImaging(patientId, body);
   }
 
@@ -110,13 +117,15 @@ export class ClinicalController {
 
   @Get('treatment-plans/:planId')
   @RequirePermissions('medical.read')
-  plan(@Param('planId') planId: string) {
+  async plan(@OrgId() orgId: string, @Param('planId') planId: string) {
+    await this.svc.ownPlan(orgId, planId);
     return this.svc.getPlan(planId);
   }
 
   @Patch('treatment-plans/:planId/status')
   @RequirePermissions('medical.write')
-  planStatus(@Param('planId') planId: string, @Body() body: { status: string }) {
+  async planStatus(@OrgId() orgId: string, @Param('planId') planId: string, @Body() body: { status: string }) {
+    await this.svc.ownPlan(orgId, planId);
     return this.svc.updatePlanStatus(planId, body.status);
   }
 
@@ -153,13 +162,15 @@ export class ClinicalController {
 
   @Post('treatment-plans/:planId/accept')
   @RequirePermissions('medical.write')
-  accept(@Param('planId') planId: string) {
+  async accept(@OrgId() orgId: string, @Param('planId') planId: string) {
+    await this.svc.ownPlan(orgId, planId);
     return this.svc.acceptPlan(planId);
   }
 
   @Patch('treatment-plans/:planId/discount')
   @RequirePermissions('medical.write')
-  discount(@Param('planId') planId: string, @Body() body: { discountPercent: number }) {
+  async discount(@OrgId() orgId: string, @Param('planId') planId: string, @Body() body: { discountPercent: number }) {
+    await this.svc.ownPlan(orgId, planId);
     return this.svc.setPlanDiscount(planId, body.discountPercent);
   }
 
@@ -175,13 +186,15 @@ export class ClinicalController {
 
   @Post('treatment-plans/:planId/recalculate')
   @RequirePermissions('medical.write')
-  recalc(@Param('planId') planId: string) {
+  async recalc(@OrgId() orgId: string, @Param('planId') planId: string) {
+    await this.svc.ownPlan(orgId, planId);
     return this.svc.recalcPlanTotal(planId);
   }
 
   @Post('treatment-plans/:planId/reorder')
   @RequirePermissions('medical.write')
-  reorder(@Param('planId') planId: string, @Body() body: { itemIds: string[] }) {
+  async reorder(@OrgId() orgId: string, @Param('planId') planId: string, @Body() body: { itemIds: string[] }) {
+    await this.svc.ownPlan(orgId, planId);
     return this.svc.reorderPlanItems(planId, body.itemIds);
   }
 
@@ -203,13 +216,15 @@ export class ClinicalController {
 
   @Post('treatment-plans/:planId/diary/photo')
   @RequirePermissions('medical.write')
-  diaryPhoto(@Param('planId') planId: string, @Body() body: { notes: string; photoUrl?: string; toothNum?: number }) {
+  async diaryPhoto(@OrgId() orgId: string, @Param('planId') planId: string, @Body() body: { notes: string; photoUrl?: string; toothNum?: number }) {
+    await this.svc.ownPlan(orgId, planId);
     return this.svc.addDiaryWithPhoto(planId, body.notes, body.photoUrl, body.toothNum);
   }
 
   @Get('patients/:patientId/photos')
   @RequirePermissions('medical.read')
-  photos(@Param('patientId') patientId: string) {
+  async photos(@OrgId() orgId: string, @Param('patientId') patientId: string) {
+    await this.svc.ownPatient(orgId, patientId);
     return this.svc.listPhotoPairs(patientId);
   }
 
