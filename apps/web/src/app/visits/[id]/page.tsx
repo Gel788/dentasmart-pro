@@ -13,6 +13,7 @@ import { XrayAssistant } from '@/components/studio/xray';
 import type { Medical } from '@/components/card/model';
 import styles from '@/components/visit/visit.module.css';
 import { api } from '@/lib/api';
+import { isDemo } from '@/lib/demo/mode';
 import { useAuth } from '@/lib/auth-context';
 import { formatMoney } from '@/lib/format';
 import type { VoiceNote } from '@/lib/voice';
@@ -306,10 +307,13 @@ function Chair() {
               />
             )}
           </div>
-          <details className={styles.fold}>
-            <summary>Снимки</summary>
-            <XrayAssistant patientId={visit.patient.id} primary={false} />
-          </details>
+          <Link className={styles.imagesLink} href={`/patients/${visit.patient.id}`} onClick={() => sessionStorage.setItem(`sd.card.${visit.patient.id}.mode`, 'imaging')}>Снимки пациента</Link>
+          {isDemo() && (
+            <details className={styles.fold}>
+              <summary>Пример чтения снимка (демо)</summary>
+              <XrayAssistant patientId={visit.patient.id} primary={false} />
+            </details>
+          )}
         </section>
 
         <section className={styles.protocol} aria-labelledby="protocol-title">
@@ -360,9 +364,9 @@ function Chair() {
               <button type="button" className="sd-btn-ghost" disabled={!!busy || reason.trim().length < 3} onClick={() => void run('amend', async () => { await act('note', { ...note, reason }); setReason(''); })}>Исправить с причиной</button>
             </div>
           )}
-          {live && (
+          {live && isDemo() && (
             <details className={styles.fold}>
-              <summary>Подсказки по протоколу</summary>
+              <summary>Подсказки по протоколу (демо)</summary>
               <Copilot patientId={visit.patient.id} note={`${note.complaints} ${note.diagnosis}`} onApply={(patch) => setNote({ ...note, ...patch })} />
             </details>
           )}

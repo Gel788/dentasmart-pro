@@ -57,6 +57,7 @@
 .lineText small { color: var(--muted); font-size: 12px; }
 .price { font-family: var(--font-mono), monospace; font-size: 13.5px; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
 .chart { display: flex; flex-direction: column; gap: 10px; min-width: 0; overflow: hidden; }
+.imagesLink { align-self: flex-start; color: var(--accent-ink); font-size: 13.5px; }
 .fold summary { cursor: pointer; color: var(--accent-ink); font-size: 13.5px; min-height: 32px; display: inline-flex; align-items: center; }
 
 .templates { display: flex; flex-wrap: wrap; gap: 6px; }

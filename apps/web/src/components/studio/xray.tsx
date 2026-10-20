@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { api } from '@/lib/api';
+import { isDemo } from '@/lib/demo/mode';
 import { activeReader, chartOf, type XrayFinding } from '@/lib/xray';
 
 type Shot = { id: string; label: string; url: string };
@@ -11,7 +12,17 @@ const DEMOS: Shot[] = [
   { id: 'bite', label: 'Прицельный', url: '/demo/tooth-16.svg' },
 ];
 
+/**
+ * A showcase of reading an X-ray: the pictures and findings are canned examples, not a reading of the
+ * patient's images. It exists only in the public demo and renders nothing against a real clinic, so a
+ * made-up finding can never reach a real patient's chart or plan.
+ */
 export function XrayAssistant({ patientId, primary = true }: { patientId: string; primary?: boolean }) {
+  if (!isDemo()) return null;
+  return <XrayShowcase patientId={patientId} primary={primary} />;
+}
+
+function XrayShowcase({ patientId, primary }: { patientId: string; primary: boolean }) {
   const [shots, setShots] = useState<Shot[]>(DEMOS);
   const [current, setCurrent] = useState<Shot>(DEMOS[0]);
   const [phase, setPhase] = useState<'idle' | 'scan' | 'done'>('idle');

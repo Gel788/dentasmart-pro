@@ -52,10 +52,28 @@ async function main() {
 
     const mine = await workspace.today(clinic.id, ['patient.read', 'medical.write'], doctor.id);
     assert.deepEqual(mine.visits.map((visit) => visit.patient), ['Должник Олег', 'Ждёт Анна'], 'врач видит своих');
+    // Recall: long gone and not booked — call; long gone but booked — don't; one line per plan family.
+    const gone = await prisma.patient.create({ data: { organizationId: clinic.id, lastName: 'Пропавший', firstName: 'Иван' } });
+    const back = await prisma.patient.create({ data: { organizationId: clinic.id, lastName: 'Вернувшийся', firstName: 'Олег' } });
+    const old = new Date(Date.now() - 200 * 86400000);
+    for (const id of [gone.id, back.id]) {
+      await prisma.appointment.create({ data: { ...base, patientId: id, startsAt: old, endsAt: new Date(old.getTime() + 3600000), status: 'COMPLETED' } });
+    }
+    await prisma.appointment.create({ data: { ...base, patientId: back.id, startsAt: at(60), endsAt: at(61), status: 'SCHEDULED' } });
+    for (const tier of ['ECONOM', 'OPTIMUM', 'PREMIUM'] as const) {
+      await prisma.treatmentPlan.create({ data: { organizationId: clinic.id, patientId: gone.id, title: `План · ${tier}`, status: 'PROPOSED', tier, familyKey: `fam-${stamp}`, totalPrice: tier === 'OPTIMUM' ? '36200' : '1000' } });
+    }
+    const recall = await workspace.recall(clinic.id);
+    assert.deepEqual(recall.checkups.map((row) => row.patient), ['Пропавший Иван'], 'записанного не обзваниваем');
+    assert.equal(recall.checkups[0].days >= 199, true);
+    assert.equal(recall.plans.length, 1, 'одна строка на семейство вариантов');
+    assert.equal(recall.plans[0].title, 'Оптимум');
+    assert.equal(recall.plans[0].total, 36200);
     console.log('today ok');
   } finally {
     const org = clinic.id;
     await prisma.invoice.deleteMany({ where: { organizationId: org } });
+    await prisma.treatmentPlan.deleteMany({ where: { organizationId: org } });
     await prisma.appointment.deleteMany({ where: { organizationId: org } });
     await prisma.patient.deleteMany({ where: { organizationId: org } });
     await prisma.employee.deleteMany({ where: { user: { organizationId: org } } });

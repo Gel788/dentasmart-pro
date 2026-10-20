@@ -182,6 +182,64 @@ export class WorkspaceService {
     };
   }
 
+  /**
+   * Who to call back: patients whose last finished visit is over half a year ago and who have nothing
+   * booked, and proposed plans nobody has answered (one per family, the recommended variant).
+   */
+  async recall(orgId: string) {
+    const now = new Date();
+    const horizon = new Date(now.getTime() - 183 * 86400000);
+    const [last, upcoming, plans] = await Promise.all([
+      this.prisma.appointment.groupBy({ by: ['patientId'], where: { organizationId: orgId, status: 'COMPLETED' }, _max: { startsAt: true } }),
+      this.prisma.appointment.findMany({
+        where: { organizationId: orgId, startsAt: { gte: now }, status: { in: ['SCHEDULED', 'CONFIRMED', 'WAITING'] } },
+        select: { patientId: true },
+        distinct: ['patientId'],
+      }),
+      this.prisma.treatmentPlan.findMany({
+        where: { organizationId: orgId, status: 'PROPOSED', signedAt: null, abandonedAt: null },
+        include: { patient: { select: { id: true, firstName: true, lastName: true, phone: true, isActive: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 300,
+      }),
+    ]);
+    const booked = new Set(upcoming.map((row) => row.patientId));
+    const due = last.filter((row) => row._max.startsAt && row._max.startsAt < horizon && !booked.has(row.patientId));
+    const people = due.length
+      ? await this.prisma.patient.findMany({ where: { organizationId: orgId, isActive: true, id: { in: due.map((row) => row.patientId) } }, select: { id: true, firstName: true, lastName: true, phone: true } })
+      : [];
+    const byId = new Map(people.map((row) => [row.id, row]));
+    const name = (row: { lastName: string; firstName: string }) => `${row.lastName} ${row.firstName === '—' ? '' : row.firstName}`.trim();
+    const checkups = due
+      .filter((row) => byId.has(row.patientId))
+      .map((row) => {
+        const patient = byId.get(row.patientId)!;
+        const lastVisit = row._max.startsAt!;
+        return { id: patient.id, patient: name(patient), phone: patient.phone, lastVisit, days: Math.round((now.getTime() - lastVisit.getTime()) / 86400000) };
+      })
+      .sort((a, b) => b.days - a.days)
+      .slice(0, 50);
+    const families = new Map<string, (typeof plans)[number]>();
+    for (const plan of plans) {
+      if (!plan.patient.isActive) continue;
+      const key = plan.familyKey ?? plan.id;
+      const held = families.get(key);
+      if (!held || (plan.tier === 'OPTIMUM' && held.tier !== 'OPTIMUM')) families.set(key, plan);
+    }
+    return {
+      checkups,
+      plans: [...families.values()].slice(0, 50).map((plan) => ({
+        planId: plan.id,
+        patientId: plan.patient.id,
+        patient: name(plan.patient),
+        phone: plan.patient.phone,
+        title: plan.tier ? TIER_LABEL[plan.tier] : plan.title,
+        total: Number(plan.totalPrice),
+        status: plan.status,
+      })),
+    };
+  }
+
   async home(orgId: string, permissions: string[], employeeId?: string) {
     const role = this.roleOf(permissions);
     if (role === 'owner') return { role, ...(await this.ownerMetrics(orgId)) };
