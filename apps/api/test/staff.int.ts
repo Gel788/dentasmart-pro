@@ -21,6 +21,18 @@ async function main() {
     const strangerUser = await prisma.user.create({ data: { organizationId: other.id, email: `s-${stamp}@t.local`, passwordHash: 'x' } });
     const stranger = await prisma.employee.create({ data: { userId: strangerUser.id, firstName: 'Чужой', lastName: 'Врач' } });
 
+    await prisma.role.create({ data: { organizationId: clinic.id, code: 'doctor', name: 'Врач' } });
+    const adminRole = await prisma.role.create({ data: { organizationId: clinic.id, code: 'admin', name: 'Администратор' } });
+    await prisma.role.create({ data: { organizationId: clinic.id, code: 'owner', name: 'Владелец' } });
+    await assert.rejects(config.saveEmployee(clinic.id, owner.id, { firstName: 'А', lastName: 'Б', email: `x-${stamp}@t.local`, roleCode: 'nope' }), /Такой роли нет/);
+    assert.equal(await prisma.user.count({ where: { email: `x-${stamp}@t.local` } }), 0, 'при неверной роли учётка не создаётся');
+    const reception = await config.saveEmployee(clinic.id, owner.id, { firstName: 'Марина', lastName: 'Соколова', email: `adm-${stamp}@t.local`, roleCode: 'admin' });
+    const receptionUser = await prisma.user.findFirstOrThrow({ where: { email: reception.email }, include: { userRoles: true } });
+    assert.deepEqual(receptionUser.userRoles.map((link) => link.roleId), [adminRole.id], 'роль из формы');
+    const sneaky = await config.saveEmployee(clinic.id, owner.id, { firstName: 'В', lastName: 'Г', email: `own-${stamp}@t.local`, roleCode: 'owner' });
+    const sneakyUser = await prisma.user.findFirstOrThrow({ where: { email: sneaky.email }, include: { userRoles: { include: { role: true } } } });
+    assert.equal(sneakyUser.userRoles[0].role.code, 'doctor', 'роль владельца отсюда не выдаётся');
+
     const created = await config.saveEmployee(clinic.id, owner.id, { firstName: 'Ольга', lastName: 'Козлова', email: `KOZLOVA-${stamp}@t.local` });
     assert.ok(created.password && created.password.length >= 10, 'выдан пароль');
     assert.equal(created.email, `kozlova-${stamp}@t.local`);
