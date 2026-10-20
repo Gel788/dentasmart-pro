@@ -74,6 +74,25 @@ async function main() {
     assert.equal((await flow.visit(clinic.id, visit.id)).debt, 5500, 'долг визита = счёт');
 
     await assert.rejects(flow.complete(clinic.id, visit.id, { doneItemIds: [] }), /недоступно|уже закрыт/, 'второй раз не закрыть');
+    await assert.rejects(flow.addVisitItem(clinic.id, visit.id, { serviceId: service.id }), /во время приёма/, 'в закрытый визит услугу не добавить');
+
+    // A service the plan didn't have, added in the chair to a patient with no plan at all.
+    await prisma.patient.update({ where: { id: other.id }, data: { medicalConfirmedAt: new Date() } });
+    const at2 = new Date(Date.now() + 5 * 3600_000);
+    const walkIn = await prisma.appointment.create({
+      data: { organizationId: clinic.id, branchId: branch.id, patientId: other.id, startsAt: at2, endsAt: new Date(+at2 + 1800_000), status: 'WAITING' },
+    });
+    await prisma.treatmentPlan.deleteMany({ where: { patientId: other.id } });
+    await flow.start(clinic.id, walkIn.id);
+    const withLine = await flow.addVisitItem(clinic.id, walkIn.id, { serviceId: service.id, toothNum: 36 });
+    const added = withLine.today.find((line) => line.toothNum === 36);
+    assert.ok(added && added.booked, 'добавленная на приёме услуга видна и привязана к визиту');
+    assert.equal(added!.price, 5500, 'цена из прайса');
+    await flow.saveNote(clinic.id, walkIn.id, 'nobody', { diagnosis: 'K02.1', treatment: 'Пломба 36' });
+    await flow.complete(clinic.id, walkIn.id, { doneItemIds: [added!.id] });
+    const billed = await prisma.treatmentPlanItem.findUniqueOrThrow({ where: { id: added!.id }, include: { invoiceItem: true } });
+    assert.equal(billed.status, 'DONE');
+    assert.ok(billed.invoiceItem, 'и попала в счёт');
     console.log('visit flow ok');
   } finally {
     const org = clinic.id;

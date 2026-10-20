@@ -8,6 +8,7 @@ import { Protected } from '@/components/protected';
 import { ToothChart, type ChartSurface } from '@/components/studio/chart';
 import { ToothFocus } from '@/components/studio/tooth-focus';
 import { Copilot } from '@/components/studio/copilot';
+import { PricePicker, type PriceService } from '@/components/studio/price-picker';
 import { VoiceChart } from '@/components/studio/voice-chart';
 import { XrayAssistant } from '@/components/studio/xray';
 import type { Medical } from '@/components/card/model';
@@ -71,6 +72,7 @@ function Chair() {
   const [tooth, setTooth] = useState<number | null>(null);
   const [face, setFace] = useState('TOOTH');
   const [closing, setClosing] = useState(false);
+  const [picking, setPicking] = useState(false);
   const [followDate, setFollowDate] = useState('');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState('');
@@ -176,6 +178,15 @@ function Chair() {
   const missing = FIELDS.filter((field) => field.required && !note[field.key].trim());
   const name = `${visit.patient.lastName} ${visit.patient.firstName === '—' ? '' : visit.patient.firstName}`.trim();
 
+  /** A service done in the chair that the plan didn't have: added, priced from the list and ticked. */
+  const addService = async (service: PriceService) => {
+    const before = new Set(visit.today.map((line) => line.id));
+    const data = await act('items', { serviceId: service.id, toothNum: tooth });
+    const fresh = data.today.find((line) => !before.has(line.id));
+    if (fresh) setPicked((current) => ({ ...current, [fresh.id]: true }));
+    setPicking(false);
+  };
+
   const confirmMedical = () => run('confirm', async () => {
     await api(`/patients/${visit.patient.id}/medical`, { method: 'PATCH', body: JSON.stringify({ version: visit.medical.version, confirm: true }) });
     await load();
@@ -249,9 +260,12 @@ function Chair() {
           <div className={styles.sectionHead}>
             <h2 id="today-title">Сегодня по плану</h2>
             {chosen.length > 0 && <span className={styles.sum}>{formatMoney(toBill)}</span>}
+            {live && medicalWrite && (
+              <button type="button" className={`sd-btn-ghost ${styles.addBtn}`} onClick={() => setPicking(true)}>+ Услуга{tooth ? ` на ${tooth}` : ''}</button>
+            )}
           </div>
           {visit.today.length === 0 ? (
-            <p className={styles.none}>В плане пациента нет открытых услуг. <Link href={`/patients/${visit.patient.id}`} onClick={() => sessionStorage.setItem(`sd.card.${visit.patient.id}.mode`, 'plan')}>Добавить в план</Link></p>
+            <p className={styles.none}>{live ? 'В плане нет открытых услуг. Добавьте то, что делаете сейчас, кнопкой «+ Услуга».' : 'В плане пациента нет открытых услуг.'}</p>
           ) : (
             <ul className={styles.lines}>
               {visit.today.map((line) => {
@@ -383,6 +397,16 @@ function Chair() {
             <button type="button" className="sd-btn-ghost" onClick={() => window.print()}>Распечатать протокол</button>
           </div>
         </section>
+      )}
+
+      {picking && (
+        <PricePicker
+          tooth={tooth}
+          phaseId="loose"
+          phases={[]}
+          onClose={() => setPicking(false)}
+          onPick={async (service) => { await addService(service); }}
+        />
       )}
 
       {closing && (

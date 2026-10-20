@@ -55,7 +55,8 @@ export function PricePicker({
   useEffect(() => { setPhase(phaseId); }, [phaseId]);
 
   useEffect(() => {
-    searchRef.current?.focus();
+    // On a phone the keyboard would cover the list; there the search is one tap away instead.
+    if (window.matchMedia('(pointer: fine)').matches) searchRef.current?.focus();
     try {
       const saved = JSON.parse(window.localStorage.getItem(RECENT) || '[]');
       if (Array.isArray(saved)) setRecent(saved.filter((id) => typeof id === 'string').slice(0, 5));
@@ -124,11 +125,13 @@ export function PricePicker({
         <label className="sd-field">Поиск услуги
           <input ref={searchRef} className="sd-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Кариес, коронка, гигиена" />
         </label>
-        <label className="sd-field">Этап
-          <select className="sd-input" value={phase} onChange={(event) => setPhase(event.target.value)}>
-            {phases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-          </select>
-        </label>
+        {phases.length > 0 && (
+          <label className="sd-field">Этап
+            <select className="sd-input" value={phase} onChange={(event) => setPhase(event.target.value)}>
+              {phases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+            </select>
+          </label>
+        )}
         <div className="pp-head">Категория</div>
         <div className="pp-cats">
           <button type="button" className={`sd-chip ${category === 'all' ? 'info' : ''}`} onClick={() => setCategory('all')}>Все</button>

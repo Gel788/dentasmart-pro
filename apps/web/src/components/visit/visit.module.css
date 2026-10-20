@@ -41,6 +41,8 @@
 .work, .protocol, .result { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-solid); min-width: 0; }
 .sectionHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .sectionHead h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.addBtn { margin-left: auto; min-height: 40px; }
+.sectionHead .sum + .addBtn { margin-left: 8px; }
 .sum { font-family: var(--font-mono), monospace; font-size: 14px; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
 .saveState { color: var(--muted); font-size: 12.5px; }
 

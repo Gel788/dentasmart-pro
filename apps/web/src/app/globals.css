@@ -883,7 +883,9 @@ html.dark .ai-chips button.on { color: #042f2e; }
 }
 .pp-row b { font-weight: 620; }
 .pp-row span { color: var(--muted); font-size: 12px; }
-.pp-row em { font-style: normal; font-weight: 650; grid-row: 1 / span 2; align-self: center; white-space: nowrap; }
+.pp-row b, .pp-row span { grid-column: 1; text-align: left; min-width: 0; }
+.pp-row em { grid-column: 2; grid-row: 1 / span 2; align-self: center; justify-self: end; font-style: normal; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) { .pp-list { max-height: none; overflow: visible; } }
 .pp-row:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); border-color: var(--border-strong); }
 .pp-row:disabled { opacity: 0.6; transform: none; }
 .pp-error { color: var(--danger); margin: 8px 0 0; }
@@ -1185,4 +1187,12 @@ html.dark .ai-chips button.on { color: #042f2e; }
   .grid:has(> .ds-stat):not(:has(> :not(.ds-stat))) > .ds-card .ds-display { font-size: 1.25rem; line-height: 1.15; overflow-wrap: anywhere; }
   .grid:has(> .ds-stat):not(:has(> :not(.ds-stat))) > .ds-card p.uppercase { font-size: 10.5px; letter-spacing: 0.06em; }
   .grid:has(> .ds-stat):not(:has(> :not(.ds-stat))) > .ds-stat.justify-between > div:last-child { display: none; }
+}
+
+/* Phones: every dialog (price list, new patient, templates…) opens as a sheet from the bottom. */
+@media (max-width: 720px) {
+  .sd-sheet-back { place-items: end stretch; padding: 0; }
+  .sd-sheet { width: 100%; max-height: 88dvh; border-radius: 18px 18px 0 0; border-width: 1px 0 0; padding: 16px 16px calc(18px + env(safe-area-inset-bottom, 0px)); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  .sd-sheet h2 { font-size: 22px; letter-spacing: -0.02em; }
+  .sd-sheet-head { position: sticky; top: -16px; z-index: 1; margin: -16px -16px 8px; padding: 14px 16px 10px; background: var(--surface-solid); border-bottom: 1px solid var(--border); }
 }

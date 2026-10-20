@@ -75,6 +75,17 @@ export class FlowController {
     return this.flow.saveNote(orgId, id, user.id, body);
   }
 
+  @Post('visits/:id/items')
+  @RequirePermissions('medical.write')
+  addItem(
+    @OrgId() orgId: string,
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: { serviceId: string; toothNum?: number | null },
+  ) {
+    return this.flow.addVisitItem(orgId, id, body, user.employee?.id);
+  }
+
   @Post('visits/:id/complete')
   @RequirePermissions('medical.write')
   complete(@OrgId() orgId: string, @Param('id') id: string, @Body() body: { followUpDate?: string; followUpReason?: string; doneItemIds?: string[] }) {

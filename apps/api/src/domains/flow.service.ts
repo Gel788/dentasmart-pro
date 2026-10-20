@@ -199,6 +199,27 @@ export class FlowService {
       .sort((a, b) => Number(b.booked) - Number(a.booked));
   }
 
+  /**
+   * A service done in the chair that the plan didn't have: it joins the patient's current plan (the
+   * accepted one, else the recommended variant of the latest proposal, else a new draft), priced from
+   * the list, agreed and tied to this visit so closing the visit bills it.
+   */
+  async addVisitItem(orgId: string, id: string, body: { serviceId: string; toothNum?: number | null }, doctorId?: string) {
+    const appointment = await this.must(orgId, id);
+    if (appointment.status !== 'IN_PROGRESS') throw new BadRequestException('Добавить услугу можно во время приёма');
+    const plans = await this.prisma.treatmentPlan.findMany({
+      where: { organizationId: orgId, patientId: appointment.patientId, status: { notIn: ['REJECTED', 'CANCELLED', 'COMPLETED'] } },
+      orderBy: { createdAt: 'desc' },
+    });
+    const accepted = plans.find((plan) => plan.status === 'ACCEPTED' || plan.status === 'IN_PROGRESS');
+    const latest = plans[0]?.familyKey ? plans.filter((plan) => plan.familyKey === plans[0].familyKey) : plans.slice(0, 1);
+    let plan = accepted ?? latest.find((row) => row.tier === 'OPTIMUM') ?? latest[0];
+    if (!plan) plan = await this.clinical.createPlan(orgId, { patientId: appointment.patientId, title: 'План лечения', doctorId: doctorId ?? appointment.doctorId ?? undefined });
+    const item = await this.clinical.addPlanItem(orgId, plan.id, { serviceId: body.serviceId, toothNum: body.toothNum ?? undefined });
+    await this.prisma.treatmentPlanItem.update({ where: { id: item.id }, data: { appointmentId: id, status: 'ACCEPTED' } });
+    return this.visit(orgId, id);
+  }
+
   async start(orgId: string, id: string) {
     const appointment = await this.must(orgId, id);
     this.assert(appointment.status, 'start');
