@@ -210,6 +210,8 @@ function read(path: string, token: string): unknown {
   }
   if (pathname === '/workspace/recall') return recallList(bag);
 
+  const visitPath = pathname.match(/^\/flow\/visits\/([^/]+)$/);
+  if (visitPath && pathname in bag.gets) return visitView(bag, visitPath[1]);
   const cardPath = pathname.match(/^\/workspace\/patients\/([^/]+)\/card$/);
   if (cardPath && pathname in bag.gets) return cardView(bag, cardPath[1]);
   const medicalPath = pathname.match(/^\/patients\/([^/]+)\/medical$/);
@@ -1068,6 +1070,14 @@ function setVisitStatus(bag: Bag, id: string, status: string) {
   const from = (row.status === 'ARRIVED' ? 'WAITING' : row.status) as VisitStatus;
   if (!isVisitStatus(status)) throw new Error('Неизвестный статус визита');
   if (!canMoveVisit(from, status)) throw new Error(visitMoveError(from, status));
+  const patient = findPatient(bag, row.patientId);
+  if (status === 'IN_PROGRESS' && medicalReviewDue(patient?.medicalConfirmedAt ?? null, new Date(anchorNow()))) {
+    throw new ApiError('Перед приёмом уточните анамнез у пациента и подтвердите медкарту', 400, {});
+  }
+  const stored = bag.gets[`/flow/visits/${id}`] as AnyRec | undefined;
+  if (status === 'COMPLETED' && (!String(stored?.note?.diagnosis ?? '').trim() || !String(stored?.note?.treatment ?? '').trim())) {
+    throw new ApiError('Закройте визит на экране приёма: нужны диагноз и что сделали', 400, {});
+  }
   row.status = status;
   const visit = bag.gets[`/flow/visits/${id}`] as AnyRec | undefined;
   if (visit) visit.status = status;
@@ -1147,30 +1157,75 @@ function visitFrom(row: Appointment, patient: AnyRec | undefined) {
   };
 }
 
+/** Mirrors FlowService: same statuses, anamnesis before the chair, done lines and their invoice on close. */
 function visitAction(bag: Bag, id: string, action: string, data: AnyRec) {
   const visit = (bag.gets[`/flow/visits/${id}`] ?? {}) as AnyRec;
   bag.gets[`/flow/visits/${id}`] = visit;
+  const patient = findPatient(bag, visit.patient?.id ?? '');
   if (action === 'note') visit.note = { ...(visit.note ?? {}), ...data };
   if (action === 'check-in') {
-    visit.status = 'ARRIVED';
-    visit.actions = ['start'];
+    visit.status = 'WAITING';
+    visit.actions = ['start', 'no-show'];
   }
   if (action === 'start') {
+    if (medicalReviewDue(patient?.medicalConfirmedAt ?? null, new Date(anchorNow()))) {
+      throw new ApiError('Перед приёмом уточните анамнез у пациента и подтвердите медкарту', 400, {});
+    }
     visit.status = 'IN_PROGRESS';
     visit.actions = ['complete'];
   }
   if (action === 'complete') {
+    if (!String(visit.note?.diagnosis ?? '').trim()) throw new ApiError('Сначала запишите диагноз — без него визит не закрывается', 400, {});
+    if (!String(visit.note?.treatment ?? '').trim()) throw new ApiError('Опишите, что сделали на приёме', 400, {});
+    const ids = new Set<string>((data.doneItemIds ?? []) as string[]);
+    let total = 0;
+    const seen = new Set<AnyRec>();
+    eachPlan(bag, (plan, _family, card) => {
+      if (seen.has(plan) || card?.patient?.id !== patient?.id) return;
+      seen.add(plan);
+      for (const item of planItems(plan)) {
+        if (!ids.has(item.id) || item.status === 'DONE') continue;
+        item.status = 'DONE';
+        item.appointmentId = id;
+        total += Number(item.price) || 0;
+      }
+    });
+    if (total > 0 && patient) pushList(bag, '/finance/invoices', invoiceRow(bag, { patientId: patient.id, totalAmount: total }));
     visit.status = 'COMPLETED';
-    visit.actions = [];
+    visit.actions = ['pay'];
     consumeDemoVisit(bag, id);
   }
   if (action === 'no-show') {
     visit.status = 'NO_SHOW';
-    visit.actions = [];
+    visit.actions = ['rebook'];
   }
   const appt = bag.appointments.find((item) => item.id === id);
   if (appt) appt.status = visit.status;
-  return visit;
+  return visitView(bag, id);
+}
+
+/** The stored visit plus what the API computes on read: medical state and the lines for today. */
+function visitView(bag: Bag, id: string) {
+  const visit = bag.gets[`/flow/visits/${id}`] as AnyRec;
+  const patientId = visit.patient?.id ?? '';
+  const row = findPatient(bag, patientId);
+  const today: AnyRec[] = [];
+  const seen = new Set<AnyRec>();
+  const card = bag.gets[`/workspace/patients/${patientId}/card`] as AnyRec | undefined;
+  const family = [...((card?.families ?? []) as AnyRec[])].sort((a, b) => (b.plans?.length ?? 0) - (a.plans?.length ?? 0))[0];
+  const accepted = ((family?.plans ?? []) as AnyRec[]).filter((plan) => ['ACCEPTED', 'IN_PROGRESS'].includes(plan.status));
+  const pool = accepted.length ? accepted : [((family?.plans ?? []) as AnyRec[]).find((plan) => plan.tier === 'OPTIMUM') ?? family?.plans?.[0]].filter(Boolean);
+  for (const plan of pool) {
+    if (seen.has(plan)) continue;
+    seen.add(plan);
+    for (const item of planItems(plan)) {
+      const doneHere = item.status === 'DONE' && item.appointmentId === id;
+      if (item.status === 'DONE' && !doneHere) continue;
+      if (item.status === 'REJECTED') continue;
+      today.push({ id: item.id, planId: plan.id, planTitle: plan.title, title: item.title, toothNum: item.toothNum ?? null, surfaces: item.surfaces ?? [], price: Number(item.price) || 0, status: item.status ?? 'PROPOSED', booked: item.appointmentId === id, doneHere });
+    }
+  }
+  return { ...visit, medical: medicalOf(row ?? visit.patient ?? {}), today };
 }
 
 function paint(bag: Bag, patientId: string, data: AnyRec) {

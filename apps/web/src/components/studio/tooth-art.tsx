@@ -292,12 +292,12 @@ function ToothGlyphBase({
         )}
         {mode === 'buccal' && visual.spots.length > 0 && (
           <g clipPath={`url(#${crownClip})`} pointerEvents="none">
-            {visual.spots.map((spot) => {
+            {visual.spots.map((spot, index) => {
               const at = spec.spots[spot.surface] ?? spec.spots.O;
               const dark = spot.condition === 'CARIES';
               const rx = Math.max(6, (glyphH - spec.crownY) * (dark ? 0.075 : 0.09));
               return (
-                <g key={`${spot.surface}-${spot.condition}`}>
+                <g key={`${spot.surface}-${spot.condition}-${index}`}>
                   <ellipse cx={at[0]} cy={at[1]} rx={rx} ry={rx * 0.72} fill={spotFill(spot.condition)} stroke={dark ? 'none' : '#6d8f80'} strokeWidth={dark ? 0 : 0.8} />
                   {dark && <ellipse cx={at[0]} cy={at[1] + 0.6} rx={rx * 0.42} ry={rx * 0.28} fill="#1a0e0a" />}
                 </g>
@@ -305,13 +305,13 @@ function ToothGlyphBase({
             })}
           </g>
         )}
-        {mode === 'occlusal' && visual.spots.map((spot) => {
+        {mode === 'occlusal' && visual.spots.map((spot, index) => {
           const face = (FACES.includes(spot.surface as Face) ? spot.surface : 'O') as Face;
           const at = spec.anchors[face];
           const dark = spot.condition === 'CARIES';
           return (
             <ellipse
-              key={`${spot.surface}-${spot.condition}`}
+              key={`${spot.surface}-${spot.condition}-${index}`}
               cx={at[0]}
               cy={at[1]}
               rx={dark ? 8 : 10}

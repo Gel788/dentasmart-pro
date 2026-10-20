@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { AuthUser, canMoveVisit, isVisitClosed, isVisitStatus, visitMoveError, type VisitStatus } from '@dentasmart/shared';
+import { AuthUser, canMoveVisit, isVisitClosed, isVisitStatus, medicalReviewDue, visitMoveError, type VisitStatus } from '@dentasmart/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { consumeStock } from '../domains/stock-consume';
 import { consumeForVisit, moveLabDeadlines } from '../route/route-chain';
@@ -242,6 +242,20 @@ export class AppointmentsService {
     if (!appt) throw new NotFoundException();
     if (!isVisitStatus(status)) throw new BadRequestException('Неизвестный статус визита');
     if (!canMoveVisit(appt.status as VisitStatus, status)) throw new BadRequestException(visitMoveError(appt.status as VisitStatus, status));
+    // The calendar follows the same rules as the visit screen: history confirmed before the chair,
+    // a diagnosis and what was done before the visit closes.
+    if (status === 'IN_PROGRESS') {
+      const patient = await this.prisma.patient.findFirst({ where: { id: appt.patientId, organizationId: orgId } });
+      if (patient && medicalReviewDue(patient.medicalConfirmedAt)) {
+        throw new BadRequestException('Перед приёмом уточните анамнез у пациента и подтвердите медкарту');
+      }
+    }
+    if (status === 'COMPLETED') {
+      const note = await this.prisma.visitNote.findUnique({ where: { appointmentId: id } });
+      if (!note?.diagnosis?.trim() || !note.treatment?.trim()) {
+        throw new BadRequestException('Закройте визит на экране приёма: нужны диагноз и что сделали');
+      }
+    }
     // Only move if nobody changed the status in between; otherwise the second click reports the real state.
     const moved = await this.prisma.appointment.updateMany({ where: { id, status: appt.status }, data: { status } });
     if (!moved.count) throw new ConflictException('Статус визита только что изменили. Обновите страницу');

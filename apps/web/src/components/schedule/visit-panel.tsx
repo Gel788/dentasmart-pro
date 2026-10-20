@@ -7,7 +7,8 @@ import { canMoveVisit, isVisitClosed, type VisitStatus } from '@dentasmart/share
 import { ACTION, clock, dayTitle, STATUS, wallMinutes, type BoardVisit } from './model';
 import styles from './schedule.module.css';
 
-const FORWARD: VisitStatus[] = ['CONFIRMED', 'WAITING', 'IN_PROGRESS', 'COMPLETED'];
+// Starting and closing the visit happen on the visit screen, where the history check and the protocol live.
+const FORWARD: VisitStatus[] = ['CONFIRMED', 'WAITING'];
 
 type Props = {
   visit: BoardVisit | null;
@@ -55,6 +56,8 @@ export function VisitPanel({ visit, offset, busy, onStatus, onReschedule, onClos
             {busy ? 'Сохраняем…' : ACTION[next]}
           </button>
         )}
+        {!isVisitClosed(visit.status) && <Link className={next ? 'sd-btn-ghost' : 'sd-btn'} href={`/visits/${visit.id}`}>{visit.status === 'IN_PROGRESS' ? 'Вернуться к приёму' : 'Открыть приём'}</Link>}
+        {visit.status === 'COMPLETED' && <Link className="sd-btn-ghost" href={`/visits/${visit.id}`}>Протокол</Link>}
         <Link className="sd-btn-ghost" href={`/patients/${visit.patientId}`}>Карта пациента</Link>
         {movable && <button type="button" className="sd-btn-ghost" disabled={busy} onClick={() => onReschedule(visit)}>Перенести</button>}
       </div>

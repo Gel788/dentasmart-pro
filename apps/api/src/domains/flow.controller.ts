@@ -77,7 +77,7 @@ export class FlowController {
 
   @Post('visits/:id/complete')
   @RequirePermissions('medical.write')
-  complete(@OrgId() orgId: string, @Param('id') id: string, @Body() body: { followUpDate?: string; followUpReason?: string }) {
+  complete(@OrgId() orgId: string, @Param('id') id: string, @Body() body: { followUpDate?: string; followUpReason?: string; doneItemIds?: string[] }) {
     return this.flow.complete(orgId, id, body);
   }
 

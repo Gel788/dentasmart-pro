@@ -5,6 +5,10 @@ import { formatRub, fromKopecks, kopecks } from '@dentasmart/shared';
 import { inputKopecks, isUniqueViolation, paymentByKey, recordPayment } from './invoice-ledger';
 import { consumeForVisit } from '../route/route-chain';
 import { ClinicConfigService } from './clinic-config.service';
+import { ClinicalService } from './clinical.service';
+import { FinanceService } from './finance.service';
+import { medicalView } from '../patients/patients.service';
+import { medicalReviewDue } from '@dentasmart/shared';
 
 export const PHOTO_SLOTS = [
   { code: 'FACE_SMILE', label: 'Лицо, улыбка' },
@@ -33,6 +37,8 @@ export class FlowService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ClinicConfigService,
+    private readonly clinical: ClinicalService,
+    private readonly finance: FinanceService,
   ) {}
 
   async visit(orgId: string, id: string) {
@@ -57,8 +63,13 @@ export class FlowService {
       }),
       this.imaging(orgId, appointment.patientId),
     ]);
-    const debt = debtInvoices.reduce((sum, invoice) => sum + Math.max(0, Number(invoice.totalAmount) - Number(invoice.paidAmount)), 0);
+    const debt =
+      debtInvoices.reduce(
+        (sum, invoice) => sum + Math.max(0, kopecks(invoice.totalAmount) - kopecks(invoice.discountAmount) - kopecks(invoice.paidAmount)),
+        0,
+      ) / 100;
     const patient = appointment.patient;
+    const [medical, today] = await Promise.all([medicalView(this.prisma, patient), this.todayLines(orgId, appointment.patientId, id)]);
     return {
       id: appointment.id,
       status: appointment.status,
@@ -83,6 +94,8 @@ export class FlowService {
         contraindications: patient.contraindications,
       },
       debt,
+      medical,
+      today,
       note: appointment.visitNote,
       reminders: appointment.reminders.map((reminder) => ({
         id: reminder.id,
@@ -152,9 +165,47 @@ export class FlowService {
     return this.visit(orgId, id);
   }
 
+  /**
+   * What can be done in this visit: lines booked onto it first, then the open lines of the patient's
+   * accepted plans, or of the recommended variant of the latest proposal when nothing is accepted yet.
+   */
+  private async todayLines(orgId: string, patientId: string, appointmentId: string) {
+    const plans = await this.prisma.treatmentPlan.findMany({
+      where: { organizationId: orgId, patientId, status: { notIn: ['REJECTED', 'CANCELLED', 'COMPLETED'] } },
+      include: { items: { orderBy: [{ phase: 'asc' }, { sortOrder: 'asc' }] } },
+      orderBy: { createdAt: 'desc' },
+    });
+    const accepted = plans.filter((plan) => ['ACCEPTED', 'IN_PROGRESS'].includes(plan.status));
+    const latest = plans[0]?.familyKey ? plans.filter((plan) => plan.familyKey === plans[0].familyKey) : plans.slice(0, 1);
+    const pool = accepted.length ? accepted : [latest.find((plan) => plan.tier === 'OPTIMUM') ?? latest[0]].filter(Boolean);
+    const lines = pool.flatMap((plan) =>
+      plan.items
+        .filter((item) => item.appointmentId === appointmentId || item.status === 'PROPOSED' || item.status === 'ACCEPTED' || item.status === 'DONE')
+        .map((item) => ({
+          id: item.id,
+          planId: plan.id,
+          planTitle: plan.title,
+          title: item.title,
+          toothNum: item.toothNum,
+          surfaces: item.surfaces,
+          price: Number(item.price),
+          status: item.status,
+          booked: item.appointmentId === appointmentId,
+          doneHere: item.status === 'DONE' && item.appointmentId === appointmentId,
+        })),
+    );
+    return lines
+      .filter((line) => line.status !== 'DONE' || line.doneHere)
+      .sort((a, b) => Number(b.booked) - Number(a.booked));
+  }
+
   async start(orgId: string, id: string) {
     const appointment = await this.must(orgId, id);
     this.assert(appointment.status, 'start');
+    const patient = await this.prisma.patient.findFirst({ where: { id: appointment.patientId, organizationId: orgId } });
+    if (patient && medicalReviewDue(patient.medicalConfirmedAt)) {
+      throw new BadRequestException('Перед приёмом уточните анамнез у пациента и подтвердите медкарту');
+    }
     await this.prisma.appointment.update({ where: { id }, data: { status: 'IN_PROGRESS' } });
     await this.prisma.receptionQueueItem.updateMany({
       where: { appointmentId: id, status: { in: ['WAITING', 'CALLED'] } },
@@ -230,21 +281,39 @@ export class FlowService {
     return this.visit(orgId, id);
   }
 
-  async complete(orgId: string, id: string, body: { followUpDate?: string; followUpReason?: string }) {
+  async complete(orgId: string, id: string, body: { followUpDate?: string; followUpReason?: string; doneItemIds?: string[] }) {
     const appointment = await this.must(orgId, id);
     this.assert(appointment.status, 'complete');
     const note = await this.prisma.visitNote.findUnique({ where: { appointmentId: id } });
     if (!note?.diagnosis?.trim()) throw new BadRequestException('Сначала запишите диагноз — без него визит не закрывается');
     if (!note.treatment?.trim()) throw new BadRequestException('Опишите, что сделали на приёме');
-    await this.prisma.appointment.update({ where: { id }, data: { status: 'COMPLETED' } });
+    if (body.followUpDate && Number.isNaN(+new Date(body.followUpDate))) throw new BadRequestException('Некорректная дата контроля');
+    // Only this patient's open plan lines in this clinic can be marked done by this visit.
+    const ids = [...new Set((body.doneItemIds ?? []).filter((value) => typeof value === 'string'))].slice(0, 100);
+    const done = ids.length
+      ? await this.prisma.treatmentPlanItem.findMany({
+          where: { id: { in: ids }, status: { in: ['PROPOSED', 'ACCEPTED'] }, plan: { organizationId: orgId, patientId: appointment.patientId } },
+        })
+      : [];
+    if (done.length !== ids.length) throw new BadRequestException('Часть услуг уже выполнена или не из плана этого пациента. Обновите страницу');
+    const closed = await this.prisma.appointment.updateMany({ where: { id, organizationId: orgId, status: 'IN_PROGRESS' }, data: { status: 'COMPLETED' } });
+    if (!closed.count) throw new BadRequestException('Визит уже закрыт или ещё не начат. Обновите страницу');
     await consumeForVisit(this.prisma, orgId, id);
+    for (const item of done) {
+      await this.prisma.treatmentPlanItem.update({ where: { id: item.id }, data: { appointmentId: item.appointmentId ?? id } });
+      await this.clinical.completePlanItemWithMaterials(orgId, item.id, appointment.branchId, true);
+    }
+    const byPlan = new Map<string, string[]>();
+    for (const item of done) byPlan.set(item.planId, [...(byPlan.get(item.planId) ?? []), item.id]);
+    for (const [planId, itemIds] of byPlan) {
+      await this.finance.createInvoiceFromPlan(orgId, planId, { itemIds, appointmentId: id });
+    }
     await this.prisma.receptionQueueItem.updateMany({
       where: { appointmentId: id },
       data: { status: 'DONE' },
     });
     if (body.followUpDate) {
       const dueAt = new Date(body.followUpDate);
-      if (Number.isNaN(+dueAt)) throw new BadRequestException('Некорректная дата контроля');
       await this.prisma.followUp.create({
         data: {
           organizationId: orgId,
