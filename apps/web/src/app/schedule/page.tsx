@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { effectiveHours, exceptionOn, visibleHours, weekHoursOf, type DayHours, type ScheduleException, type VisitStatus } from '@dentasmart/shared';
 import { Protected } from '@/components/protected';
 import { Agenda } from '@/components/schedule/agenda';
@@ -254,36 +254,45 @@ function Calendar() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.bar}>
-        <h1 className={styles.title}>
-          <span>{title.charAt(0).toUpperCase() + title.slice(1)}</span>
-          <small>
-            {view === 'day' && daySummary ? `${daySummary.visits} визитов · кресла заняты на ${Math.round(daySummary.ratio * 100)}%` : view === 'agenda' ? 'Повестка на неделю' : 'Расписание клиники'}
-          </small>
-        </h1>
-        <div className={styles.nav}>
-          <button type="button" className={styles.iconBtn} onClick={() => go(-1)} aria-label="Назад"><ChevronLeft size={18} /></button>
-          <button type="button" className="sd-btn-ghost" onClick={() => setDate(todayIn(offset))}>Сегодня</button>
-          <button type="button" className={styles.iconBtn} onClick={() => go(1)} aria-label="Вперёд"><ChevronRight size={18} /></button>
-        </div>
-        <div className="sd-seg" role="tablist" aria-label="Вид календаря">
-          {VIEWS.map((item) => (
-            <button key={item.id} type="button" role="tab" aria-selected={view === item.id} className={view === item.id ? 'on' : ''} onClick={() => setView(item.id)}>{item.label}</button>
-          ))}
-        </div>
-        {view === 'day' && (
-          <div className="sd-seg" role="group" aria-label="Колонки дня">
-            <button type="button" aria-pressed={axis === 'chair'} className={axis === 'chair' ? 'on' : ''} onClick={() => setAxis('chair')}>Кресла</button>
-            <button type="button" aria-pressed={axis === 'doctor'} className={axis === 'doctor' ? 'on' : ''} onClick={() => setAxis('doctor')}>Врачи</button>
+      <header className={styles.bar}>
+        <div className={styles.barTop}>
+          <div className={`${styles.nav} ${styles.navDesk}`}>
+            <button type="button" className={styles.iconBtn} onClick={() => go(-1)} aria-label="Назад"><ChevronLeft size={18} /></button>
+            <button type="button" className={styles.todayBtn} onClick={() => setDate(todayIn(offset))}>Сегодня</button>
+            <button type="button" className={styles.iconBtn} onClick={() => go(1)} aria-label="Вперёд"><ChevronRight size={18} /></button>
           </div>
-        )}
-        <label className="sr-only" htmlFor="calendar-doctor">Врач</label>
-        <select id="calendar-doctor" className={styles.filter} value={doctor} onChange={(event) => setDoctor(event.target.value)}>
-          <option value="">Все врачи</option>
-          {shell?.doctors.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select>
-        <button type="button" className="sd-btn" onClick={book} disabled={!shell}>Записать</button>
-      </div>
+          <h1 className={styles.title}>
+            <span>{title.charAt(0).toUpperCase() + title.slice(1)}</span>
+            <small>
+              {view === 'day' && daySummary ? `${daySummary.visits} визитов · кресла заняты на ${Math.round(daySummary.ratio * 100)}%` : view === 'agenda' ? 'Повестка на неделю' : 'Расписание клиники'}
+            </small>
+          </h1>
+          <button type="button" className={styles.book} onClick={book} disabled={!shell}><Plus size={18} aria-hidden="true" /><span>Записать</span></button>
+        </div>
+        <div className={styles.tools}>
+          <div className={`${styles.nav} ${styles.navPhone}`}>
+            <button type="button" className={styles.iconBtn} onClick={() => go(-1)} aria-label="Назад"><ChevronLeft size={18} /></button>
+            <button type="button" className={styles.todayBtn} onClick={() => setDate(todayIn(offset))}>Сегодня</button>
+            <button type="button" className={styles.iconBtn} onClick={() => go(1)} aria-label="Вперёд"><ChevronRight size={18} /></button>
+          </div>
+          <div className="sd-seg" role="tablist" aria-label="Вид календаря">
+            {VIEWS.map((item) => (
+              <button key={item.id} type="button" role="tab" aria-selected={view === item.id} className={view === item.id ? 'on' : ''} onClick={() => setView(item.id)}>{item.label}</button>
+            ))}
+          </div>
+          {view === 'day' && (
+            <div className="sd-seg" role="group" aria-label="Колонки дня">
+              <button type="button" aria-pressed={axis === 'chair'} className={axis === 'chair' ? 'on' : ''} onClick={() => setAxis('chair')}>Кресла</button>
+              <button type="button" aria-pressed={axis === 'doctor'} className={axis === 'doctor' ? 'on' : ''} onClick={() => setAxis('doctor')}>Врачи</button>
+            </div>
+          )}
+          <label className="sr-only" htmlFor="calendar-doctor">Врач</label>
+          <select id="calendar-doctor" className={styles.filter} value={doctor} onChange={(event) => setDoctor(event.target.value)}>
+            <option value="">Все врачи</option>
+            {shell?.doctors.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </div>
+      </header>
 
       {month && <MonthStrip days={month.days} selected={date} offset={offset} onPick={pick} />}
 

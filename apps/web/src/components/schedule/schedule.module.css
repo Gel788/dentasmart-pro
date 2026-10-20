@@ -31,13 +31,26 @@
   --load-4: #5eead4;
 }
 
-.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
-.title { margin: 0 auto 0 0; font-family: var(--font-display), sans-serif; font-weight: 600; font-size: clamp(20px, 1.6vw + 10px, 26px); letter-spacing: -0.01em; }
-.title small { display: block; font-family: var(--font-body), sans-serif; font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
-.nav { display: inline-flex; align-items: center; gap: 4px; }
-.iconBtn { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 3px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); }
-.iconBtn:hover { border-color: var(--accent); }
-.filter { height: 38px; border-radius: 3px; border: 1px solid var(--border-strong); background: var(--surface-solid); padding: 0 10px; color: var(--text); max-width: 220px; }
+/* Header: one ruled module — date navigation, the date, the booking button; the view switches below. */
+.bar { display: flex; flex-direction: column; background: var(--surface-solid); border: 1px solid var(--border); }
+.barTop { display: flex; align-items: center; gap: 14px; padding: 10px 12px; }
+.tools { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+.tools::-webkit-scrollbar { display: none; }
+.tools > * { flex: none; }
+.title { flex: 1; min-width: 0; margin: 0; font-weight: 800; font-size: clamp(20px, 1.2vw + 12px, 26px) !important; line-height: 1.1 !important; letter-spacing: -0.02em; }
+.title span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.title small { display: block; margin-top: 2px; font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+.nav { display: inline-flex; align-items: center; gap: 0; flex: none; }
+.navPhone { display: none; }
+.iconBtn { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); cursor: pointer; }
+.iconBtn:hover { background: var(--surface-2); }
+.todayBtn { height: 44px; padding: 0 14px; border: 1px solid var(--border-strong); border-left: 0; border-right: 0; background: var(--surface-solid); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+.todayBtn:hover { background: var(--surface-2); }
+.book { flex: none; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border: 0; background: var(--accent); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.book:hover { background: var(--accent-hover); }
+.book:disabled { opacity: 0.6; cursor: default; }
+:global(html.dark) .book { color: #0f1215; }
+.filter { height: 40px; border: 1px solid var(--border-strong); background: var(--surface-solid); padding: 0 10px; color: var(--text); max-width: 220px; }
 
 /* Month strip: one cell per day, filled by how booked the chairs are. Also the day picker. */
 .strip { display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-solid); min-width: 0; }
@@ -97,6 +110,7 @@
 .hoursBar span { color: var(--muted); }
 .hoursBar .hoursNote { font-style: normal; font-weight: 600; color: var(--warning); }
 .hoursBar button { margin-left: auto; min-height: 40px; }
+@media (max-width: 720px) { .hoursBar { padding: 8px 10px; gap: 6px 10px; font-size: 13px; } .hoursBar > span { display: none; } }
 .dayOff { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 28px 20px; border: 1px solid var(--border); background: var(--surface-solid); }
 .dayOff h2 { margin: 0; font-size: 20px; font-weight: 800; }
 .dayOff p { margin: 0; color: var(--text-secondary); max-width: 56ch; }
@@ -181,9 +195,17 @@
 
 @media (max-width: 720px) {
   .page { --hour: 60px; }
-  .title { flex: 1 0 100%; }
-  .bar { gap: 8px; }
-  .filter { flex: 1 1 140px; max-width: none; }
+  .barTop { gap: 10px; padding: 8px; }
+  .navDesk { display: none; }
+  .navPhone { display: inline-flex; }
+  .navPhone .iconBtn { width: 40px; height: 40px; }
+  .navPhone .todayBtn { height: 40px; }
+  .title { font-size: 19px !important; }
+  .title small { font-size: 12px; }
+  .book { width: 44px; padding: 0; justify-content: center; }
+  .book span { display: none; }
+  .tools { padding: 8px; }
+  .tools :global(.sd-seg) button { height: 40px; padding: 0 12px; }
   .stripHead span { display: none; }
   .cell { flex: 0 0 40px; }
   .row { grid-template-columns: 64px minmax(0, 1fr); }
