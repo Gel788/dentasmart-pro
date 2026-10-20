@@ -12,7 +12,7 @@ if [ -n "$(git status --porcelain)" ]; then
   echo "Есть незакоммиченные изменения — выкатывается только закоммиченный HEAD ($REV)." >&2
 fi
 
-SSH=(ssh -i "$KEY" -o IdentitiesOnly=yes -o BatchMode=yes "$HOST")
+SSH=(ssh -i "$KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=20 "$HOST")
 git archive HEAD | "${SSH[@]}" "cat > /tmp/dentasmart-$REV.tar"
 "${SSH[@]}" "REV=$REV bash -s" <<'REMOTE'
 set -euo pipefail
