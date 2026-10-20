@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
 import { useFocus } from '@/lib/focus';
 import { api } from '@/lib/api';
+import { BookingSheet } from './booking/booking-sheet';
 import { ContextPanel } from './studio/panels';
 
 const PRIMARY = [
@@ -172,6 +173,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <div className="sd-main">
         <div className="sd-workspace">{children}</div>
       </div>
+      <BookingSheet />
       <aside className={`sd-panel ${panelOpen ? 'open' : ''}`}>
         <ContextPanel />
       </aside>
