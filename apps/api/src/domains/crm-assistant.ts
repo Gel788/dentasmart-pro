@@ -47,13 +47,20 @@ type Action =
   | { type: 'patient'; query?: string }
   | { type: 'day'; date?: string; doctor?: string }
   | { type: 'open'; page?: string }
+  | { type: 'visit'; intent?: string; patient?: string; date?: string; dateTo?: string; from?: string }
+  | { type: 'new_patient'; lastName?: string; firstName?: string; middleName?: string; phone?: string }
   | { type: 'none' };
 
 export type Card =
   | { kind: 'slots'; doctor: { id: string; name: string } | null; patient: { id: string; name: string } | null; serviceId: string | null; durationMin: number; service: string | null; items: { startsAt: string; endsAt: string }[] }
   | { kind: 'patients'; query: string; items: { id: string; name: string; phone: string | null }[] }
   | { kind: 'day'; date: string; items: { id: string; startsAt: string; patientId: string; patient: string; doctor: string | null; service: string | null; status: string }[] }
-  | { kind: 'link'; href: string; label: string };
+  | { kind: 'link'; href: string; label: string }
+  | { kind: 'visits'; intent: VisitIntent; query: string; items: VisitRow[]; slots: { startsAt: string; endsAt: string }[] }
+  | { kind: 'newPatient'; lastName: string; firstName: string; middleName: string; phone: string };
+export type VisitIntent = 'cancel' | 'confirm' | 'arrived' | 'no_show' | 'move';
+type VisitRow = { id: string; startsAt: string; endsAt: string; patientId: string; patient: string; doctor: string | null; service: string | null; status: string };
+const INTENTS: VisitIntent[] = ['cancel', 'confirm', 'arrived', 'no_show', 'move'];
 
 type Fetch = typeof fetch;
 const clean = (value: unknown) => String(value ?? '').trim().toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
@@ -168,6 +175,60 @@ export class CrmAssistantService {
       });
     }
 
+    if (action.type === 'visit' && can('schedule.read')) {
+      const intent: VisitIntent = INTENTS.includes(action.intent as VisitIntent) ? (action.intent as VisitIntent) : 'confirm';
+      const query = String(action.patient ?? '').trim();
+      const patients = query && can('patient.read') ? await this.findPatients(orgId, query) : [];
+      const visits = patients.length
+        ? await this.prisma.appointment.findMany({
+            where: {
+              organizationId: orgId,
+              patientId: { in: patients.map((row) => row.id) },
+              status: { notIn: ['CANCELLED', 'COMPLETED', 'NO_SHOW'] },
+              startsAt: { gte: new Date(Date.now() - 12 * 3600_000) },
+            },
+            orderBy: { startsAt: 'asc' },
+            take: 6,
+            select: { id: true, startsAt: true, endsAt: true, status: true, patientId: true, doctorId: true, patient: { select: { firstName: true, lastName: true } }, doctor: { select: { firstName: true, lastName: true } }, service: { select: { name: true } } },
+          })
+        : [];
+      let slots: { startsAt: string; endsAt: string }[] = [];
+      const first = visits[0];
+      if (intent === 'move' && first && branch) {
+        const target = datesIn(targetPart(turns.at(-1)!.content), today);
+        const fromDate = target?.date && target.date >= today ? target.date : today;
+        const toDate = target?.dateTo ?? (target ? fromDate : addDays(today, 6));
+        const durationMin = Math.round((+first.endsAt - +first.startsAt) / 60000);
+        const from = new Date(Date.parse(`${fromDate}T00:00:00Z`) - offset * 60000);
+        const to = new Date(Date.parse(`${addDays(toDate, 1)}T00:00:00Z`) - offset * 60000);
+        const after = clock(action.from);
+        slots = (await this.widget.freeSlots(orgId, branch.id, durationMin, from, to, { doctorId: first.doctorId, limit: 200 }))
+          .filter((slot) => after === null || Math.round(((Date.parse(slot.startsAt) + offset * 60000) % 86400000) / 60000) >= after)
+          .slice(0, 12);
+      }
+      cards.push({
+        kind: 'visits',
+        intent,
+        query,
+        slots,
+        items: visits.map((row) => ({
+          id: row.id,
+          startsAt: row.startsAt.toISOString(),
+          endsAt: row.endsAt.toISOString(),
+          patientId: row.patientId,
+          patient: `${row.patient.lastName} ${row.patient.firstName}`,
+          doctor: row.doctor ? `${row.doctor.lastName} ${row.doctor.firstName[0] ?? ''}.` : null,
+          service: row.service?.name ?? null,
+          status: row.status,
+        })),
+      });
+    }
+
+    if (action.type === 'new_patient' && can('patient.write')) {
+      const word = (value?: string) => capitalize(String(value ?? '').trim().slice(0, 60));
+      cards.push({ kind: 'newPatient', lastName: word(action.lastName), firstName: word(action.firstName), middleName: word(action.middleName), phone: String(action.phone ?? '').replace(/[^\d+]/g, '').slice(0, 16) });
+    }
+
     if (action.type === 'open') {
       const page = pages.find((item) => item.href === action.page);
       if (page) cards.push({ kind: 'link', href: page.href, label: page.label });
@@ -244,10 +305,12 @@ export class CrmAssistantService {
       '- slots: свободное время для записи; также когда просят записать пациента. Поля: patient (фамилия пациента, если назван), doctor (фамилия или имя врача, если назван), date и dateTo (YYYY-MM-DD; «завтра», «в пятницу», «на следующей неделе» переведи в даты), from и to (HH:MM, «вечером» = from 17:00, «утром» = to 12:00, «после обеда» = from 14:00), service (услуга словами, если названа), durationMin (если названа длительность).',
       '- patient: найти пациента. Поле query: фамилия, имя или телефон.',
       '- day: кто записан на день. Поля date (YYYY-MM-DD) и doctor.',
+      '- visit: действие с уже существующим визитом пациента. Поля: patient (фамилия), intent — одно из: cancel (отменить), confirm (подтвердить), arrived (пришёл, отметить приход), no_show (не пришёл), move (перенести), from (HH:MM, если для переноса назвали время).',
+      '- new_patient: завести нового пациента. Поля lastName, firstName, middleName, phone.',
       `- open: открыть раздел. Поле page — один из адресов: ${context.pages.map((page) => `${page.href} (${page.label})`).join(', ')}.`,
       '- none: вопрос о том, как работать в CRM, или просто разговор. Тогда ответь сам в reply, в 1–4 предложениях.',
       'Когда действие не none, reply — одна короткая фраза о том, что ты показываешь («Свободные окна у Завена Седраковича завтра вечером:»). Не придумывай имена, время, суммы и диагнозы — их покажет CRM.',
-      'Ты не записываешь, не отменяешь и не переносишь визиты сам. На просьбу записать выбери slots: CRM покажет время, человек нажмёт его и подтвердит запись.',
+      'Ты выполняешь команды через CRM: она покажет, что будет сделано, а человек нажмёт «Подтвердить». На просьбу записать выбери slots, на отмену, перенос, подтверждение и отметки визита — visit, на нового пациента — new_patient.',
       'Подсказки по CRM: часы работы клиники и врачей, праздники и отпуска — в Настройках; запись — кнопкой на свободном месте в Расписании или из карточки окна; протокол приёма и диктовка — на экране визита; заявки с сайта подтверждаются в разделе «Запись с сайта».',
       'В reply пиши как живой помощник: никогда не упоминай action, JSON, поля и адреса страниц.',
       'Ответь только JSON без пояснений: {"reply":"","action":{"type":"slots","patient":"","doctor":"","date":"","dateTo":"","from":"","to":"","service":""}}',
@@ -333,12 +396,25 @@ function withDates(action: Action, text: string, today: string): Action {
   return action.type === 'slots' ? { ...action, date: dates.date, dateTo: dates.dateTo ?? dates.date } : { ...action, date: dates.date };
 }
 
+const capitalize = (value: string) => value.charAt(0).toLocaleUpperCase('ru-RU') + value.slice(1);
+
+/** «Перенеси Орлову с пятницы на понедельник»: the new date is what follows the last «на». */
+function targetPart(text: string) {
+  const parts = clean(text).split(/\sна\s/);
+  return parts.length > 1 ? parts.at(-1)! : text;
+}
+
 function describe(cards: Card[]) {
   const card = cards[0];
   if (!card) return 'Не понял запрос. Спросите иначе — например, «свободные окна завтра после 15:00».';
   if (card.kind === 'slots') return card.items.length ? `Свободное время${card.doctor ? ` у врача ${card.doctor.name}` : ''}${card.patient ? ` для пациента ${card.patient.name}` : ''}:` : 'Свободного времени по этому запросу нет.';
   if (card.kind === 'patients') return card.items.length ? 'Нашёл пациентов:' : 'Пациента не нашёл.';
   if (card.kind === 'day') return 'Записи на день:';
+  if (card.kind === 'visits') {
+    if (!card.items.length) return card.query ? `Ближайших визитов у «${card.query}» не нашёл.` : 'Назовите фамилию пациента.';
+    return { cancel: 'Какой визит отменить?', confirm: 'Подтверждаю визит:', arrived: 'Отмечаю приход:', no_show: 'Отмечаю неявку:', move: 'Перенос визита — выберите новое время:' }[card.intent];
+  }
+  if (card.kind === 'newPatient') return 'Проверьте данные нового пациента:';
   return `Раздел «${card.label}»:`;
 }
 
@@ -356,13 +432,18 @@ export function parseRoute(content: string): { reply: string; action: Action } {
   }
   const reply = typeof raw.reply === 'string' ? raw.reply.trim().slice(0, 1200) : start < 0 ? content.trim().slice(0, 1200) : '';
   const action = raw.action && typeof raw.action === 'object' ? raw.action : {};
-  const type = ['slots', 'patient', 'day', 'open'].includes(action.type) ? action.type : 'none';
+  const type = ['slots', 'patient', 'day', 'open', 'visit', 'new_patient'].includes(action.type) ? action.type : 'none';
   const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, 80) : undefined);
   return {
     reply,
     action: {
       type,
       patient: text(action.patient),
+      intent: text(action.intent),
+      lastName: text(action.lastName),
+      firstName: text(action.firstName),
+      middleName: text(action.middleName),
+      phone: text(action.phone),
       doctor: text(action.doctor),
       date: text(action.date),
       dateTo: text(action.dateTo),

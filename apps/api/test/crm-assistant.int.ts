@@ -78,6 +78,16 @@ async function main() {
     assert.deepEqual((await ask({ type: 'open', page: '/money' })).cards, [{ kind: 'link', href: '/money', label: 'Деньги: оплаты, долги, касса' }]);
     assert.equal((await ask({ type: 'open', page: '/settings' })).cards.length, 0, 'настройки только тем, кому можно');
 
+    const move = await ask({ type: 'visit', intent: 'move', patient: 'Орлову' }, ALL, 'перенеси Орлову на послезавтра');
+    assert.ok(move.cards[0]?.kind === 'visits' && move.cards[0].items[0]?.patientId === patient.id && move.cards[0].slots.length > 0, 'визит найден, новое время предложено');
+    const cancel = await ask({ type: 'visit', intent: 'удалить всё', patient: 'Орлова' });
+    assert.ok(cancel.cards[0]?.kind === 'visits' && cancel.cards[0].intent === 'confirm', 'незнакомое намерение не становится отменой');
+    assert.equal((await ask({ type: 'visit', intent: 'cancel', patient: 'Орлова' }, ['schedule.read'])).cards[0]?.kind === 'visits' ? 'ok' : 'no', 'ok');
+    const fresh = await ask({ type: 'new_patient', lastName: 'петрова', firstName: 'анна', phone: '+7 (900) 123-45-67' });
+    assert.deepEqual(fresh.cards, [], 'без права на пациентов карточки нет');
+    const fresh2 = await assistant.ask(clinic.id, user.id, [...ALL, 'patient.write'], [{ role: 'user', content: 'новый пациент' }]);
+    assert.ok(fresh2.cards[0]?.kind === 'newPatient' && fresh2.cards[0].lastName === 'Петрова' && fresh2.cards[0].phone === '+79001234567');
+
     // Booking from the conversation picks a free chair; when both are taken it says so.
     const slotAt = new Date(Date.parse(`${day}T16:00:00Z`) - 3 * 3600000).toISOString();
     const first = await assistant.book(clinic.id, user.id, { patientId: patient.id, startsAt: slotAt });

@@ -146,6 +146,22 @@ select.bookInput option { background: #1b1c26; color: var(--ink); }
 .bookAlt { min-height: 54px; padding: 0 18px; border: 1px solid var(--line); border-radius: 16px; background: transparent; color: var(--ink-2); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
 .bookAlt:hover { background: var(--pane-2); color: var(--ink); }
 
+.bookDanger { flex: 1 1 220px; min-height: 54px; border: 0; border-radius: 16px; background: linear-gradient(120deg, #ff3d6e, #ff7a3d); color: #fff; font: inherit; font-size: 17px; font-weight: 700; cursor: pointer; box-shadow: 0 14px 36px rgba(255, 61, 110, 0.4); transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1); }
+.bookDanger:hover:not(:disabled) { transform: translateY(-2px); }
+.bookDanger:disabled { opacity: 0.4; cursor: default; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pick { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 66px; padding: 10px 20px; border: 0; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; transition: background 140ms ease, box-shadow 140ms ease; }
+.pick:hover { background: var(--pane-2); }
+.pick[aria-pressed='true'] { background: rgba(179, 92, 255, 0.14); box-shadow: inset 3px 0 0 var(--s3); }
+.pickDate { display: flex; flex: none; flex-direction: column; align-items: center; width: 44px; }
+.pickDate small { color: var(--s5); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.pickDate b { font-size: 26px; font-weight: 300; line-height: 1; font-variant-numeric: tabular-nums; }
+.moveTo { display: flex; flex-direction: column; gap: 8px; padding: 14px 4px 4px 20px; border-top: 1px solid var(--line); }
+.moveTo .times { padding-left: 0; }
+.times button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+.slotDay { color: var(--ink-3); font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
+.times button[aria-pressed='true'] .slotDay { color: #4b4f66; }
+
 .done { display: flex; align-items: center; gap: 16px; padding: 18px 20px; animation: rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 .done > div { flex: 1; min-width: 0; }
 .done b { display: block; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
@@ -221,6 +237,8 @@ select.bookInput option { background: #1b1c26; color: var(--ink); }
   .row time { width: auto; font-size: 20px; }
   .row .state { grid-column: 2; justify-self: start; }
   .bar textarea { font-size: 16px; }
+  .grid2 { grid-template-columns: 1fr; }
+  .done { flex-wrap: wrap; }
 }
 
 @media (prefers-reduced-motion: reduce) {

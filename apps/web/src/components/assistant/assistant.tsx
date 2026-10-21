@@ -11,10 +11,14 @@ type Card =
   | { kind: 'slots'; doctor: { id: string; name: string } | null; patient: { id: string; name: string } | null; serviceId: string | null; durationMin: number; service: string | null; items: { startsAt: string; endsAt: string }[] }
   | { kind: 'patients'; query: string; items: { id: string; name: string; phone: string | null }[] }
   | { kind: 'day'; date: string; items: { id: string; startsAt: string; patientId: string; patient: string; doctor: string | null; service: string | null; status: string }[] }
-  | { kind: 'link'; href: string; label: string };
+  | { kind: 'link'; href: string; label: string }
+  | { kind: 'visits'; intent: Intent; query: string; items: VisitRow[]; slots: { startsAt: string; endsAt: string }[] }
+  | { kind: 'newPatient'; lastName: string; firstName: string; middleName: string; phone: string };
+type Intent = 'cancel' | 'confirm' | 'arrived' | 'no_show' | 'move';
+type VisitRow = { id: string; startsAt: string; endsAt: string; patientId: string; patient: string; doctor: string | null; service: string | null; status: string };
 type Exchange = { id: number; question: string; reply?: string; cards?: Card[]; error?: boolean };
 
-const IDEAS = ['Свободные окна завтра после 15:00', 'Кто записан сегодня?', 'Найди пациента Орлова', 'Как поставить врачу отпуск?'];
+const IDEAS = ['Свободные окна завтра после 15:00', 'Кто записан сегодня?', 'Перенеси Орлову на понедельник', 'Новый пациент Петрова Анна +7 900 123-45-67'];
 const STATUS: Record<string, { code: string; word: string }> = {
   SCHEDULED: { code: 'wait', word: 'не подтверждён' },
   CONFIRMED: { code: 'ok', word: 'подтверждён' },
@@ -125,7 +129,7 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
               )}
             </div>
           )}
-          {thread.map((item) => <Answer key={item.id} item={item} onBook={book} onClose={onClose} />)}
+          {thread.map((item) => <Answer key={item.id} item={item} onBook={book} onClose={onClose} onAsk={(question) => void send(question)} />)}
         </div>
 
         <form className={styles.bar} onSubmit={(event) => { event.preventDefault(); void send(text); }}>
@@ -180,7 +184,7 @@ function Typed({ text }: { text: string }) {
   );
 }
 
-function Answer({ item, onBook, onClose }: { item: Exchange; onBook: (slot: { startsAt: string }, doctorId?: string, patientId?: string) => void; onClose: () => void }) {
+function Answer({ item, onBook, onClose, onAsk }: { item: Exchange; onBook: (slot: { startsAt: string }, doctorId?: string, patientId?: string) => void; onClose: () => void; onAsk: (question: string) => void }) {
   return (
     <article className={styles.answer} data-error={item.error || undefined}>
       <p className={styles.question}>{capital(item.question)}</p>
@@ -191,7 +195,7 @@ function Answer({ item, onBook, onClose }: { item: Exchange; onBook: (slot: { st
           {item.reply && <Typed text={item.reply} />}
           {item.cards?.map((card, index) => (
             <div key={index} className={styles.rise} style={{ animationDelay: `${160 + index * 90}ms` }}>
-              <CardView card={card} onBook={onBook} onClose={onClose} />
+              <CardView card={card} onBook={onBook} onClose={onClose} onAsk={onAsk} />
             </div>
           ))}
         </>
@@ -200,7 +204,9 @@ function Answer({ item, onBook, onClose }: { item: Exchange; onBook: (slot: { st
   );
 }
 
-function CardView({ card, onBook, onClose }: { card: Card; onBook: (slot: { startsAt: string }, doctorId?: string, patientId?: string) => void; onClose: () => void }) {
+function CardView({ card, onBook, onClose, onAsk }: { card: Card; onBook: (slot: { startsAt: string }, doctorId?: string, patientId?: string) => void; onClose: () => void; onAsk: (question: string) => void }) {
+  if (card.kind === 'visits') return <VisitsCard card={card} onClose={onClose} />;
+  if (card.kind === 'newPatient') return <NewPatientCard card={card} onClose={onClose} onAsk={onAsk} />;
   if (card.kind === 'slots') return <SlotsCard card={card} onBook={onBook} onClose={onClose} />;
   if (card.kind === 'patients') {
     if (!card.items.length) return <p className={styles.empty}>Пациента «{card.query}» не нашёл.</p>;
@@ -385,6 +391,158 @@ function BookHere({ startsAt, card, onDone, onFullForm }: { startsAt: string; ca
           {pending ? 'Записываю…' : `Записать на ${time(startsAt)}`}
         </button>
         <button type="button" className={styles.bookAlt} onClick={onFullForm}>Полная форма</button>
+      </div>
+    </div>
+  );
+}
+
+const ACTS: Record<Intent, { button: string; done: string; danger?: boolean }> = {
+  confirm: { button: 'Подтвердить визит', done: 'Подтверждён' },
+  arrived: { button: 'Пациент пришёл', done: 'Отмечен приход' },
+  no_show: { button: 'Не пришёл', done: 'Отмечена неявка', danger: true },
+  cancel: { button: 'Отменить визит', done: 'Визит отменён', danger: true },
+  move: { button: 'Перенести', done: 'Перенесён' },
+};
+
+/** A command on an existing visit: the visit, what will happen, one button (two taps for anything that removes a visit). */
+function VisitsCard({ card, onClose }: { card: Extract<Card, { kind: 'visits' }>; onClose: () => void }) {
+  const { bump } = useFocus();
+  const [chosen, setChosen] = useState<string | null>(card.items.length === 1 ? card.items[0].id : null);
+  const [target, setTarget] = useState<string | null>(null);
+  const [armed, setArmed] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState<{ id: string; text: string } | null>(null);
+  useEffect(() => { setArmed(false); setError(''); }, [chosen, target]);
+  if (!card.items.length) return <p className={styles.empty}>{card.query ? `Ближайших визитов у «${card.query}» нет.` : 'Назовите фамилию пациента.'}</p>;
+  const act = ACTS[card.intent];
+  const visit = card.items.find((row) => row.id === chosen) ?? null;
+
+  const run = async () => {
+    if (!visit) return;
+    if (act.danger && !armed) { setArmed(true); return; }
+    setPending(true);
+    setError('');
+    try {
+      if (card.intent === 'confirm') await api(`/flow/visits/${visit.id}/confirm`, { method: 'POST' });
+      if (card.intent === 'arrived') await api(`/flow/visits/${visit.id}/check-in`, { method: 'POST' });
+      if (card.intent === 'no_show') await api(`/flow/visits/${visit.id}/no-show`, { method: 'POST', body: JSON.stringify({ reason: 'Не пришёл' }) });
+      if (card.intent === 'cancel') await api(`/appointments/${visit.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }) });
+      if (card.intent === 'move' && target) {
+        const length = Date.parse(visit.endsAt) - Date.parse(visit.startsAt);
+        await api(`/appointments/${visit.id}`, { method: 'PATCH', body: JSON.stringify({ startsAt: target, endsAt: new Date(Date.parse(target) + length).toISOString() }) });
+      }
+      bump();
+      setDone({ id: visit.id, text: card.intent === 'move' && target ? `${act.done} на ${dayLabel(target)}, ${time(target)}` : act.done });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не получилось');
+    } finally {
+      setPending(false);
+    }
+  };
+
+  if (done && visit) {
+    return (
+      <div className={`${styles.glass} ${styles.done}`}>
+        <span className={styles.doneMark} aria-hidden="true"><Check size={26} strokeWidth={2.6} /></span>
+        <div><b>{done.text}</b><p>{visit.patient}{card.intent === 'move' ? '' : ` · ${capital(dayLabel(visit.startsAt))}, ${time(visit.startsAt)}`}</p></div>
+        <Link href={`/patients/${visit.patientId}`} onClick={onClose} className={styles.doneLink}>Карточка<ArrowRight size={16} aria-hidden="true" /></Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.glass}>
+      <p className={styles.glassHead}><b>{card.items.length > 1 ? 'Какой визит?' : 'Визит'}</b><span>{act.button}</span></p>
+      <ul>
+        {card.items.map((row) => {
+          const state = STATUS[row.status] ?? { code: 'done', word: row.status };
+          return (
+            <li key={row.id}>
+              <button type="button" className={styles.pick} aria-pressed={chosen === row.id} onClick={() => setChosen(row.id)}>
+                <span className={styles.pickDate}><small>{weekday(row.startsAt)}</small><b>{new Date(row.startsAt).getDate()}</b></span>
+                <span className={styles.rowText}><b>{time(row.startsAt)} · {row.patient}</b><small>{[row.service, row.doctor].filter(Boolean).join(' · ') || month(row.startsAt)}</small></span>
+                <span className={styles.state} data-code={state.code}><i />{state.word}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {card.intent === 'move' && visit && (
+        card.slots.length ? (
+          <div className={styles.moveTo}>
+            <span className={styles.bookLabel}>Новое время</span>
+            <div className={styles.times}>
+              {card.slots.map((slot) => (
+                <button key={slot.startsAt} type="button" aria-pressed={target === slot.startsAt} onClick={() => setTarget(slot.startsAt)}>
+                  <small className={styles.slotDay}>{weekday(slot.startsAt)} {new Date(slot.startsAt).getDate()}</small>{time(slot.startsAt)}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : <p className={styles.glassFoot}>Свободного времени на этот день нет — назовите другой.</p>
+      )}
+      {visit && (card.intent !== 'move' || target) && (
+        <div className={styles.book}>
+          {error && <p className={styles.bookError} role="alert">{error}</p>}
+          <div className={styles.bookActs}>
+            <button type="button" className={act.danger ? styles.bookDanger : styles.bookGo} disabled={pending} onClick={() => void run()}>
+              {pending ? 'Выполняю…' : armed ? `Точно? Нажмите ещё раз` : card.intent === 'move' && target ? `Перенести на ${time(target)}, ${weekday(target)} ${new Date(target).getDate()}` : act.button}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NewPatientCard({ card, onClose, onAsk }: { card: Extract<Card, { kind: 'newPatient' }>; onClose: () => void; onAsk: (question: string) => void }) {
+  const { bump } = useFocus();
+  const [form, setForm] = useState({ lastName: card.lastName, firstName: card.firstName, middleName: card.middleName, phone: card.phone });
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const [created, setCreated] = useState<{ id: string; name: string } | null>(null);
+  const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [key]: event.target.value });
+
+  const submit = async () => {
+    setPending(true);
+    setError('');
+    try {
+      const patient = await api<{ id: string }>('/patients', { method: 'POST', body: JSON.stringify({ lastName: form.lastName.trim(), firstName: form.firstName.trim(), middleName: form.middleName.trim() || undefined, phone: form.phone.trim() || undefined }) });
+      bump();
+      setCreated({ id: patient.id, name: `${form.lastName.trim()} ${form.firstName.trim()}` });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не получилось создать пациента');
+    } finally {
+      setPending(false);
+    }
+  };
+
+  if (created) {
+    return (
+      <div className={`${styles.glass} ${styles.done}`}>
+        <span className={styles.doneMark} aria-hidden="true"><Check size={26} strokeWidth={2.6} /></span>
+        <div><b>Пациент создан</b><p>{created.name}</p></div>
+        <button type="button" className={styles.doneLink} onClick={() => onAsk(`Запиши ${created.name} на ближайшее свободное время`)}>Записать</button>
+        <Link href={`/patients/${created.id}`} onClick={onClose} className={styles.doneLink}>Карточка<ArrowRight size={16} aria-hidden="true" /></Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.glass}>
+      <p className={styles.glassHead}><b>Новый пациент</b><span>проверьте и создайте</span></p>
+      <div className={styles.book}>
+        <div className={styles.grid2}>
+          <label className={styles.bookField}><span className={styles.bookLabel}>Фамилия</span><input className={styles.bookInput} value={form.lastName} onChange={set('lastName')} /></label>
+          <label className={styles.bookField}><span className={styles.bookLabel}>Имя</span><input className={styles.bookInput} value={form.firstName} onChange={set('firstName')} /></label>
+          <label className={styles.bookField}><span className={styles.bookLabel}>Отчество</span><input className={styles.bookInput} value={form.middleName} onChange={set('middleName')} /></label>
+          <label className={styles.bookField}><span className={styles.bookLabel}>Телефон</span><input className={styles.bookInput} inputMode="tel" value={form.phone} onChange={set('phone')} /></label>
+        </div>
+        {error && <p className={styles.bookError} role="alert">{error}</p>}
+        <div className={styles.bookActs}>
+          <button type="button" className={styles.bookGo} disabled={pending || !form.lastName.trim() || !form.firstName.trim()} onClick={() => void submit()}>{pending ? 'Создаю…' : 'Создать пациента'}</button>
+        </div>
       </div>
     </div>
   );
