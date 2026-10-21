@@ -42,14 +42,14 @@ const PAGES = [
 
 export type Turn = { role: 'user' | 'assistant'; content: string };
 type Action =
-  | { type: 'slots'; doctor?: string; date?: string; dateTo?: string; from?: string; to?: string; service?: string; durationMin?: number }
+  | { type: 'slots'; patient?: string; doctor?: string; date?: string; dateTo?: string; from?: string; to?: string; service?: string; durationMin?: number }
   | { type: 'patient'; query?: string }
   | { type: 'day'; date?: string; doctor?: string }
   | { type: 'open'; page?: string }
   | { type: 'none' };
 
 export type Card =
-  | { kind: 'slots'; doctor: { id: string; name: string } | null; durationMin: number; service: string | null; items: { startsAt: string; endsAt: string }[] }
+  | { kind: 'slots'; doctor: { id: string; name: string } | null; patient: { id: string; name: string } | null; serviceId: string | null; durationMin: number; service: string | null; items: { startsAt: string; endsAt: string }[] }
   | { kind: 'patients'; query: string; items: { id: string; name: string; phone: string | null }[] }
   | { kind: 'day'; date: string; items: { id: string; startsAt: string; patientId: string; patient: string; doctor: string | null; service: string | null; status: string }[] }
   | { kind: 'link'; href: string; label: string };
@@ -120,28 +120,23 @@ export class CrmAssistantService {
           return (after === null || minute >= after) && (before === null || minute + durationMin <= before);
         })
         .slice(0, 12);
-      cards.push({ kind: 'slots', doctor: doctor ? { id: doctor.id, name: `${doctor.lastName} ${doctor.firstName}` } : null, durationMin, service: service?.name ?? null, items });
+      const patients = action.patient && can('patient.read') ? await this.findPatients(orgId, action.patient) : [];
+      cards.push({
+        kind: 'slots',
+        doctor: doctor ? { id: doctor.id, name: `${doctor.lastName} ${doctor.firstName}` } : null,
+        patient: patients.length === 1 ? { id: patients[0].id, name: patients[0].name } : null,
+        serviceId: service?.id ?? null,
+        durationMin,
+        service: service?.name ?? null,
+        items,
+      });
+      // Several or no matching patients: show them, the person picks on the booking sheet.
+      if (action.patient && can('patient.read') && patients.length !== 1) cards.push({ kind: 'patients', query: action.patient, items: patients });
     }
 
     if (action.type === 'patient' && can('patient.read')) {
       const query = String(action.query ?? '').trim().slice(0, 80);
-      const words = query.split(/\s+/).filter(Boolean).slice(0, 3);
-      const digits = query.replace(/\D/g, '');
-      const items = words.length
-        ? await this.prisma.patient.findMany({
-            where: {
-              organizationId: orgId,
-              isActive: true,
-              AND: digits.length >= 4
-                ? [{ phone: { contains: digits.slice(-10) } }]
-                : words.map((word) => ({ OR: [{ lastName: { contains: word, mode: 'insensitive' as const } }, { firstName: { contains: word, mode: 'insensitive' as const } }, { middleName: { contains: word, mode: 'insensitive' as const } }] })),
-            },
-            take: 8,
-            orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
-            select: { id: true, firstName: true, lastName: true, middleName: true, phone: true },
-          })
-        : [];
-      cards.push({ kind: 'patients', query, items: items.map((row) => ({ id: row.id, name: [row.lastName, row.firstName, row.middleName].filter(Boolean).join(' '), phone: row.phone })) });
+      cards.push({ kind: 'patients', query, items: await this.findPatients(orgId, query) });
     }
 
     if (action.type === 'day' && can('schedule.read')) {
@@ -176,7 +171,31 @@ export class CrmAssistantService {
 
     // Who asked and what kind of lookup, never the words.
     await this.prisma.auditLog.create({ data: { organizationId: orgId, userId, entityType: 'CrmAssistant', entityId: orgId, action: 'VIEW', changes: { action: action.type, cards: cards.length } } }).catch(() => undefined);
-    return { reply: reply || (cards.length ? 'Вот что нашёл.' : 'Не понял запрос. Спросите иначе — например, «свободные окна завтра после 15:00».'), cards };
+    return { reply: reply || describe(cards), cards };
+  }
+
+  private async findPatients(orgId: string, raw: string) {
+    const query = raw.trim().slice(0, 80);
+    // «Орлову», «Кузнецовой»: the stem finds the name in any case form.
+    const words = query.split(/\s+/).filter(Boolean).slice(0, 3).map((word) => {
+      const stem = word.replace(/(ой|ою|ей|ую|ым|ом|у|ю|а|я|е|ы|и)$/i, '');
+      return stem.length >= 3 ? stem : word;
+    });
+    const digits = query.replace(/\D/g, '');
+    if (!words.length) return [];
+    const rows = await this.prisma.patient.findMany({
+      where: {
+        organizationId: orgId,
+        isActive: true,
+        AND: digits.length >= 4
+          ? [{ phone: { contains: digits.slice(-10) } }]
+          : words.map((word) => ({ OR: [{ lastName: { contains: word, mode: 'insensitive' as const } }, { firstName: { contains: word, mode: 'insensitive' as const } }, { middleName: { contains: word, mode: 'insensitive' as const } }] })),
+      },
+      take: 8,
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+      select: { id: true, firstName: true, lastName: true, middleName: true, phone: true },
+    });
+    return rows.map((row) => ({ id: row.id, name: [row.lastName, row.firstName, row.middleName].filter(Boolean).join(' '), phone: row.phone }));
   }
 
   private async serviceOf(orgId: string, name: string) {
@@ -198,18 +217,20 @@ export class CrmAssistantService {
     const system = [
       'Ты — помощник администратора и врача в CRM стоматологической клиники. Отвечай по-русски, коротко и по делу.',
       `Сегодня ${context.today}, ${context.weekday}.`,
+      `Календарь на две недели (бери даты только отсюда): ${calendar(context.today)}.`,
+      '«В пятницу» без уточнения — ближайшая пятница из календаря, «на следующей неделе» — с понедельника по воскресенье следующей недели.',
       `Врачи клиники: ${context.doctors.join('; ') || 'нет'}.`,
       'Ты не видишь базу данных. Ты выбираешь одно действие, а CRM сама найдёт данные и покажет их под твоим ответом.',
       'Действия:',
-      '- slots: свободное время для записи. Поля: doctor (фамилия или имя врача, если назван), date и dateTo (YYYY-MM-DD; «завтра», «в пятницу», «на следующей неделе» переведи в даты), from и to (HH:MM, «вечером» = from 17:00, «утром» = to 12:00, «после обеда» = from 14:00), service (услуга словами, если названа), durationMin (если названа длительность).',
+      '- slots: свободное время для записи; также когда просят записать пациента. Поля: patient (фамилия пациента, если назван), doctor (фамилия или имя врача, если назван), date и dateTo (YYYY-MM-DD; «завтра», «в пятницу», «на следующей неделе» переведи в даты), from и to (HH:MM, «вечером» = from 17:00, «утром» = to 12:00, «после обеда» = from 14:00), service (услуга словами, если названа), durationMin (если названа длительность).',
       '- patient: найти пациента. Поле query: фамилия, имя или телефон.',
       '- day: кто записан на день. Поля date (YYYY-MM-DD) и doctor.',
       `- open: открыть раздел. Поле page — один из адресов: ${context.pages.map((page) => `${page.href} (${page.label})`).join(', ')}.`,
       '- none: вопрос о том, как работать в CRM, или просто разговор. Тогда ответь сам в reply, в 1–4 предложениях.',
       'Когда действие не none, reply — одна короткая фраза о том, что ты показываешь («Свободные окна у Завена Седраковича завтра вечером:»). Не придумывай имена, время, суммы и диагнозы — их покажет CRM.',
-      'Ты не записываешь пациентов, не отменяешь и не меняешь визиты сам: предложи выбрать время в карточке, запись откроется для проверки.',
+      'Ты не записываешь, не отменяешь и не переносишь визиты сам. На просьбу записать выбери slots: CRM покажет время, человек нажмёт его и подтвердит запись.',
       'Подсказки по CRM: часы работы клиники и врачей, праздники и отпуска — в Настройках; запись — кнопкой на свободном месте в Расписании или из карточки окна; протокол приёма и диктовка — на экране визита; заявки с сайта подтверждаются в разделе «Запись с сайта».',
-      'Ответь только JSON без пояснений: {"reply":"","action":{"type":"slots","doctor":"","date":"","dateTo":"","from":"","to":"","service":""}}',
+      'Ответь только JSON без пояснений: {"reply":"","action":{"type":"slots","patient":"","doctor":"","date":"","dateTo":"","from":"","to":"","service":""}}',
     ].join('\n');
     const response = await this.call({ model: MODEL, temperature: 0.1, max_tokens: 500, messages: [{ role: 'system', content: system }, ...turns] });
     return parseRoute(String(response?.choices?.[0]?.message?.content ?? ''));
@@ -238,6 +259,25 @@ export class CrmAssistantService {
   }
 }
 
+const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+/** Fourteen days spelled out, so the model never has to count weekdays itself. */
+function calendar(today: string) {
+  return Array.from({ length: 14 }, (_, index) => {
+    const date = addDays(today, index);
+    return `${WEEKDAYS[new Date(`${date}T12:00:00Z`).getUTCDay()]} ${date}`;
+  }).join(', ');
+}
+
+function describe(cards: Card[]) {
+  const card = cards[0];
+  if (!card) return 'Не понял запрос. Спросите иначе — например, «свободные окна завтра после 15:00».';
+  if (card.kind === 'slots') return card.items.length ? `Свободное время${card.doctor ? ` у врача ${card.doctor.name}` : ''}${card.patient ? ` для пациента ${card.patient.name}` : ''}:` : 'Свободного времени по этому запросу нет.';
+  if (card.kind === 'patients') return card.items.length ? 'Нашёл пациентов:' : 'Пациента не нашёл.';
+  if (card.kind === 'day') return 'Записи на день:';
+  return `Раздел «${card.label}»:`;
+}
+
 function addDays(date: string, days: number) {
   return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 }
@@ -258,6 +298,7 @@ export function parseRoute(content: string): { reply: string; action: Action } {
     reply,
     action: {
       type,
+      patient: text(action.patient),
       doctor: text(action.doctor),
       date: text(action.date),
       dateTo: text(action.dateTo),

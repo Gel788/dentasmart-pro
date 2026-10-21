@@ -8,7 +8,7 @@ import { useFocus } from '@/lib/focus';
 import styles from './assistant.module.css';
 
 type Card =
-  | { kind: 'slots'; doctor: { id: string; name: string } | null; durationMin: number; service: string | null; items: { startsAt: string; endsAt: string }[] }
+  | { kind: 'slots'; doctor: { id: string; name: string } | null; patient: { id: string; name: string } | null; durationMin: number; service: string | null; items: { startsAt: string; endsAt: string }[] }
   | { kind: 'patients'; query: string; items: { id: string; name: string; phone: string | null }[] }
   | { kind: 'day'; date: string; items: { id: string; startsAt: string; patientId: string; patient: string; doctor: string | null; service: string | null; status: string }[] }
   | { kind: 'link'; href: string; label: string };
@@ -66,7 +66,11 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
     }
   };
 
-  const book = (slot: { startsAt: string }, doctorId?: string) => {
+  const book = (slot: { startsAt: string }, doctorId?: string, patientId?: string) => {
+    // The booking sheet picks up a patient handed over this way, as it does from the patient card.
+    try {
+      if (patientId) sessionStorage.setItem('sd_book_patient', JSON.stringify({ id: patientId }));
+    } catch { /* private mode: the patient is chosen on the sheet */ }
     setFocus({ type: 'slot', startsAt: slot.startsAt, doctorId, label: `${dayLabel(slot.startsAt)}, ${time(slot.startsAt)}` });
     onClose();
   };
@@ -121,7 +125,7 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
   );
 }
 
-function CardView({ card, onBook, onClose }: { card: Card; onBook: (slot: { startsAt: string }, doctorId?: string) => void; onClose: () => void }) {
+function CardView({ card, onBook, onClose }: { card: Card; onBook: (slot: { startsAt: string }, doctorId?: string, patientId?: string) => void; onClose: () => void }) {
   if (card.kind === 'slots') {
     if (!card.items.length) return <p className={styles.empty}>Свободного времени по этому запросу нет. Попробуйте другой день или время.</p>;
     const days = new Map<string, typeof card.items>();
@@ -131,12 +135,12 @@ function CardView({ card, onBook, onClose }: { card: Card; onBook: (slot: { star
     }
     return (
       <div className={styles.card}>
-        <p className={styles.cardHead}>{card.doctor?.name ?? 'Любой врач'} · {card.service ?? `${card.durationMin} мин`}</p>
+        <p className={styles.cardHead}>{card.patient ? `${card.patient.name} · ` : ''}{card.doctor?.name ?? 'Любой врач'} · {card.service ?? `${card.durationMin} мин`}</p>
         {[...days].map(([day, slots]) => (
           <div key={day} className={styles.slotDay}>
             <b>{day}</b>
             <div className={styles.slots}>
-              {slots.map((slot) => <button key={slot.startsAt} type="button" onClick={() => onBook(slot, card.doctor?.id)}>{time(slot.startsAt)}</button>)}
+              {slots.map((slot) => <button key={slot.startsAt} type="button" onClick={() => onBook(slot, card.doctor?.id, card.patient?.id)}>{time(slot.startsAt)}</button>)}
             </div>
           </div>
         ))}

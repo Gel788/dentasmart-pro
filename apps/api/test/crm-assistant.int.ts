@@ -49,6 +49,12 @@ async function main() {
     assert.deepEqual(card.items.map((slot) => new Date(Date.parse(slot.startsAt) + 3 * 3600000).toISOString().slice(11, 16)), ['16:00', '16:30'], 'только после 16:00 и в часы работы');
     assert.ok(!sent.at(-1)!.includes('Орлова'), 'записи клиники не уходят в модель');
 
+    const forPatient = await ask({ type: 'slots', patient: 'Орлову', date: day });
+    assert.ok(forPatient.cards[0]?.kind === 'slots' && forPatient.cards[0].patient?.id === patient.id, 'пациент подставится в запись');
+    assert.match(forPatient.reply, /Вот:/);
+    next = { reply: '', action: { type: 'day', date: day } };
+    assert.equal((await assistant.ask(clinic.id, user.id, ALL, [{ role: 'user', content: 'кто' }])).reply, 'Записи на день:', 'пустой ответ модели описан по карточке');
+
     const found = await ask({ type: 'patient', query: 'орлова вера' });
     assert.ok(found.cards[0]?.kind === 'patients' && found.cards[0].items[0]?.id === patient.id);
     assert.ok(found.cards[0]?.kind === 'patients' && (await ask({ type: 'patient', query: '1112233' })).cards[0]?.kind === 'patients');
