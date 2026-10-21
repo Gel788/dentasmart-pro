@@ -1,0 +1,79 @@
+/**
+ * The staff assistant against a real Postgres with the model stubbed: the model's JSON picks a lookup,
+ * the lookup runs under the caller's permissions, and the clinic's records never go to the model.
+ */
+import assert from 'node:assert/strict';
+import { PrismaClient } from '@dentasmart/database';
+import { CrmAssistantService, parseRoute } from '../src/domains/crm-assistant';
+import { WidgetService } from '../src/domains/widget.service';
+import type { PrismaService } from '../src/prisma/prisma.service';
+
+const prisma = new PrismaClient();
+const db = prisma as unknown as PrismaService;
+const stamp = Date.now().toString(36);
+const ALL = ['patient.read', 'schedule.read', 'finance.read'];
+
+async function main() {
+  assert.equal(parseRoute('Конечно! {"reply":"Ищу","action":{"type":"patient","query":"Орлова"}}').action.type, 'patient');
+  assert.equal(parseRoute('{"reply":"x","action":{"type":"delete_all"}}').action.type, 'none', 'неизвестное действие — просто ответ');
+  assert.equal(parseRoute('Часы работы настраиваются в Настройках.').reply, 'Часы работы настраиваются в Настройках.');
+
+  const day = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+  const week = Array.from({ length: 7 }, () => ({ opensAt: 15 * 60, closesAt: 17 * 60 }));
+  const clinic = await prisma.organization.create({ data: { name: 'Тест помощника', slug: `asst-${stamp}`, weekHours: week } });
+  try {
+    const branch = await prisma.branch.create({ data: { organizationId: clinic.id, name: 'Главный', timezone: 'Europe/Moscow' } });
+    await prisma.cabinet.create({ data: { branchId: branch.id, name: 'Кабинет 1' } });
+    await prisma.cabinet.create({ data: { branchId: branch.id, name: 'Кабинет 2' } });
+    const patient = await prisma.patient.create({ data: { organizationId: clinic.id, lastName: 'Орлова', firstName: 'Вера', phone: '+79001112233' } });
+    const user = await prisma.user.create({ data: { organizationId: clinic.id, email: `adm-${stamp}@t.local`, passwordHash: 'x' } });
+    const at = new Date(Date.parse(`${day}T15:30:00Z`) - 3 * 3600000);
+    await prisma.appointment.create({ data: { organizationId: clinic.id, branchId: branch.id, patientId: patient.id, startsAt: at, endsAt: new Date(+at + 1800_000), status: 'CONFIRMED' } });
+
+    const assistant = new CrmAssistantService(db, new WidgetService(db));
+    process.env.POLZA_API_KEY = process.env.POLZA_API_KEY || 'test-key';
+    let next: unknown = {};
+    const sent: string[] = [];
+    assistant.http = (async (_url: string | URL | Request, init?: RequestInit) => {
+      sent.push(String(init?.body ?? ''));
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(next) } }] }), { status: 200 });
+    }) as typeof fetch;
+    const ask = (action: unknown, permissions = ALL, text = 'вопрос') => {
+      next = { reply: 'Вот:', action };
+      return assistant.ask(clinic.id, user.id, permissions, [{ role: 'user', content: text }]);
+    };
+
+    const slots = await ask({ type: 'slots', date: day, from: '16:00' });
+    const card = slots.cards[0];
+    assert.ok(card?.kind === 'slots');
+    assert.deepEqual(card.items.map((slot) => new Date(Date.parse(slot.startsAt) + 3 * 3600000).toISOString().slice(11, 16)), ['16:00', '16:30'], 'только после 16:00 и в часы работы');
+    assert.ok(!sent.at(-1)!.includes('Орлова'), 'записи клиники не уходят в модель');
+
+    const found = await ask({ type: 'patient', query: 'орлова вера' });
+    assert.ok(found.cards[0]?.kind === 'patients' && found.cards[0].items[0]?.id === patient.id);
+    assert.ok(found.cards[0]?.kind === 'patients' && (await ask({ type: 'patient', query: '1112233' })).cards[0]?.kind === 'patients');
+    assert.equal((await ask({ type: 'patient', query: 'Орлова' }, ['schedule.read'])).cards.length, 0, 'без права на пациентов — без карточек');
+
+    const list = await ask({ type: 'day', date: day });
+    assert.ok(list.cards[0]?.kind === 'day' && list.cards[0].items.length === 1 && list.cards[0].items[0].patient === 'Орлова Вера');
+
+    assert.deepEqual((await ask({ type: 'open', page: '/money' })).cards, [{ kind: 'link', href: '/money', label: 'Деньги: оплаты, долги, касса' }]);
+    assert.equal((await ask({ type: 'open', page: '/settings' })).cards.length, 0, 'настройки только тем, кому можно');
+
+    await assert.rejects(assistant.ask(clinic.id, user.id, ALL, []), /Напишите/);
+    const logs = await prisma.auditLog.findMany({ where: { organizationId: clinic.id, entityType: 'CrmAssistant' } });
+    assert.ok(logs.length >= 5 && logs.every((row) => !JSON.stringify(row.changes).includes('вопрос')), 'журнал без текста');
+    console.log('crm assistant ok');
+  } finally {
+    const org = clinic.id;
+    await prisma.auditLog.deleteMany({ where: { organizationId: org } });
+    await prisma.appointment.deleteMany({ where: { organizationId: org } });
+    await prisma.patient.deleteMany({ where: { organizationId: org } });
+    await prisma.cabinet.deleteMany({ where: { branch: { organizationId: org } } });
+    await prisma.branch.deleteMany({ where: { organizationId: org } });
+    await prisma.user.deleteMany({ where: { organizationId: org } });
+    await prisma.organization.delete({ where: { id: org } });
+  }
+}
+
+main().finally(() => prisma.$disconnect());

@@ -1,0 +1,55 @@
+/* The assistant opens as a right-hand sheet on the desk and full screen on a phone. */
+.back { position: fixed; inset: 0; z-index: 60; display: flex; justify-content: flex-end; background: rgba(21, 25, 30, 0.28); animation: fade 140ms ease-out; }
+.sheet { display: flex; flex-direction: column; width: min(440px, 100%); height: 100%; background: var(--surface-solid); border-left: 1px solid var(--border-strong); box-shadow: var(--shadow-overlay); }
+.head { display: grid; grid-template-columns: 32px minmax(0, 1fr) 44px; gap: 10px; align-items: start; padding: 14px 12px 12px 16px; border-bottom: 1px solid var(--border); }
+.head h2 { margin: 0; font-size: 17px !important; font-weight: 700; letter-spacing: 0; }
+.head p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.mark { display: grid; place-items: center; width: 32px; height: 32px; background: var(--accent); color: #fff; }
+.close { display: grid; place-items: center; width: 44px; height: 44px; margin: -6px 0 0; border: 0; background: transparent; color: var(--text); cursor: pointer; }
+.close:hover { background: var(--surface-2); }
+.list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 16px; overscroll-behavior: contain; }
+.off, .empty { margin: 0; color: var(--text-secondary); font-size: 14px; }
+.ideas { display: flex; flex-direction: column; }
+.ideas p { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.ideas button { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 46px; padding: 0 4px 0 0; border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; font-size: 14.5px; text-align: left; cursor: pointer; }
+.ideas button:last-child { border-bottom: 1px solid var(--border); }
+.ideas button:hover { color: var(--accent-ink); }
+.mine, .theirs, .fail { display: flex; flex-direction: column; gap: 8px; max-width: 100%; }
+.mine { align-self: flex-end; max-width: 85%; }
+.mine p { margin: 0; padding: 9px 12px; background: var(--text); color: var(--surface-solid); font-size: 14.5px; white-space: pre-wrap; }
+.theirs p, .fail p { margin: 0; font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; }
+.fail p { padding: 8px 10px; border: 1px solid var(--danger); background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+.typing { color: var(--muted); }
+.card { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); background: var(--surface-solid); }
+.card ul { margin: 0; padding: 0; list-style: none; }
+.card li + li, .card ul li + li { border-top: 1px solid var(--border); }
+.card li a { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 10px; color: var(--text); text-decoration: none; }
+.card li a:hover { background: var(--surface-2); }
+.card li a > span { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; }
+.card li small { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.cardHead { margin: 0 !important; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 13px !important; font-weight: 700; color: var(--text-secondary); }
+.cardNote { margin: 0 !important; padding: 8px 10px; color: var(--muted); font-size: 12.5px !important; border-top: 1px solid var(--border); }
+.slotDay { display: flex; flex-direction: column; gap: 6px; padding: 10px; }
+.slotDay + .slotDay { border-top: 1px solid var(--border); }
+.slotDay b { font-size: 13px; font-weight: 700; }
+.slots { display: flex; flex-wrap: wrap; gap: 6px; }
+.slots button { min-width: 64px; min-height: 40px; padding: 0 10px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
+.slots button:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.visit time { flex: none; width: 46px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.visit span { display: flex; flex-direction: column; gap: 1px; }
+.visit b { font-size: 14px; }
+.cardLink { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 10px; color: var(--accent-ink); font-size: 14px; font-weight: 600; text-decoration: none; }
+.card .cardLink { width: 100%; border-top: 1px solid var(--border); }
+.cardLink:hover { text-decoration: underline; }
+.compose { display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--border); }
+.compose textarea { flex: 1; min-width: 0; min-height: 46px; max-height: 140px; padding: 12px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 15px; resize: none; field-sizing: content; }
+.compose textarea:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+.compose button { display: grid; place-items: center; flex: none; width: 46px; height: 46px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
+.compose button:disabled { opacity: 0.45; cursor: default; }
+:global(html.dark) .mark, :global(html.dark) .compose button { color: #0f1215; }
+@keyframes fade { from { opacity: 0; } }
+@media (max-width: 720px) {
+  .back { background: transparent; }
+  .sheet { width: 100%; border-left: 0; box-shadow: none; padding-top: env(safe-area-inset-top, 0px); }
+}
+@media (prefers-reduced-motion: reduce) { .back { animation: none; } }

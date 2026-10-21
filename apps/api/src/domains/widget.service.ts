@@ -150,7 +150,7 @@ export class WidgetService {
     });
   }
 
-  private async branchOf(orgId: string, branchId?: string) {
+  async branchOf(orgId: string, branchId?: string) {
     const branch = await this.prisma.branch.findFirst({
       where: branchId
         ? { id: branchId, organizationId: orgId, isActive: true }

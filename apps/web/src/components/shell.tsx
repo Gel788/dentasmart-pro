@@ -10,6 +10,7 @@ import { useFocus } from '@/lib/focus';
 import { api } from '@/lib/api';
 import { BookingSheet } from './booking/booking-sheet';
 import { ContextPanel } from './studio/panels';
+import { Assistant } from './assistant/assistant';
 
 const PRIMARY = [
   { href: '/', label: 'Сегодня', icon: Calendar, perm: 'patient.read' },
@@ -60,6 +61,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [cursor, setCursor] = useState(0);
   const [density, setDensity] = useState<'compact' | 'comfort'>('compact');
   const [sheet, setSheet] = useState(false);
+  const [assistant, setAssistant] = useState(false);
   // Set after mount so the server render and the browser agree on the date.
   const [today, setToday] = useState('');
   useEffect(() => { setToday(new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' }).format(new Date())); }, []);
@@ -86,6 +88,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setPalette((open) => !open);
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'j') {
+        event.preventDefault();
+        setAssistant((open) => !open);
       }
       if (event.key === 'Escape') { setPalette(false); setSheet(false); }
     };
@@ -148,6 +154,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <span className="sd-search-text">Поиск</span>
           <kbd>⌘K</kbd>
         </button>
+        <button className="sd-search sd-ask" type="button" onClick={() => setAssistant(true)} title="Помощник (⌘J)">
+          <Sparkles />
+          <span className="sd-search-text">Помощник</span>
+          <kbd>⌘J</kbd>
+        </button>
         <nav className="sd-nav-list">
           {primary.map((link) => <NavLink key={link.href} link={link} active={isActive(link.href)} />)}
           {more.length > 0 && <span className="sd-nav-group">Ещё</span>}
@@ -175,6 +186,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <div className="sd-workspace">{children}</div>
       </div>
       <BookingSheet />
+      <button className="sd-ask-fab" type="button" onClick={() => setAssistant(true)} aria-label="Помощник"><Sparkles /></button>
+      <Assistant open={assistant} onClose={() => setAssistant(false)} />
       <aside className={`sd-panel ${panelOpen ? 'open' : ''}`}>
         <ContextPanel />
       </aside>
@@ -186,6 +199,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <span className="sd-user-text"><b>{fullName}</b><span>{user?.organization.name}</span></span>
             </div>
             <button className="sd-sheet-search" type="button" onClick={() => { setSheet(false); setPalette(true); }}><Search size={18} />Поиск пациента и команды</button>
+            <button className="sd-sheet-search" type="button" onClick={() => { setSheet(false); setAssistant(true); }}><Sparkles size={18} />Помощник</button>
             <div className="sd-more-sheet-grid">
               {[...more, ...(settings ? [settings] : [])].map((link) => {
                 const Icon = link.icon;

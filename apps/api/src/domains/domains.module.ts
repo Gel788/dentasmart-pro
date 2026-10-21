@@ -21,6 +21,7 @@ import { WidgetController } from './widget.controller';
 import { WidgetService } from './widget.service';
 import { BookingAssistantService } from './booking-assistant.service';
 import { DictationService } from './dictation.service';
+import { CrmAssistantController, CrmAssistantService } from './crm-assistant';
 import { BookingRequestsController, BookingRequestsService } from './booking-requests';
 import { RemindersController } from './reminders.controller';
 import { RemindersService } from './reminders.service';
@@ -53,6 +54,7 @@ import { MarketService } from './market.service';
     QueueController,
     WidgetController,
     BookingRequestsController,
+    CrmAssistantController,
     RemindersController,
     IntegrationsController,
     SterilizationController,
@@ -76,6 +78,7 @@ import { MarketService } from './market.service';
     WidgetService,
     BookingAssistantService,
     DictationService,
+    CrmAssistantService,
     BookingRequestsService,
     RemindersService,
     IntegrationsService,
