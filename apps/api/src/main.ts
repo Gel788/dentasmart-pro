@@ -22,9 +22,12 @@ async function bootstrap() {
   // Render and Vercel sit behind one proxy hop; rate limits need the client address, not the proxy's.
   app.set('trust proxy', 1);
 
-  app.enableCors({
-    origin: process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:3000'],
-    credentials: true,
+  // The CRM itself is limited to its own origins; the public booking widget runs on any clinic site,
+  // carries no cookies or tokens, and so may be called from anywhere.
+  const crmOrigins = process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:3000'];
+  app.enableCors((req: { url?: string }, callback: (err: Error | null, options: { origin: boolean | string[]; credentials: boolean }) => void) => {
+    const widget = (req.url ?? '').startsWith('/api/v1/public/widget/');
+    callback(null, widget ? { origin: true, credentials: false } : { origin: crmOrigins, credentials: true });
   });
 
   app.setGlobalPrefix('api/v1');

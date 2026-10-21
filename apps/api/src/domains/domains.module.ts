@@ -19,6 +19,8 @@ import { QueueController } from './queue.controller';
 import { QueueService } from './queue.service';
 import { WidgetController } from './widget.controller';
 import { WidgetService } from './widget.service';
+import { BookingAssistantService } from './booking-assistant.service';
+import { BookingRequestsController, BookingRequestsService } from './booking-requests';
 import { RemindersController } from './reminders.controller';
 import { RemindersService } from './reminders.service';
 import { IntegrationsController } from './integrations.controller';
@@ -49,6 +51,7 @@ import { MarketService } from './market.service';
     EmployeesController,
     QueueController,
     WidgetController,
+    BookingRequestsController,
     RemindersController,
     IntegrationsController,
     SterilizationController,
@@ -70,6 +73,8 @@ import { MarketService } from './market.service';
     EmployeesService,
     QueueService,
     WidgetService,
+    BookingAssistantService,
+    BookingRequestsService,
     RemindersService,
     IntegrationsService,
     SterilizationService,

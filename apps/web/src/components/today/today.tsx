@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, ArrowRight, CalendarPlus, CheckCircle2, Phone, ShieldAlert, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Globe, CalendarPlus, CheckCircle2, Phone, ShieldAlert, Wallet } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { addDays, weekStart, type RangeDay } from '@/components/schedule/model';
@@ -41,7 +41,7 @@ const STATUS: Record<string, string> = {
   SCHEDULED: 'записан', CONFIRMED: 'подтвердил', WAITING: 'пришёл, ждёт', IN_PROGRESS: 'в кресле', COMPLETED: 'принят', NO_SHOW: 'не пришёл',
 };
 const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
-const ICON = { confirm: Phone, review: ShieldAlert, pay: Wallet, plan: AlertTriangle } as Record<string, typeof Phone>;
+const ICON = { confirm: Phone, review: ShieldAlert, pay: Wallet, plan: AlertTriangle, request: Globe } as Record<string, typeof Phone>;
 /** Wall-clock time in the clinic's zone, whatever zone the device is in. */
 const clockAt = (iso: string, offset: number) => {
   const date = new Date(Date.parse(iso) + offset * 60000);

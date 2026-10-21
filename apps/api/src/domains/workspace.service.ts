@@ -136,6 +136,17 @@ export class WorkspaceService {
 
     const live = day.filter((visit) => !['COMPLETED', 'NO_SHOW', 'CANCELLED'].includes(visit.status));
     const attention: { kind: string; title: string; detail: string; href: string; patientId?: string }[] = [];
+    // Site bookings first: the slot is held until someone answers.
+    const requests = await this.prisma.bookingRequest.findMany({ where: { organizationId: orgId, status: 'PENDING' }, orderBy: { startsAt: 'asc' }, take: 5 });
+    for (const row of requests) {
+      const when = new Date(row.startsAt.getTime() + offset * 60000);
+      attention.push({
+        kind: 'request',
+        title: `${row.urgent ? 'Срочная заявка' : 'Заявка с сайта'}: ${row.lastName} ${row.firstName}`,
+        detail: `${when.toISOString().slice(8, 10)}.${when.toISOString().slice(5, 7)} в ${when.toISOString().slice(11, 16)} · подтвердите или предложите другое время`,
+        href: '/requests',
+      });
+    }
     for (const visit of tomorrow) {
       attention.push({
         kind: 'confirm',

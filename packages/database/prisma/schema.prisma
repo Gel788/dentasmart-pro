@@ -37,6 +37,8 @@ model Organization {
 
   branches             Branch[]
   scheduleExceptions   ScheduleException[]
+  widgetChats          WidgetChat[]
+  bookingRequests      BookingRequest[]
   users                User[]
   roles                Role[]
   patients             Patient[]
@@ -2317,4 +2319,56 @@ model ScheduleException {
 
   @@index([organizationId, dateFrom])
   @@map("schedule_exceptions")
+}
+
+/// A patient's conversation with the booking assistant on the clinic's site. Messages are the
+/// model transcript (content blocks kept as returned); names and phones are never part of it.
+model WidgetChat {
+  id             String   @id @default(cuid())
+  organizationId String
+  messages       Json     @default("[]")
+  /// The assistant's latest note for the clinic: what the patient needs and how urgent.
+  summary        String?
+  serviceId      String?
+  urgent         Boolean  @default(false)
+  turns          Int      @default(0)
+  consentAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requests     BookingRequest[]
+
+  @@index([organizationId, createdAt])
+  @@map("widget_chats")
+}
+
+/// A booking asked for on the site. It holds its slot while PENDING; the clinic accepts it
+/// (an appointment is created) or declines it.
+model BookingRequest {
+  id             String    @id @default(cuid())
+  organizationId String
+  branchId       String
+  chatId         String?
+  serviceId      String?
+  firstName      String
+  lastName       String
+  phone          String
+  startsAt       DateTime
+  endsAt         DateTime
+  summary        String?
+  urgent         Boolean   @default(false)
+  status         String    @default("PENDING")
+  declineReason  String?
+  appointmentId  String?
+  consentAt      DateTime
+  decidedAt      DateTime?
+  decidedById    String?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  chat         WidgetChat?  @relation(fields: [chatId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, startsAt])
+  @@map("booking_requests")
 }

@@ -190,6 +190,7 @@ function read(path: string, token: string): unknown {
   if (pathname === '/flow/caller') return searchPeople(bag, query.phone ?? '');
   if (pathname === '/workspace/schedule/range') return scheduleRange(bag, query.from ?? ANCHOR, query.to ?? ANCHOR);
   if (pathname === '/workspace/schedule') return scheduleFor(bag, query.date || ANCHOR);
+  if (pathname === '/booking-requests') return [];
   if (pathname === '/config/exceptions') return [...demoExceptions(bag)].sort((a, b) => String(a.dateFrom).localeCompare(String(b.dateFrom)));
   if (pathname === '/showcase/copilot') {
     return bag.gets['/showcase/copilot'] ?? bag.gets[`/showcase/copilot?patientId=${query.patientId}&note=кариес`];
