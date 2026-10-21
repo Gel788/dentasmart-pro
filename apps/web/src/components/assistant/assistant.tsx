@@ -2,13 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, ArrowUp, CalendarRange, X } from 'lucide-react';
+import { ArrowRight, ArrowUp, CalendarRange, Check, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useFocus } from '@/lib/focus';
 import styles from './assistant.module.css';
 
 type Card =
-  | { kind: 'slots'; doctor: { id: string; name: string } | null; patient: { id: string; name: string } | null; durationMin: number; service: string | null; items: { startsAt: string; endsAt: string }[] }
+  | { kind: 'slots'; doctor: { id: string; name: string } | null; patient: { id: string; name: string } | null; serviceId: string | null; durationMin: number; service: string | null; items: { startsAt: string; endsAt: string }[] }
   | { kind: 'patients'; query: string; items: { id: string; name: string; phone: string | null }[] }
   | { kind: 'day'; date: string; items: { id: string; startsAt: string; patientId: string; patient: string; doctor: string | null; service: string | null; status: string }[] }
   | { kind: 'link'; href: string; label: string };
@@ -201,35 +201,7 @@ function Answer({ item, onBook, onClose }: { item: Exchange; onBook: (slot: { st
 }
 
 function CardView({ card, onBook, onClose }: { card: Card; onBook: (slot: { startsAt: string }, doctorId?: string, patientId?: string) => void; onClose: () => void }) {
-  if (card.kind === 'slots') {
-    if (!card.items.length) return <p className={styles.empty}>Свободного времени нет. Попробуйте другой день или время.</p>;
-    const days: { key: string; first: string; slots: typeof card.items }[] = [];
-    for (const slot of card.items) {
-      const key = dayKey(slot.startsAt);
-      const day = days.find((item) => item.key === key);
-      if (day) day.slots.push(slot);
-      else days.push({ key, first: slot.startsAt, slots: [slot] });
-    }
-    return (
-      <div className={styles.glass}>
-        <p className={styles.glassHead}>
-          <b>{card.patient?.name ?? card.doctor?.name ?? 'Любой врач'}</b>
-          <span>{[card.patient && (card.doctor?.name ?? 'любой врач'), card.service ?? `${card.durationMin} мин`].filter(Boolean).join(' · ')}</span>
-        </p>
-        {days.map((day) => (
-          <div key={day.key} className={styles.day}>
-            <div className={styles.date}><small>{weekday(day.first)}</small><b>{new Date(day.first).getDate()}</b><em>{month(day.first)}</em></div>
-            <div className={styles.times}>
-              {day.slots.map((slot) => (
-                <button key={slot.startsAt} type="button" onClick={() => onBook(slot, card.doctor?.id, card.patient?.id)} aria-label={`Записать на ${dayLabel(slot.startsAt)}, ${time(slot.startsAt)}`}>{time(slot.startsAt)}</button>
-              ))}
-            </div>
-          </div>
-        ))}
-        <p className={styles.glassFoot}>Нажмите время — откроется запись для проверки.</p>
-      </div>
-    );
-  }
+  if (card.kind === 'slots') return <SlotsCard card={card} onBook={onBook} onClose={onClose} />;
   if (card.kind === 'patients') {
     if (!card.items.length) return <p className={styles.empty}>Пациента «{card.query}» не нашёл.</p>;
     return (
@@ -271,6 +243,151 @@ function CardView({ card, onBook, onClose }: { card: Card; onBook: (slot: { star
     );
   }
   return <Link className={styles.jump} href={card.href} onClick={onClose}><span>{card.label}</span><ArrowRight size={20} aria-hidden="true" /></Link>;
+}
+
+type SlotsData = Extract<Card, { kind: 'slots' }>;
+type Person = { id: string; name: string };
+type Service = { id: string; name: string; price: number; durationMin: number };
+
+/** Free times; picking one opens the booking right here in the conversation. */
+function SlotsCard({ card, onBook, onClose }: { card: SlotsData; onBook: (slot: { startsAt: string }, doctorId?: string, patientId?: string) => void; onClose: () => void }) {
+  const [picked, setPicked] = useState<string | null>(null);
+  const [booked, setBooked] = useState<{ startsAt: string; endsAt: string; patient: Person } | null>(null);
+  if (!card.items.length) return <p className={styles.empty}>Свободного времени нет. Попробуйте другой день или время.</p>;
+  if (booked) {
+    return (
+      <div className={`${styles.glass} ${styles.done}`}>
+        <span className={styles.doneMark} aria-hidden="true"><Check size={26} strokeWidth={2.6} /></span>
+        <div>
+          <b>Записано: {booked.patient.name}</b>
+          <p>{capital(dayLabel(booked.startsAt))}, {time(booked.startsAt)}–{time(booked.endsAt)}{card.doctor ? ` · ${card.doctor.name}` : ''}</p>
+        </div>
+        <Link href={`/patients/${booked.patient.id}`} onClick={onClose} className={styles.doneLink}>Карточка<ArrowRight size={16} aria-hidden="true" /></Link>
+      </div>
+    );
+  }
+  const days: { key: string; first: string; slots: typeof card.items }[] = [];
+  for (const slot of card.items) {
+    const key = dayKey(slot.startsAt);
+    const day = days.find((item) => item.key === key);
+    if (day) day.slots.push(slot);
+    else days.push({ key, first: slot.startsAt, slots: [slot] });
+  }
+  return (
+    <div className={styles.glass}>
+      <p className={styles.glassHead}>
+        <b>{card.patient?.name ?? card.doctor?.name ?? 'Любой врач'}</b>
+        <span>{[card.patient && (card.doctor?.name ?? 'любой врач'), card.service ?? `${card.durationMin} мин`].filter(Boolean).join(' · ')}</span>
+      </p>
+      {days.map((day) => (
+        <div key={day.key} className={styles.day}>
+          <div className={styles.date}><small>{weekday(day.first)}</small><b>{new Date(day.first).getDate()}</b><em>{month(day.first)}</em></div>
+          <div className={styles.times}>
+            {day.slots.map((slot) => (
+              <button key={slot.startsAt} type="button" aria-pressed={picked === slot.startsAt} onClick={() => setPicked(picked === slot.startsAt ? null : slot.startsAt)} aria-label={`Выбрать ${dayLabel(slot.startsAt)}, ${time(slot.startsAt)}`}>{time(slot.startsAt)}</button>
+            ))}
+          </div>
+        </div>
+      ))}
+      {picked ? (
+        <BookHere key={picked} startsAt={picked} card={card} onDone={setBooked} onFullForm={() => onBook({ startsAt: picked }, card.doctor?.id, card.patient?.id)} />
+      ) : (
+        <p className={styles.glassFoot}>Выберите время — запишем прямо здесь.</p>
+      )}
+    </div>
+  );
+}
+
+function BookHere({ startsAt, card, onDone, onFullForm }: { startsAt: string; card: SlotsData; onDone: (visit: { startsAt: string; endsAt: string; patient: Person }) => void; onFullForm: () => void }) {
+  const { bump } = useFocus();
+  const [patient, setPatient] = useState<Person | null>(card.patient);
+  const [query, setQuery] = useState('');
+  const [hits, setHits] = useState<{ id: string; firstName: string; lastName: string; phone: string | null }[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [serviceId, setServiceId] = useState(card.serviceId ?? '');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const search = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { api<Service[]>('/workspace/catalog').then(setServices).catch(() => setServices([])); }, []);
+  useEffect(() => { if (!patient) search.current?.focus(); }, [patient]);
+  useEffect(() => {
+    if (query.trim().length < 2) { setHits([]); return; }
+    const handle = setTimeout(() => {
+      api<typeof hits>(`/workspace/search?q=${encodeURIComponent(query)}`).then(setHits).catch(() => setHits([]));
+    }, 160);
+    return () => clearTimeout(handle);
+  }, [query]);
+
+  const service = services.find((item) => item.id === serviceId);
+  const minutes = service?.durationMin ?? card.durationMin;
+  const ends = new Date(Date.parse(startsAt) + minutes * 60000).toISOString();
+
+  const submit = async () => {
+    if (!patient) return;
+    setPending(true);
+    setError('');
+    try {
+      const visit = await api<{ startsAt: string; endsAt: string }>('/assistant/book', { method: 'POST', body: JSON.stringify({ patientId: patient.id, startsAt, serviceId: serviceId || null, doctorId: card.doctor?.id ?? null }) });
+      bump();
+      onDone({ startsAt: visit.startsAt, endsAt: visit.endsAt, patient });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не получилось записать');
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className={styles.book}>
+      <div className={styles.bookWhen}>
+        <b>{capital(dayLabel(startsAt))}</b>
+        <span>{time(startsAt)}–{time(ends)} · {card.doctor?.name ?? 'любой врач'}</span>
+      </div>
+
+      <div className={styles.bookField}>
+        <span className={styles.bookLabel}>Пациент</span>
+        {patient ? (
+          <div className={styles.chosen}>
+            <span className={styles.avatar} aria-hidden="true">{initials(patient.name)}</span>
+            <b>{patient.name}</b>
+            <button type="button" onClick={() => { setPatient(null); setQuery(''); }}>Другой</button>
+          </div>
+        ) : (
+          <>
+            <input ref={search} className={styles.bookInput} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Фамилия или телефон" aria-label="Найти пациента" />
+            {hits.length > 0 && (
+              <div className={styles.hits}>
+                {hits.map((hit) => (
+                  <button key={hit.id} type="button" onClick={() => setPatient({ id: hit.id, name: `${hit.lastName} ${hit.firstName}` })}>
+                    <b>{hit.lastName} {hit.firstName}</b><small>{hit.phone ?? ''}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+            {query.trim().length >= 2 && !hits.length && <p className={styles.bookNote}>Не нашёл. Нового пациента заведите в полной форме.</p>}
+          </>
+        )}
+      </div>
+
+      <label className={styles.bookField}>
+        <span className={styles.bookLabel}>Услуга</span>
+        <select className={styles.bookInput} value={serviceId} onChange={(event) => setServiceId(event.target.value)}>
+          <option value="">Без услуги · {card.durationMin} мин</option>
+          {services.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.durationMin} мин</option>)}
+        </select>
+      </label>
+
+      {error && <p className={styles.bookError} role="alert">{error}</p>}
+
+      <div className={styles.bookActs}>
+        <button type="button" className={styles.bookGo} disabled={!patient || pending} onClick={() => void submit()}>
+          {pending ? 'Записываю…' : `Записать на ${time(startsAt)}`}
+        </button>
+        <button type="button" className={styles.bookAlt} onClick={onFullForm}>Полная форма</button>
+      </div>
+    </div>
+  );
 }
 
 function plural(count: number) {

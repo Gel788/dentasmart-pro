@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { PrismaClient } from '@dentasmart/database';
 import { CrmAssistantService, datesIn, parseRoute } from '../src/domains/crm-assistant';
 import { WidgetService } from '../src/domains/widget.service';
+import { WorkspaceService } from '../src/domains/workspace.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 const prisma = new PrismaClient();
@@ -41,7 +42,7 @@ async function main() {
     const at = new Date(Date.parse(`${day}T15:30:00Z`) - 3 * 3600000);
     await prisma.appointment.create({ data: { organizationId: clinic.id, branchId: branch.id, patientId: patient.id, startsAt: at, endsAt: new Date(+at + 1800_000), status: 'CONFIRMED' } });
 
-    const assistant = new CrmAssistantService(db, new WidgetService(db));
+    const assistant = new CrmAssistantService(db, new WidgetService(db), { book: (orgId: string, body: Parameters<WorkspaceService['book']>[1]) => prisma.appointment.create({ data: { organizationId: orgId, branchId: branch.id, patientId: body.patientId, cabinetId: body.cabinetId, startsAt: new Date(body.startsAt), endsAt: new Date(Date.parse(body.startsAt) + (body.durationMin ?? 30) * 60000) } }) } as unknown as WorkspaceService);
     process.env.POLZA_API_KEY = process.env.POLZA_API_KEY || 'test-key';
     let next: unknown = {};
     const sent: string[] = [];
@@ -76,6 +77,15 @@ async function main() {
 
     assert.deepEqual((await ask({ type: 'open', page: '/money' })).cards, [{ kind: 'link', href: '/money', label: 'Деньги: оплаты, долги, касса' }]);
     assert.equal((await ask({ type: 'open', page: '/settings' })).cards.length, 0, 'настройки только тем, кому можно');
+
+    // Booking from the conversation picks a free chair; when both are taken it says so.
+    const slotAt = new Date(Date.parse(`${day}T16:00:00Z`) - 3 * 3600000).toISOString();
+    const first = await assistant.book(clinic.id, user.id, { patientId: patient.id, startsAt: slotAt });
+    const second = await assistant.book(clinic.id, user.id, { patientId: patient.id, startsAt: slotAt });
+    const chairs = await prisma.appointment.findMany({ where: { id: { in: [first.id, second.id] } }, select: { cabinetId: true } });
+    assert.equal(new Set(chairs.map((row) => row.cabinetId)).size, 2, 'два разных кресла');
+    await assert.rejects(assistant.book(clinic.id, user.id, { patientId: patient.id, startsAt: slotAt }), /кресла/);
+    await assert.rejects(assistant.book(clinic.id, user.id, { startsAt: slotAt }), /пациента/);
 
     await assert.rejects(assistant.ask(clinic.id, user.id, ALL, []), /Напишите/);
     const logs = await prisma.auditLog.findMany({ where: { organizationId: clinic.id, entityType: 'CrmAssistant' } });

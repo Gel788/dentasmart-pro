@@ -11,6 +11,7 @@ import { tzOffsetMinutes } from '@dentasmart/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { clinicianWhere } from './clinicians';
 import { WidgetService } from './widget.service';
+import { WorkspaceService } from './workspace.service';
 
 /**
  * The staff assistant inside the CRM. A Russian-hosted model (GigaChat through Polza, so whatever a
@@ -68,7 +69,7 @@ export class CrmAssistantService {
   /** Swappable in tests; production calls Polza. */
   http: Fetch = (input, init) => fetch(input, init);
 
-  constructor(private readonly prisma: PrismaService, private readonly widget: WidgetService) {}
+  constructor(private readonly prisma: PrismaService, private readonly widget: WidgetService, private readonly workspace: WorkspaceService) {}
 
   get enabled() {
     return Boolean(process.env.POLZA_API_KEY);
@@ -175,6 +176,21 @@ export class CrmAssistantService {
     // Who asked and what kind of lookup, never the words.
     await this.prisma.auditLog.create({ data: { organizationId: orgId, userId, entityType: 'CrmAssistant', entityId: orgId, action: 'VIEW', changes: { action: action.type, cards: cards.length } } }).catch(() => undefined);
     return { reply: reply || describe(cards), cards };
+  }
+
+  /** Booking straight from the conversation: the chair is picked here, the clash checks are the usual ones. */
+  async book(orgId: string, userId: string, body: { patientId?: string; startsAt?: string; serviceId?: string | null; doctorId?: string | null }) {
+    if (!body?.patientId || !body.startsAt) throw new BadRequestException('Выберите пациента и время');
+    const startsAt = new Date(body.startsAt);
+    if (Number.isNaN(+startsAt) || startsAt <= new Date()) throw new BadRequestException('Выберите будущее время');
+    const service = body.serviceId ? await this.prisma.service.findFirst({ where: { id: body.serviceId, organizationId: orgId, isActive: true }, select: { id: true, durationMin: true } }) : null;
+    const durationMin = service?.durationMin || 30;
+    const branch = await this.widget.branchOf(orgId);
+    const cabinetId = await this.widget.pickCabinet(orgId, branch.id, startsAt, new Date(startsAt.getTime() + durationMin * 60000));
+    if (!cabinetId) throw new BadRequestException('Все кресла в это время заняты. Выберите другое время.');
+    const visit = await this.workspace.book(orgId, { patientId: body.patientId, startsAt: startsAt.toISOString(), durationMin, doctorId: body.doctorId || undefined, cabinetId, serviceId: service?.id });
+    await this.prisma.auditLog.create({ data: { organizationId: orgId, userId, entityType: 'Appointment', entityId: visit.id, action: 'CREATE', changes: { via: 'assistant' } } }).catch(() => undefined);
+    return { id: visit.id, startsAt: visit.startsAt.toISOString(), endsAt: visit.endsAt.toISOString(), patientId: visit.patientId };
   }
 
   private async findPatients(orgId: string, raw: string) {
@@ -378,5 +394,11 @@ export class CrmAssistantController {
   @RequirePermissions('patient.read')
   ask(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Body() body: { messages?: Turn[] }) {
     return this.assistant.ask(orgId, user.id, user.permissions, body?.messages ?? []);
+  }
+
+  @Post('book')
+  @RequirePermissions('schedule.write')
+  book(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Body() body: { patientId?: string; startsAt?: string; serviceId?: string | null; doctorId?: string | null }) {
+    return this.assistant.book(orgId, user.id, body);
   }
 }
