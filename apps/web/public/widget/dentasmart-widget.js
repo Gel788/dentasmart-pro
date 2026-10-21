@@ -163,7 +163,7 @@
       var foot = el('div', { class: 'foot' }, [
         !s.chatId ? el('label', { class: 'check' }, [
           el('input', { type: 'checkbox', checked: s.consent, on: { change: function (event) { s.consent = event.target.checked; } } }),
-          el('span', { text: 'Согласен(на), что мои сообщения обработает ИИ-помощник Claude (Anthropic, США) для подбора услуги и времени. Не пишите в чат ФИО, телефон и паспортные данные — их спросим в форме.' }),
+          el('span', { text: 'Согласен(на), что мои сообщения обработает ИИ-помощник (сервис Polza AI, модель работает на зарубежных серверах) для подбора услуги и времени. Не пишите в чат ФИО, телефон и паспортные данные — их спросим в форме.' }),
         ]) : null,
         el('div', { class: 'row' }, [input, el('button', { class: 'send', type: 'button', disabled: s.pending, 'aria-label': 'Отправить', text: '→', on: { click: send } })]),
       ]);

@@ -17,11 +17,12 @@ function WidgetSetup() {
   const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
   const [origin, setOrigin] = useState('');
   const [assistant, setAssistant] = useState<boolean | null>(null);
+  const [model, setModel] = useState('');
   const [copied, setCopied] = useState('');
   useEffect(() => setOrigin(window.location.origin), []);
   useEffect(() => {
     if (!slug) return;
-    fetch(`${apiBase}/public/widget/${slug}/assistant`).then((r) => r.json()).then((data) => setAssistant(!!data.enabled)).catch(() => setAssistant(false));
+    fetch(`${apiBase}/public/widget/${slug}/assistant`).then((r) => r.json()).then((data) => { setAssistant(!!data.enabled); setModel(data.model ?? ''); }).catch(() => setAssistant(false));
   }, [apiBase, slug]);
 
   const link = origin && slug ? `${origin}/book/${slug}` : '';
@@ -43,9 +44,9 @@ function WidgetSetup() {
       <section className="sd-card" style={{ padding: 16, display: 'grid', gap: 10 }}>
         <h2 style={{ margin: 0, fontSize: 16 }}>ИИ-помощник</h2>
         {assistant === null ? <p className="sd-muted">Проверяем…</p> : assistant ? (
-          <p>Включён. Модель — Claude Haiku (Anthropic). Перед чатом пациент даёт согласие на обработку сообщений за рубежом; телефоны и почты в сообщениях скрываются, имя и телефон спрашивает только форма.</p>
+          <p>Включён, модель <code>{model}</code>. Перед чатом пациент даёт согласие на обработку сообщений за рубежом; телефоны и почты в сообщениях скрываются, имя и телефон спрашивает только форма.</p>
         ) : (
-          <p>Выключен: на сервере не задан ключ <code>ANTHROPIC_API_KEY</code>. Виджет работает без чата — пациент сам выбирает услугу и время.</p>
+          <p>Выключен: на сервере не задан ключ <code>POLZA_API_KEY</code> (Polza AI). Виджет работает без чата — пациент сам выбирает услугу и время.</p>
         )}
       </section>
 

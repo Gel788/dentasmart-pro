@@ -5,8 +5,14 @@ import { tzOffsetMinutes } from '@dentasmart/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { WidgetService } from './widget.service';
 
-/** The cheapest current Claude model: the assistant only triages, explains and finds time. */
-const MODEL = 'claude-haiku-5-5';
+/**
+ * The assistant runs through Polza AI (Anthropic-compatible endpoint, billed in roubles) when
+ * POLZA_API_KEY is set, or straight through Anthropic with ANTHROPIC_API_KEY. The default model is
+ * the cheapest current Claude: it only triages, explains and finds time.
+ */
+const POLZA_BASE_URL = 'https://polza.ai/api';
+const MODEL = process.env.AI_MODEL || (process.env.POLZA_API_KEY ? 'anthropic/claude-haiku-5.5' : 'claude-haiku-5-5');
+const VIA_POLZA = () => Boolean(process.env.POLZA_API_KEY);
 const MAX_TURNS = 20;
 const MAX_MESSAGE = 1000;
 const MAX_TOOL_ROUNDS = 4;
@@ -80,12 +86,18 @@ export class BookingAssistantService {
 
   /** Off until the server has an API key; the widget then offers the plain booking form. */
   get enabled() {
-    return Boolean(process.env.ANTHROPIC_API_KEY);
+    return Boolean(process.env.POLZA_API_KEY || process.env.ANTHROPIC_API_KEY);
+  }
+
+  get model() {
+    return MODEL;
   }
 
   private api() {
     if (!this.enabled) throw new ServiceUnavailableException('ИИ-помощник не подключён. Выберите время сами.');
-    this.client ??= new Anthropic({ maxRetries: 2, timeout: 30_000 });
+    this.client ??= VIA_POLZA()
+      ? new Anthropic({ baseURL: POLZA_BASE_URL, authToken: process.env.POLZA_API_KEY, apiKey: null, maxRetries: 2, timeout: 30_000 })
+      : new Anthropic({ maxRetries: 2, timeout: 30_000 });
     return this.client;
   }
 
@@ -116,12 +128,13 @@ export class BookingAssistantService {
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
       let response: Anthropic.Message;
       try {
+        // Through Polza only the core Messages fields are sent; the direct API also gets low effort.
         response = await client.messages.create({
           model: MODEL,
           max_tokens: 2000,
-          output_config: { effort: 'low' },
+          ...(VIA_POLZA() ? {} : { output_config: { effort: 'low' as const } }),
           system: [{ type: 'text', text: systemPrompt(org), cache_control: { type: 'ephemeral' } }],
-          tools: TOOLS,
+          tools: VIA_POLZA() ? TOOLS.map(({ strict: _strict, ...tool }) => tool) : TOOLS,
           messages,
         });
       } catch (err) {

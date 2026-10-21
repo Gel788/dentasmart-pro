@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<style>
+:root{--bg:#fff;--grid:#a9c7ff;--ink:#111;--hot:#c93d0c;--muted:#5d6470;--cell:40px}
+*{box-sizing:border-box}html,body{margin:0;width:1440px;height:900px;overflow:hidden;background:var(--bg);color:var(--ink);font:14px/1.35 Onest,system-ui,sans-serif}
+body{background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:var(--cell) var(--cell);background-position:-1px -1px}
+.top{position:absolute;left:40px;top:40px;right:40px;height:160px;display:flex;align-items:flex-end;justify-content:space-between}
+.clock{font:700 160px/0.8 Onest;letter-spacing:-.06em;font-variant-numeric:tabular-nums}
+.clock span{color:var(--hot)}
+.meta{text-align:right;font-weight:600}.meta b{display:block;font-size:28px;letter-spacing:-.02em}.meta small{color:var(--muted);font-size:14px}
+.nav{position:absolute;left:40px;top:240px;width:160px;display:flex;flex-direction:column}
+.nav a{height:40px;display:flex;align-items:center;font-weight:600;border-bottom:1px solid var(--ink)}
+.nav a.on{background:var(--ink);color:#fff;padding-left:10px}
+.board{position:absolute;left:240px;top:240px;right:360px;height:600px;background:transparent}
+.hours{position:absolute;left:0;top:0;width:80px}
+.hours div{height:80px;font:600 13px Onest;padding-top:2px}
+.col{position:absolute;top:0;width:360px}
+.col h4{margin:0;height:40px;display:flex;align-items:center;font:700 14px Onest;text-transform:uppercase;letter-spacing:.06em;background:#fff;border-bottom:2px solid var(--ink)}
+.v{position:absolute;left:0;right:0;background:#fff;border:2px solid var(--ink);padding:8px 12px}
+.v b{display:block;font-size:15px}.v small{color:var(--muted)}
+.v.hot{background:var(--hot);border-color:var(--hot);color:#fff}.v.hot small{color:#fff}
+.v.past{color:var(--muted);border-color:var(--muted)}
+.now{position:absolute;left:80px;right:0;height:2px;background:var(--hot)}
+.side{position:absolute;right:40px;top:240px;width:280px;background:#fff;border:2px solid var(--ink)}
+.side h4{margin:0;height:40px;display:flex;align-items:center;padding:0 12px;background:var(--ink);color:#fff;font:700 13px Onest;text-transform:uppercase;letter-spacing:.06em}
+.side div{padding:10px 12px;border-bottom:1px solid var(--grid)}.side small{display:block;color:var(--muted)}
+.side .big{font:700 40px/1 Onest;letter-spacing:-.03em;padding:16px 12px}
+</style></head><body>
+<div class="top"><div class="clock">11<span>:</span>55</div><div class="meta"><b>Вторник, 20 октября</b><small>Седракович Дент · 7 пациентов · 2 кабинета</small></div></div>
+<nav class="nav"><a class="on">Сегодня</a><a>Пациенты</a><a>Расписание</a><a>Склад</a><a>Деньги</a></nav>
+<section class="board">
+<div class="hours"><div>09:00</div><div>10:00</div><div>11:00</div><div>12:00</div><div>13:00</div><div>14:00</div><div>15:00</div></div>
+<div class="col" style="left:80px"><h4>Кабинет 1</h4>
+<div class="v past" style="top:40px;height:80px"><b>Орлова Вера</b><small>кариес 16 · оплачено</small></div>
+<div class="v past" style="top:160px;height:40px"><b>Ким Артур · долг 4 500 ₽</b></div>
+<div class="v hot" style="top:280px;height:80px"><b>Абрамян Лилит — в кресле</b><small>кариес 26, 27 · аллергия: лидокаин</small></div>
+<div class="v" style="top:520px;height:80px"><b>Новикова Ирина</b><small>эндодонтия 36 · подтвердила</small></div></div>
+<div class="col" style="left:480px"><h4>Кабинет 2</h4>
+<div class="v" style="top:400px;height:80px"><b>Ветров Павел</b><small>гигиена · пришёл</small></div></div>
+<div class="now" style="top:273px"></div>
+</section>
+<aside class="side"><h4>Требует внимания</h4><div>Шубин Глеб не подтвердил 16:30<small>позвонить до 14:00</small></div><div>Ким Артур: долг 4 500 ₽<small>консультация</small></div><h4>Оплачено сегодня</h4><div class="big">18 200 ₽</div></aside>
+</body></html>

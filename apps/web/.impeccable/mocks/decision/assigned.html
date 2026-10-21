@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&family=Onest:wght@400;500;600&display=swap">
+<style>
+:root{--paper:#fff;--fog:#f1f1ef;--ink:#141414;--red:#cf2216;--grey:#6b6b68;--rule:#141414}
+*{box-sizing:border-box}html,body{margin:0;width:1440px;height:900px;overflow:hidden;background:var(--paper);color:var(--ink);font:15px/1.4 Onest,system-ui,sans-serif}
+.app{display:grid;grid-template-columns:76px 1fr 360px;height:900px}
+.rail{background:var(--ink);color:#fff;display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 0}
+.mark{width:44px;height:44px;background:var(--red);display:grid;place-items:center;font:700 20px Jost;margin-bottom:18px;clip-path:polygon(0 0,100% 0,100% 70%,70% 100%,0 100%)}
+.rail a{width:52px;height:52px;display:grid;place-items:center;font:600 10.5px Jost;letter-spacing:.06em;text-transform:uppercase;color:#9b9b97;border-left:3px solid transparent}
+.rail a.on{color:#fff;border-left-color:var(--red)}
+.main{padding:28px 36px;display:flex;flex-direction:column;gap:20px;overflow:hidden}
+.top{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:3px solid var(--rule);padding-bottom:14px}
+.top h1{margin:0;font:600 40px/1 Jost;letter-spacing:-.02em}
+.top h1 span{color:var(--grey);font-weight:400}
+.top .search{width:360px;height:44px;border:1.5px solid var(--ink);display:flex;align-items:center;padding:0 14px;color:var(--grey)}
+.week{display:grid;grid-template-columns:repeat(7,1fr);border:1.5px solid var(--ink)}
+.week div{padding:8px 12px;border-right:1.5px solid var(--ink);display:flex;align-items:baseline;gap:8px}
+.week div:last-child{border-right:0}
+.week small{font:600 11px Jost;text-transform:uppercase;letter-spacing:.08em;color:var(--grey)}
+.week b{font:600 22px Jost}.week em{font-style:normal;margin-left:auto;color:var(--grey);font-size:13px}
+.week .on{background:var(--ink);color:#fff}.week .on small,.week .on em{color:#cfcfcb}
+.now{position:relative;background:var(--red);color:#fff;padding:24px 28px;display:grid;grid-template-columns:1fr auto;gap:10px 24px}
+.now .lbl{font:600 12px Jost;letter-spacing:.12em;text-transform:uppercase}
+.now h2{margin:0;font:600 52px/1 Jost;letter-spacing:-.03em}
+.now p{margin:0;font-size:16px;opacity:.92}
+.timer{font:500 56px/1 Jost;text-align:right;font-variant-numeric:tabular-nums}
+.now .row{grid-column:1/-1;display:flex;gap:10px;margin-top:8px}
+.btn{height:48px;padding:0 22px;display:inline-flex;align-items:center;font:600 15px Onest;border:2px solid #fff}
+.btn.solid{background:#fff;color:var(--red)}.btn.ghost{color:#fff}
+.allergy{position:absolute;right:28px;bottom:24px;background:var(--ink);color:#fff;padding:8px 12px;font:600 13px Onest}
+.feed{display:flex;flex-direction:column}
+.feed h3{margin:0 0 8px;font:600 13px Jost;letter-spacing:.12em;text-transform:uppercase}
+.v{display:grid;grid-template-columns:90px 1fr 200px 160px;align-items:center;height:58px;border-top:1.5px solid var(--ink)}
+.v time{font:600 22px Jost;font-variant-numeric:tabular-nums}
+.v b{font-weight:600;font-size:16px}.v span{color:var(--grey);font-size:14px}
+.st{justify-self:start;font:600 12px Jost;letter-spacing:.08em;text-transform:uppercase;padding:5px 0;border-bottom:2px solid var(--ink)}
+.st.wait{border-bottom-style:dashed}.st.no{text-decoration:line-through;border:0;color:var(--grey)}
+.v.past{color:var(--grey)}.v.past b{color:var(--grey)}
+.wedge{position:relative;height:0;border-top:3px solid var(--red)}
+.wedge::before{content:"11:55";position:absolute;left:0;top:-12px;background:var(--red);color:#fff;font:600 12px Jost;padding:3px 10px 3px 8px;clip-path:polygon(0 0,85% 0,100% 50%,85% 100%,0 100%)}
+.side{border-left:3px solid var(--ink);padding:28px 24px;display:flex;flex-direction:column;gap:26px;background:var(--fog)}
+.side h3{margin:0 0 10px;font:600 13px Jost;letter-spacing:.12em;text-transform:uppercase}
+.todo div{padding:12px 0;border-top:1.5px solid var(--ink);font-size:14.5px}
+.todo small{display:block;color:var(--grey);font-size:13px}
+.money{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px}
+.money b{font:600 34px/1.1 Jost;font-variant-numeric:tabular-nums}.money small{color:var(--grey);font-size:13px}
+.bar{grid-column:1/-1;height:10px;display:flex;margin-top:8px}.bar i{background:var(--ink)}.bar i+i{background:#c8c8c4}
+.danger{margin-top:auto;padding-top:20px;border-top:1.5px solid var(--ink);color:var(--grey);font-size:13.5px}
+</style></head><body><div class="app">
+<nav class="rail"><div class="mark">С</div><a class="on">День</a><a>Пац.</a><a>Запись</a><a>Склад</a><a>Деньги</a></nav>
+<main class="main">
+<div class="top"><h1>Вторник, 20 октября <span>/ 7 пациентов</span></h1><div class="search">Пациент, телефон или запись ⌘K</div></div>
+<div class="week"><div><small>пн</small><b>19</b><em>9</em></div><div class="on"><small>вт</small><b>20</b><em>7</em></div><div><small>ср</small><b>21</b><em>4</em></div><div><small>чт</small><b>22</b><em>5</em></div><div><small>пт</small><b>23</b><em>3</em></div><div><small>сб</small><b>24</b><em>1</em></div><div><small>вс</small><b>25</b><em>—</em></div></div>
+<section class="now"><div><div class="lbl">В кресле · кабинет 1 · 12:00–13:00</div><h2>Абрамян Лилит</h2><p>34 года · кариес 26, 27 · анамнез подтверждён</p></div><div class="timer">24:10</div>
+<div class="row"><span class="btn solid">Завершить приём</span><span class="btn ghost">+ Услуга</span><span class="btn ghost">Формула</span></div><span class="allergy">Аллергия: лидокаин</span></section>
+<section class="feed"><h3>Лента дня</h3>
+<div class="v past"><time>09:00</time><div><b>Орлова Вера</b> <span>кариес 16</span></div><span>кабинет 1</span><span class="st">оплачено</span></div>
+<div class="v past"><time>10:30</time><div><b>Ким Артур</b> <span>консультация</span></div><span>кабинет 1</span><span class="st">долг 4 500 ₽</span></div>
+<div class="wedge"></div>
+<div class="v"><time>13:30</time><div><b>Ветров Павел</b> <span>гигиена</span></div><span>кабинет 2</span><span class="st">пришёл</span></div>
+<div class="v"><time>15:00</time><div><b>Новикова Ирина</b> <span>эндодонтия 36</span></div><span>кабинет 1</span><span class="st">подтвердила</span></div>
+<div class="v"><time>16:30</time><div><b>Шубин Глеб</b> <span>осмотр импланта</span></div><span>кабинет 1</span><span class="st wait">ждёт ответа</span></div>
+</section></main>
+<aside class="side"><div class="todo"><h3>Требует внимания</h3><div>Шубин Глеб не подтвердил 16:30<small>позвонить до 14:00</small></div><div>Ким Артур ушёл с долгом 4 500 ₽<small>консультация, 10:30</small></div><div>План Орловой ждёт решения 12 дней<small>3 варианта, от 96 000 ₽</small></div></div>
+<div><h3>Деньги дня</h3><div class="money"><small>Оплачено</small><small>Ждём</small><b>18 200 ₽</b><b>4 500 ₽</b><div class="bar"><i style="width:80%"></i><i style="width:20%"></i></div></div></div>
+<div class="danger">Отменить визит · Перенести</div></aside>
+</div></body></html>

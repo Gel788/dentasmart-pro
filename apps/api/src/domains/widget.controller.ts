@@ -24,7 +24,7 @@ export class WidgetController {
   /** Whether the assistant is switched on for this server; the widget falls back to the form if not. */
   @Get(':orgSlug/assistant')
   assistantStatus() {
-    return { enabled: this.assistant.enabled };
+    return { enabled: this.assistant.enabled, model: this.assistant.enabled ? this.assistant.model : null };
   }
 
   @Post(':orgSlug/assistant')
