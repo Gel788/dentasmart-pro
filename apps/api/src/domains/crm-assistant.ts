@@ -104,8 +104,13 @@ export class CrmAssistantService {
 
     const routed = await this.route(turns, { today, weekday, doctors: doctors.map((row) => `${row.lastName} ${row.firstName}${row.middleName ? ` ${row.middleName}` : ''}`), pages });
     const { reply } = routed;
-    // Small models miscount weekdays, so dates said in words are worked out here and win.
-    const action = withDates(routed.action, turns.at(-1)!.content, today);
+    // Small models miscount weekdays and miss commands, so dates and command verbs are read here too.
+    const said = turns.at(-1)!.content;
+    let action = withDates(withCommand(routed.action, said), said, today);
+    if ((action.type === 'visit' && !action.patient) || (action.type === 'slots' && !action.patient && /запиш/i.test(said))) {
+      const named = await this.nameIn(orgId, said);
+      if (named) action = { ...action, patient: named };
+    }
     const cards: Card[] = [];
     const can = (perm: string) => permissions.includes(perm);
     const doctorOf = (name?: string) => {
@@ -236,7 +241,9 @@ export class CrmAssistantService {
 
     // Who asked and what kind of lookup, never the words.
     await this.prisma.auditLog.create({ data: { organizationId: orgId, userId, entityType: 'CrmAssistant', entityId: orgId, action: 'VIEW', changes: { action: action.type, cards: cards.length } } }).catch(() => undefined);
-    return { reply: reply || describe(cards), cards };
+    // For commands the words come from what will actually happen, never from the model's guess.
+    const acting = cards.some((card) => card.kind === 'visits' || card.kind === 'newPatient');
+    return { reply: acting || !reply ? describe(cards) : reply, cards };
   }
 
   /** Booking straight from the conversation: the chair is picked here, the clash checks are the usual ones. */
@@ -252,6 +259,15 @@ export class CrmAssistantService {
     const visit = await this.workspace.book(orgId, { patientId: body.patientId, startsAt: startsAt.toISOString(), durationMin, doctorId: body.doctorId || undefined, cabinetId, serviceId: service?.id });
     await this.prisma.auditLog.create({ data: { organizationId: orgId, userId, entityType: 'Appointment', entityId: visit.id, action: 'CREATE', changes: { via: 'assistant' } } }).catch(() => undefined);
     return { id: visit.id, startsAt: visit.startsAt.toISOString(), endsAt: visit.endsAt.toISOString(), patientId: visit.patientId };
+  }
+
+  /** A patient named anywhere in the sentence: the first word that matches someone. */
+  private async nameIn(orgId: string, text: string) {
+    const skip = /^(перенес|отмен|подтверд|запиш|пришел|пришёл|приш|не|на|в|во|с|со|к|у|визит|запис|пациент|завтра|сегодня|послезавтра|понедельник|вторник|сред|четверг|пятниц|суббот|воскрес|утр|вечер|после|обеда)/i;
+    for (const word of text.split(/[\s,.!?]+/).filter((item) => item.length >= 3 && !skip.test(item)).slice(0, 6)) {
+      if ((await this.findPatients(orgId, word)).length) return word;
+    }
+    return null;
   }
 
   private async findPatients(orgId: string, raw: string) {
@@ -381,6 +397,20 @@ export function datesIn(text: string, today: string): { date: string; dateTo?: s
     return { date: addDays(today, /следующ/.test(said) && stillThisWeek ? ahead + 7 : ahead) };
   }
   return null;
+}
+
+/** Command verbs said outright decide the action, whatever the model made of them. */
+export function withCommand(action: Action, text: string): Action {
+  const said = clean(text);
+  const patient = 'patient' in action ? action.patient : action.type === 'patient' ? action.query : undefined;
+  const visit = (intent: VisitIntent): Action => ({ type: 'visit', intent, patient, ...(action.type === 'visit' ? { from: action.from } : {}) });
+  if (/нов\S* пациент|заведи|завести|создай пациент/.test(said)) return action.type === 'new_patient' ? action : { type: 'new_patient' };
+  if (/перенес|перенос|передвин/.test(said)) return visit('move');
+  if (/отмени|отменить|отмена/.test(said)) return visit('cancel');
+  if (/не (при|яви)ш|не пришл|неявк/.test(said)) return visit('no_show');
+  if (/пришел|пришла|пришли|отметь приход|на месте/.test(said)) return visit('arrived');
+  if (/подтверд/.test(said)) return visit('confirm');
+  return action;
 }
 
 function withDates(action: Action, text: string, today: string): Action {

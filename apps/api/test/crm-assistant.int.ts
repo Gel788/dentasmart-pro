@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { PrismaClient } from '@dentasmart/database';
-import { CrmAssistantService, datesIn, parseRoute } from '../src/domains/crm-assistant';
+import { CrmAssistantService, datesIn, parseRoute, withCommand } from '../src/domains/crm-assistant';
 import { WidgetService } from '../src/domains/widget.service';
 import { WorkspaceService } from '../src/domains/workspace.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
@@ -29,6 +29,11 @@ async function main() {
   assert.deepEqual(datesIn('на 5 ноября', '2026-10-21'), { date: '2026-11-05' });
   assert.deepEqual(datesIn('на 3.01', '2026-10-21'), { date: '2027-01-03' });
   assert.equal(datesIn('найди Орлову', '2026-10-21'), null);
+
+  assert.deepEqual(withCommand({ type: 'none' }, 'перенеси Кузнецова на понедельник'), { type: 'visit', intent: 'move', patient: undefined });
+  assert.equal((withCommand({ type: 'visit', intent: 'arrived', patient: 'Медведев' }, 'Медведев не пришёл') as { intent: string }).intent, 'no_show');
+  assert.equal((withCommand({ type: 'visit', intent: 'confirm', patient: 'Соколов' }, 'Соколов пришёл') as { intent: string }).intent, 'arrived');
+  assert.equal(withCommand({ type: 'slots' }, 'окна на завтра').type, 'slots');
 
   const day = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
   const week = Array.from({ length: 7 }, () => ({ opensAt: 15 * 60, closesAt: 17 * 60 }));
@@ -80,6 +85,10 @@ async function main() {
 
     const move = await ask({ type: 'visit', intent: 'move', patient: 'Орлову' }, ALL, 'перенеси Орлову на послезавтра');
     assert.ok(move.cards[0]?.kind === 'visits' && move.cards[0].items[0]?.patientId === patient.id && move.cards[0].slots.length > 0, 'визит найден, новое время предложено');
+    next = { reply: 'Не понял', action: { type: 'none' } };
+    const guessed = await assistant.ask(clinic.id, user.id, ALL, [{ role: 'user', content: 'перенеси Орлову на послезавтра' }]);
+    assert.ok(guessed.cards[0]?.kind === 'visits' && guessed.cards[0].items.length > 0, 'команду и фамилию нашёл сервер сам');
+    assert.match(guessed.reply, /Перенос/);
     const cancel = await ask({ type: 'visit', intent: 'удалить всё', patient: 'Орлова' });
     assert.ok(cancel.cards[0]?.kind === 'visits' && cancel.cards[0].intent === 'confirm', 'незнакомое намерение не становится отменой');
     assert.equal((await ask({ type: 'visit', intent: 'cancel', patient: 'Орлова' }, ['schedule.read'])).cards[0]?.kind === 'visits' ? 'ok' : 'no', 'ok');
