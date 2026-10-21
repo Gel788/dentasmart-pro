@@ -94,7 +94,10 @@ export class CrmAssistantService {
     const doctors = await this.prisma.employee.findMany({ where: clinicianWhere(orgId), select: { id: true, firstName: true, lastName: true, middleName: true }, orderBy: { lastName: 'asc' } });
     const pages = PAGES.filter((page) => permissions.includes(page.perm));
 
-    const { reply, action } = await this.route(turns, { today, weekday, doctors: doctors.map((row) => `${row.lastName} ${row.firstName}${row.middleName ? ` ${row.middleName}` : ''}`), pages });
+    const routed = await this.route(turns, { today, weekday, doctors: doctors.map((row) => `${row.lastName} ${row.firstName}${row.middleName ? ` ${row.middleName}` : ''}`), pages });
+    const { reply } = routed;
+    // Small models miscount weekdays, so dates said in words are worked out here and win.
+    const action = withDates(routed.action, turns.at(-1)!.content, today);
     const cards: Card[] = [];
     const can = (perm: string) => permissions.includes(perm);
     const doctorOf = (name?: string) => {
@@ -230,6 +233,7 @@ export class CrmAssistantService {
       'Когда действие не none, reply — одна короткая фраза о том, что ты показываешь («Свободные окна у Завена Седраковича завтра вечером:»). Не придумывай имена, время, суммы и диагнозы — их покажет CRM.',
       'Ты не записываешь, не отменяешь и не переносишь визиты сам. На просьбу записать выбери slots: CRM покажет время, человек нажмёт его и подтвердит запись.',
       'Подсказки по CRM: часы работы клиники и врачей, праздники и отпуска — в Настройках; запись — кнопкой на свободном месте в Расписании или из карточки окна; протокол приёма и диктовка — на экране визита; заявки с сайта подтверждаются в разделе «Запись с сайта».',
+      'В reply пиши как живой помощник: никогда не упоминай action, JSON, поля и адреса страниц.',
       'Ответь только JSON без пояснений: {"reply":"","action":{"type":"slots","patient":"","doctor":"","date":"","dateTo":"","from":"","to":"","service":""}}',
     ].join('\n');
     const response = await this.call({ model: MODEL, temperature: 0.1, max_tokens: 500, messages: [{ role: 'system', content: system }, ...turns] });
@@ -267,6 +271,44 @@ function calendar(today: string) {
     const date = addDays(today, index);
     return `${WEEKDAYS[new Date(`${date}T12:00:00Z`).getUTCDay()]} ${date}`;
   }).join(', ');
+}
+
+const DAY_WORDS: [RegExp, number][] = [[/понедельник/, 1], [/вторник/, 2], [/сред[уаы]/, 3], [/четверг/, 4], [/пятниц/, 5], [/суббот/, 6], [/воскресень/, 0]];
+const MONTHS = ['январ', 'феврал', 'март', 'апрел', 'ма[йя]', 'июн', 'июл', 'август', 'сентябр', 'октябр', 'ноябр', 'декабр'];
+
+/** Dates said in words — «завтра», «в пятницу», «на следующей неделе», «23 октября», «23.10» — from today. */
+export function datesIn(text: string, today: string): { date: string; dateTo?: string } | null {
+  const said = clean(text);
+  const weekday = new Date(`${today}T12:00:00Z`).getUTCDay();
+  const year = Number(today.slice(0, 4));
+  const pick = (date: string) => (date < today ? `${Number(date.slice(0, 4)) + 1}${date.slice(4)}` : date);
+  const numeric = /(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?/.exec(said);
+  if (numeric) return { date: pick(`${numeric[3] ? (numeric[3].length === 2 ? `20${numeric[3]}` : numeric[3]) : year}-${numeric[2].padStart(2, '0')}-${numeric[1].padStart(2, '0')}`) };
+  for (let index = 0; index < 12; index += 1) {
+    const match = new RegExp(`(\\d{1,2})\\s+${MONTHS[index]}`).exec(said);
+    if (match) return { date: pick(`${year}-${String(index + 1).padStart(2, '0')}-${match[1].padStart(2, '0')}`) };
+  }
+  if (/послезавтра/.test(said)) return { date: addDays(today, 2) };
+  if (/завтра/.test(said)) return { date: addDays(today, 1) };
+  if (/сегодня/.test(said)) return { date: today };
+  const toMonday = ((8 - weekday) % 7) || 7;
+  if (/следующ\S* недел/.test(said)) return { date: addDays(today, toMonday), dateTo: addDays(today, toMonday + 6) };
+  if (/(эт\S*|текущ\S*) недел/.test(said)) return { date: today, dateTo: addDays(today, (7 - weekday) % 7) };
+  for (const [pattern, day] of DAY_WORDS) {
+    if (!pattern.test(said)) continue;
+    const ahead = (day - weekday + 7) % 7;
+    // «Следующий вторник» means next week's only while this week's is still ahead.
+    const stillThisWeek = (day + 6) % 7 > (weekday + 6) % 7;
+    return { date: addDays(today, /следующ/.test(said) && stillThisWeek ? ahead + 7 : ahead) };
+  }
+  return null;
+}
+
+function withDates(action: Action, text: string, today: string): Action {
+  if (action.type !== 'slots' && action.type !== 'day') return action;
+  const dates = datesIn(text, today);
+  if (!dates) return action;
+  return action.type === 'slots' ? { ...action, date: dates.date, dateTo: dates.dateTo ?? dates.date } : { ...action, date: dates.date };
 }
 
 function describe(cards: Card[]) {

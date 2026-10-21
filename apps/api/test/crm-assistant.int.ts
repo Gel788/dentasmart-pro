@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { PrismaClient } from '@dentasmart/database';
-import { CrmAssistantService, parseRoute } from '../src/domains/crm-assistant';
+import { CrmAssistantService, datesIn, parseRoute } from '../src/domains/crm-assistant';
 import { WidgetService } from '../src/domains/widget.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
@@ -17,6 +17,17 @@ async function main() {
   assert.equal(parseRoute('Конечно! {"reply":"Ищу","action":{"type":"patient","query":"Орлова"}}').action.type, 'patient');
   assert.equal(parseRoute('{"reply":"x","action":{"type":"delete_all"}}').action.type, 'none', 'неизвестное действие — просто ответ');
   assert.equal(parseRoute('Часы работы настраиваются в Настройках.').reply, 'Часы работы настраиваются в Настройках.');
+
+  // 2026-10-21 is a Wednesday.
+  assert.deepEqual(datesIn('окно в пятницу вечером', '2026-10-21'), { date: '2026-10-23' });
+  assert.deepEqual(datesIn('в среду', '2026-10-21'), { date: '2026-10-21' });
+  assert.deepEqual(datesIn('в следующий вторник', '2026-10-21'), { date: '2026-10-27' });
+  assert.deepEqual(datesIn('в следующую пятницу', '2026-10-21'), { date: '2026-10-30' });
+  assert.deepEqual(datesIn('кто записан завтра', '2026-10-21'), { date: '2026-10-22' });
+  assert.deepEqual(datesIn('на следующей неделе утром', '2026-10-21'), { date: '2026-10-26', dateTo: '2026-11-01' });
+  assert.deepEqual(datesIn('на 5 ноября', '2026-10-21'), { date: '2026-11-05' });
+  assert.deepEqual(datesIn('на 3.01', '2026-10-21'), { date: '2027-01-03' });
+  assert.equal(datesIn('найди Орлову', '2026-10-21'), null);
 
   const day = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
   const week = Array.from({ length: 7 }, () => ({ opensAt: 15 * 60, closesAt: 17 * 60 }));
