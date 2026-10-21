@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowUp, CalendarRange, ChevronRight, Sparkles, X } from 'lucide-react';
+import { ArrowRight, ArrowUp, CalendarRange, CornerDownLeft, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useFocus } from '@/lib/focus';
 import styles from './assistant.module.css';
@@ -12,26 +12,44 @@ type Card =
   | { kind: 'patients'; query: string; items: { id: string; name: string; phone: string | null }[] }
   | { kind: 'day'; date: string; items: { id: string; startsAt: string; patientId: string; patient: string; doctor: string | null; service: string | null; status: string }[] }
   | { kind: 'link'; href: string; label: string };
-type Message = { role: 'user' | 'assistant'; content: string; cards?: Card[]; error?: boolean };
+type Exchange = { id: number; question: string; reply?: string; cards?: Card[]; error?: boolean };
 
-const IDEAS = ['Свободные окна завтра после 15:00', 'Кто записан сегодня?', 'Найди пациента Орлова', 'Как настроить часы работы врача?'];
-const STATUS: Record<string, string> = { SCHEDULED: 'не подтверждён', CONFIRMED: 'подтверждён', WAITING: 'пришёл', IN_PROGRESS: 'в кресле', COMPLETED: 'завершён', NO_SHOW: 'не пришёл' };
+const IDEAS = [
+  { ask: 'Свободные окна завтра после 15:00', hint: 'время' },
+  { ask: 'Кто записан сегодня?', hint: 'день' },
+  { ask: 'Найди пациента Орлова', hint: 'пациент' },
+  { ask: 'Как поставить врачу отпуск?', hint: 'вопрос' },
+];
+/** Visit state in the clinic's own code squares, always with its word. */
+const STATUS: Record<string, { code: string; word: string }> = {
+  SCHEDULED: { code: 'wait', word: 'не подтверждён' },
+  CONFIRMED: { code: 'ok', word: 'подтверждён' },
+  WAITING: { code: 'here', word: 'пришёл' },
+  IN_PROGRESS: { code: 'chair', word: 'в кресле' },
+  COMPLETED: { code: 'next', word: 'завершён' },
+  NO_SHOW: { code: 'gone', word: 'не пришёл' },
+};
 const time = (iso: string) => new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
-const dayLabel = (iso: string) => new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' }).format(new Date(iso));
+const dayKey = (iso: string) => new Date(iso).toDateString();
+const weekday = (iso: string) => new Intl.DateTimeFormat('ru-RU', { weekday: 'short' }).format(new Date(iso));
+const month = (iso: string) => new Intl.DateTimeFormat('ru-RU', { month: 'long', day: 'numeric' }).format(new Date(iso)).replace(/^\d+\s/, '');
+const dayLabel = (iso: string) => new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(iso));
+const initials = (name: string) => name.split(/\s+/).slice(0, 2).map((part) => part[0] ?? '').join('').toUpperCase();
 
 /**
- * The staff assistant: a side sheet any screen can open. The model only works out what is being asked;
- * every name, time and visit in the answer comes from the clinic's own data, and booking still goes
- * through the usual sheet for a person to confirm.
+ * The staff assistant. It reads like the CRM's own command line: the question is the headline, the
+ * answer is the clinic's data laid out in its usual blocks, and the newest exchange sits right under
+ * the field. The model only works out what was asked; booking still goes through the usual sheet.
  */
 export function Assistant({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { setFocus } = useFocus();
   const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [thread, setThread] = useState<Exchange[]>([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
-  const list = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  const seq = useRef(0);
 
   useEffect(() => {
     if (!open || enabled !== null) return;
@@ -41,28 +59,38 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
   useEffect(() => {
     if (!open) return;
     input.current?.focus();
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+      // 1–4 run a suggestion while the field is still empty.
+      if (!thread.length && !text && /^[1-4]$/.test(event.key) && document.activeElement === input.current) {
+        event.preventDefault();
+        void send(IDEAS[Number(event.key) - 1].ask);
+      }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
-  useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight }); }, [messages, busy]);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
 
   const send = async (raw: string) => {
-    const content = raw.trim();
-    if (!content || busy) return;
-    const next = [...messages, { role: 'user' as const, content }];
-    setMessages(next);
+    const question = raw.trim();
+    if (!question || busy || enabled === false) return;
+    const id = ++seq.current;
+    const history = thread.slice().reverse().filter((item) => !item.error).flatMap((item) => [
+      { role: 'user' as const, content: item.question },
+      ...(item.reply ? [{ role: 'assistant' as const, content: item.reply }] : []),
+    ]);
+    setThread((items) => [{ id, question }, ...items]);
     setText('');
     setBusy(true);
+    body.current?.scrollTo({ top: 0 });
     try {
-      const history = next.filter((message) => !message.error).map(({ role, content: body }) => ({ role, content: body }));
-      const data = await api<{ reply: string; cards: Card[] }>('/assistant', { method: 'POST', body: JSON.stringify({ messages: history }) });
-      setMessages([...next, { role: 'assistant', content: data.reply, cards: data.cards }]);
+      const data = await api<{ reply: string; cards: Card[] }>('/assistant', { method: 'POST', body: JSON.stringify({ messages: [...history, { role: 'user', content: question }] }) });
+      setThread((items) => items.map((item) => (item.id === id ? { ...item, reply: data.reply, cards: data.cards } : item)));
     } catch (err) {
-      setMessages([...next, { role: 'assistant', content: err instanceof Error ? err.message : 'Помощник не ответил', error: true }]);
+      setThread((items) => items.map((item) => (item.id === id ? { ...item, reply: err instanceof Error ? err.message : 'Помощник не ответил', error: true } : item)));
     } finally {
       setBusy(false);
+      input.current?.focus();
     }
   };
 
@@ -76,109 +104,158 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
   };
 
   if (!open) return null;
+  const [latest, ...earlier] = thread;
 
   return (
     <div className={styles.back} onMouseDown={onClose}>
-      <section className={styles.sheet} role="dialog" aria-modal="true" aria-labelledby="assistant-title" onMouseDown={(event) => event.stopPropagation()}>
+      <section className={styles.sheet} role="dialog" aria-modal="true" aria-labelledby="assistant-title" data-busy={busy || undefined} onMouseDown={(event) => event.stopPropagation()}>
+        <div className={styles.band} aria-hidden="true"><i /></div>
         <header className={styles.head}>
-          <span className={styles.mark} aria-hidden="true"><Sparkles size={16} /></span>
-          <div>
-            <h2 id="assistant-title">Помощник</h2>
-            <p>Ищет окна, пациентов и записи. Работает на GigaChat, данные остаются в России.</p>
-          </div>
-          <button type="button" className={styles.close} onClick={onClose} aria-label="Закрыть помощника"><X size={18} /></button>
+          <span className={styles.code}><span className={styles.k} data-code="chair" />{busy ? 'Ищу в базе клиники…' : 'GigaChat · данные остаются в России'}</span>
+          <button type="button" className={styles.close} onClick={onClose} aria-label="Закрыть помощника"><X size={20} /></button>
         </header>
 
-        <div className={styles.list} ref={list} aria-live="polite">
+        <form className={styles.ask} onSubmit={(event) => { event.preventDefault(); void send(text); }}>
+          <label id="assistant-title" htmlFor="assistant-input" className={styles.title}>{thread.length ? 'Ещё вопрос' : 'Что найти?'}</label>
+          <div className={styles.field}>
+            <textarea
+              id="assistant-input"
+              ref={input}
+              rows={1}
+              value={text}
+              disabled={enabled === false}
+              placeholder="Окно у Завена в пятницу вечером"
+              onChange={(event) => setText(event.target.value)}
+              onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(text); } }}
+            />
+            <button type="submit" disabled={busy || !text.trim() || enabled === false} aria-label="Спросить"><ArrowUp size={22} /></button>
+          </div>
+        </form>
+
+        <div className={styles.body} ref={body} aria-live="polite">
           {enabled === false && <p className={styles.off}>Помощник не подключён: на сервере нет ключа Polza AI.</p>}
-          {enabled !== false && messages.length === 0 && (
-            <div className={styles.ideas}>
-              <p>Спросите своими словами, например:</p>
-              {IDEAS.map((idea) => <button key={idea} type="button" onClick={() => void send(idea)}>{idea}<ChevronRight size={16} aria-hidden="true" /></button>)}
+
+          {enabled !== false && !thread.length && (
+            <ol className={styles.ideas}>
+              {IDEAS.map((idea, index) => (
+                <li key={idea.ask}>
+                  <button type="button" onClick={() => void send(idea.ask)}>
+                    <kbd>{index + 1}</kbd>
+                    <span>{idea.ask}</span>
+                    <small>{idea.hint}</small>
+                    <ArrowRight size={18} aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ol>
+          )}
+
+          {latest && <Answer item={latest} big onBook={book} onClose={onClose} />}
+          {earlier.length > 0 && (
+            <div className={styles.earlier}>
+              <p className={styles.rule}>Раньше</p>
+              {earlier.map((item) => <Answer key={item.id} item={item} onBook={book} onClose={onClose} />)}
             </div>
           )}
-          {messages.map((message, index) => (
-            <div key={index} className={message.role === 'user' ? styles.mine : message.error ? styles.fail : styles.theirs}>
-              {message.content && <p>{message.content}</p>}
-              {message.cards?.map((card, at) => <CardView key={at} card={card} onBook={book} onClose={onClose} />)}
-            </div>
-          ))}
-          {busy && <div className={styles.theirs}><p className={styles.typing}>Ищу…</p></div>}
         </div>
 
-        <form className={styles.compose} onSubmit={(event) => { event.preventDefault(); void send(text); }}>
-          <label className="sr-only" htmlFor="assistant-input">Вопрос помощнику</label>
-          <textarea
-            id="assistant-input"
-            ref={input}
-            rows={1}
-            value={text}
-            disabled={enabled === false}
-            placeholder="Например: окно у Завена в пятницу вечером"
-            onChange={(event) => setText(event.target.value)}
-            onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(text); } }}
-          />
-          <button type="submit" disabled={busy || !text.trim() || enabled === false} aria-label="Отправить"><ArrowUp size={18} /></button>
-        </form>
+        <footer className={styles.foot}>
+          <span><CornerDownLeft size={14} aria-hidden="true" />спросить</span>
+          <span><kbd>Esc</kbd>закрыть</span>
+          <span><kbd>⌘J</kbd>открыть с любого экрана</span>
+        </footer>
       </section>
     </div>
   );
 }
 
+function Answer({ item, big, onBook, onClose }: { item: Exchange; big?: boolean; onBook: (slot: { startsAt: string }, doctorId?: string, patientId?: string) => void; onClose: () => void }) {
+  return (
+    <article className={styles.answer} data-big={big || undefined} data-error={item.error || undefined}>
+      <h3>{item.question.charAt(0).toLocaleUpperCase('ru-RU') + item.question.slice(1)}</h3>
+      {item.reply === undefined ? (
+        <div className={styles.wait} aria-label="Помощник думает"><i /><i /><i /></div>
+      ) : (
+        <>
+          {item.reply && <p className={styles.reply}>{item.reply}</p>}
+          {item.cards?.map((card, index) => <CardView key={index} card={card} onBook={onBook} onClose={onClose} />)}
+        </>
+      )}
+    </article>
+  );
+}
+
 function CardView({ card, onBook, onClose }: { card: Card; onBook: (slot: { startsAt: string }, doctorId?: string, patientId?: string) => void; onClose: () => void }) {
   if (card.kind === 'slots') {
-    if (!card.items.length) return <p className={styles.empty}>Свободного времени по этому запросу нет. Попробуйте другой день или время.</p>;
-    const days = new Map<string, typeof card.items>();
+    if (!card.items.length) return <p className={styles.empty}>Свободного времени нет. Попробуйте другой день или время.</p>;
+    const days: { key: string; first: string; slots: typeof card.items }[] = [];
     for (const slot of card.items) {
-      const key = dayLabel(slot.startsAt);
-      days.set(key, [...(days.get(key) ?? []), slot]);
+      const key = dayKey(slot.startsAt);
+      const day = days.find((item) => item.key === key);
+      if (day) day.slots.push(slot);
+      else days.push({ key, first: slot.startsAt, slots: [slot] });
     }
     return (
-      <div className={styles.card}>
-        <p className={styles.cardHead}>{card.patient ? `${card.patient.name} · ` : ''}{card.doctor?.name ?? 'Любой врач'} · {card.service ?? `${card.durationMin} мин`}</p>
-        {[...days].map(([day, slots]) => (
-          <div key={day} className={styles.slotDay}>
-            <b>{day}</b>
-            <div className={styles.slots}>
-              {slots.map((slot) => <button key={slot.startsAt} type="button" onClick={() => onBook(slot, card.doctor?.id, card.patient?.id)}>{time(slot.startsAt)}</button>)}
+      <div className={styles.pack}>
+        <p className={styles.packHead}>
+          <b>{card.patient?.name ?? card.doctor?.name ?? 'Любой врач'}</b>
+          <span>{[card.patient && (card.doctor?.name ?? 'любой врач'), card.service ?? `${card.durationMin} мин`].filter(Boolean).join(' · ')}</span>
+        </p>
+        {days.map((day) => (
+          <div key={day.key} className={styles.day}>
+            <div className={styles.date}><small>{weekday(day.first)}</small><b>{new Date(day.first).getDate()}</b><em>{month(day.first)}</em></div>
+            <div className={styles.times}>
+              {day.slots.map((slot) => (
+                <button key={slot.startsAt} type="button" onClick={() => onBook(slot, card.doctor?.id, card.patient?.id)} aria-label={`Записать на ${dayLabel(slot.startsAt)}, ${time(slot.startsAt)}`}>{time(slot.startsAt)}</button>
+              ))}
             </div>
           </div>
         ))}
-        <p className={styles.cardNote}>Нажмите время — откроется запись, проверьте и подтвердите.</p>
+        <p className={styles.packFoot}>Нажмите время — откроется запись, вы проверите и подтвердите.</p>
       </div>
     );
   }
   if (card.kind === 'patients') {
     if (!card.items.length) return <p className={styles.empty}>Пациента «{card.query}» не нашёл.</p>;
     return (
-      <ul className={styles.card}>
+      <ul className={styles.pack}>
         {card.items.map((row) => (
-          <li key={row.id}><Link href={`/patients/${row.id}`} onClick={onClose}><span>{row.name}</span><small>{row.phone ?? ''}</small><ChevronRight size={16} aria-hidden="true" /></Link></li>
+          <li key={row.id}>
+            <Link href={`/patients/${row.id}`} onClick={onClose} className={styles.person}>
+              <span className={styles.avatar} aria-hidden="true">{initials(row.name)}</span>
+              <span><b>{row.name}</b><small>{row.phone ?? 'телефона нет'}</small></span>
+              <ArrowRight size={18} aria-hidden="true" />
+            </Link>
+          </li>
         ))}
       </ul>
     );
   }
   if (card.kind === 'day') {
-    const label = dayLabel(`${card.date}T12:00:00`);
-    if (!card.items.length) return <p className={styles.empty}>На {label} записей нет.</p>;
+    const noon = `${card.date}T12:00:00`;
+    if (!card.items.length) return <p className={styles.empty}>На {dayLabel(noon)} записей нет.</p>;
     return (
-      <div className={styles.card}>
-        <p className={styles.cardHead}>{label} · {card.items.length} {plural(card.items.length)}</p>
+      <div className={styles.pack}>
+        <p className={styles.packHead}><b>{dayLabel(noon)}</b><span>{card.items.length} {plural(card.items.length)}</span></p>
         <ul>
-          {card.items.map((row) => (
-            <li key={row.id}>
-              <Link href={`/patients/${row.patientId}`} onClick={onClose} className={styles.visit}>
-                <time>{time(row.startsAt)}</time>
-                <span><b>{row.patient}</b><small>{[row.service, row.doctor, STATUS[row.status]].filter(Boolean).join(' · ')}</small></span>
-              </Link>
-            </li>
-          ))}
+          {card.items.map((row) => {
+            const state = STATUS[row.status] ?? { code: 'next', word: row.status };
+            return (
+              <li key={row.id}>
+                <Link href={`/patients/${row.patientId}`} onClick={onClose} className={styles.visit}>
+                  <time>{time(row.startsAt)}</time>
+                  <span><b>{row.patient}</b><small>{[row.service, row.doctor].filter(Boolean).join(' · ')}</small></span>
+                  <span className={styles.state}><span className={styles.k} data-code={state.code} />{state.word}</span>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
-        <Link className={styles.cardLink} href="/schedule" onClick={onClose}><CalendarRange size={16} aria-hidden="true" />Открыть расписание</Link>
+        <Link className={styles.packLink} href="/schedule" onClick={onClose}><CalendarRange size={16} aria-hidden="true" />Открыть расписание</Link>
       </div>
     );
   }
-  return <Link className={styles.cardLink} href={card.href} onClick={onClose}>Открыть: {card.label}<ChevronRight size={16} aria-hidden="true" /></Link>;
+  return <Link className={styles.jump} href={card.href} onClick={onClose}><span>{card.label}</span><ArrowRight size={20} aria-hidden="true" /></Link>;
 }
 
 function plural(count: number) {
