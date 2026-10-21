@@ -20,6 +20,7 @@ import { QueueService } from './queue.service';
 import { WidgetController } from './widget.controller';
 import { WidgetService } from './widget.service';
 import { BookingAssistantService } from './booking-assistant.service';
+import { DictationService } from './dictation.service';
 import { BookingRequestsController, BookingRequestsService } from './booking-requests';
 import { RemindersController } from './reminders.controller';
 import { RemindersService } from './reminders.service';
@@ -74,6 +75,7 @@ import { MarketService } from './market.service';
     QueueService,
     WidgetService,
     BookingAssistantService,
+    DictationService,
     BookingRequestsService,
     RemindersService,
     IntegrationsService,

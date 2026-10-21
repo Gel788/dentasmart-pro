@@ -10,6 +10,7 @@ import { ToothFocus } from '@/components/studio/tooth-focus';
 import { Copilot } from '@/components/studio/copilot';
 import { PricePicker, type PriceService } from '@/components/studio/price-picker';
 import { VoiceChart } from '@/components/studio/voice-chart';
+import { Dictation } from '@/components/visit/dictation';
 import { XrayAssistant } from '@/components/studio/xray';
 import type { Medical } from '@/components/card/model';
 import styles from '@/components/visit/visit.module.css';
@@ -342,7 +343,21 @@ function Chair() {
               ))}
             </div>
           )}
-          {live && (
+          {/* Live clinics dictate through Russian-hosted models; the browser's own speech service stays in the demo. */}
+          {live && medicalWrite && !isDemo() && (
+            <Dictation
+              visitId={visit.id}
+              current={note}
+              onApply={(patch) => setNote((value) => ({ ...value, ...patch }))}
+              onAddService={async (serviceId, toothNum) => {
+                const before = new Set(visit.today.map((line) => line.id));
+                const data = await act('items', { serviceId, toothNum });
+                const fresh = data.today.find((line: { id: string }) => !before.has(line.id));
+                if (fresh) setPicked((value) => ({ ...value, [fresh.id]: true }));
+              }}
+            />
+          )}
+          {live && isDemo() && (
             <VoiceChart
               canWrite={medicalWrite}
               onChange={hear}

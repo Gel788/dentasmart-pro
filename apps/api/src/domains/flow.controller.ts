@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser } from '@dentasmart/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -8,13 +9,33 @@ import { CurrentUser } from '../common/current-user.decorator';
 import { IdempotencyKey } from '../common/idempotency.decorator';
 import { OrgId } from '../common/org.decorator';
 import { FlowService } from './flow.service';
+import { DictationService } from './dictation.service';
+
+const AUDIO = /^(audio|video)\/(webm|ogg|mp4|mpeg|mp3|wav|x-wav|x-m4a|m4a|aac|flac)/;
 
 @ApiTags('flow')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('flow')
 export class FlowController {
-  constructor(private readonly flow: FlowService) {}
+  constructor(private readonly flow: FlowService, private readonly dictation: DictationService) {}
+
+  @Get('dictation')
+  @RequirePermissions('medical.write')
+  dictationStatus() {
+    return { enabled: this.dictation.enabled };
+  }
+
+  /** A dictated (audio) or typed account of the visit back as a draft protocol; nothing is saved. */
+  @Post('visits/:id/dictation')
+  @RequirePermissions('medical.write')
+  @UseInterceptors(FileInterceptor('audio', {
+    limits: { fileSize: 12 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => (AUDIO.test(file.mimetype) ? cb(null, true) : cb(new BadRequestException('Этот формат записи не принимается'), false)),
+  }))
+  dictate(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Param('id') id: string, @UploadedFile() audio: Express.Multer.File | undefined, @Body() body: { text?: string }) {
+    return this.dictation.draft(orgId, id, user.id, { audio: audio ? { buffer: audio.buffer, mimetype: audio.mimetype } : undefined, text: typeof body?.text === 'string' ? body.text : undefined });
+  }
 
   @Get('retention')
   @RequirePermissions('analytics.read')
