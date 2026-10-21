@@ -20,6 +20,29 @@
 .scene[data-leaving] { animation: sceneOut 220ms ease-in forwards; }
 .scene ::selection { background: rgba(179, 92, 255, 0.55); color: #fff; }
 
+/* The trigger carries the same spectrum and orb, so the button already looks like what it opens. */
+.trigger {
+  --s1: #ff7a3d; --s2: #ff3d8b; --s3: #b35cff; --s4: #3d7bff; --s5: #2fd8ff; --speed: 8s;
+  --spectrum: conic-gradient(from var(--spin), var(--s1), var(--s2), var(--s3), var(--s4), var(--s5), var(--s1));
+  position: relative; isolation: isolate; border: 0; font: inherit; cursor: pointer;
+  animation: spin var(--speed) linear infinite;
+}
+.trigger:hover { --speed: 3s; }
+.trigger::before { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; padding: 1.5px; background: var(--spectrum); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+.trigger::after { content: ''; position: absolute; inset: 4px; z-index: -2; border-radius: inherit; background: var(--spectrum); filter: blur(12px); opacity: 0.35; transition: opacity 200ms ease; }
+.trigger:hover::after { opacity: 0.7; }
+.trigger:focus-visible { outline: 2px solid var(--s4); outline-offset: 3px; }
+.trigger .orb { width: 26px; height: 26px; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14) inset, 0 3px 12px rgba(179, 92, 255, 0.45); }
+.trigger .orb i { filter: blur(5px); }
+
+.nav, .inline { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px; padding: 0 10px 0 9px; border-radius: 14px; background: var(--surface-solid); color: var(--text); text-align: left; }
+.nav { margin: -4px 0 12px; }
+.navLabel { flex: 1; min-width: 0; font-size: 14px; font-weight: 650; letter-spacing: -0.005em; white-space: nowrap; }
+.navKbd { flex: none; padding: 1px 6px; border-radius: 6px; background: var(--surface-2); color: var(--muted); font: inherit; font-size: 11.5px; }
+.inline { min-height: 52px; margin-top: 8px; font-size: 15px; }
+
+.fab { display: none; }
+
 /* The living edge: a spectrum ring around the screen and its soft bloom. */
 .edge, .bloom { position: fixed; inset: 0; pointer-events: none; border-radius: 0; }
 .edge { padding: 3px; background: var(--spectrum); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
@@ -132,7 +155,18 @@
 @keyframes word { from { opacity: 0; filter: blur(8px); } }
 @keyframes orbIn { from { opacity: 0; transform: scale(0.6); filter: blur(12px); } }
 
+@media (max-width: 1180px) and (min-width: 721px) {
+  .nav { justify-content: center; padding: 0; }
+  .nav .navLabel, .nav .navKbd { display: none; }
+}
+
 @media (max-width: 720px) {
+  .nav { display: none; }
+  .fab { display: grid; place-items: center; position: fixed; right: 16px; bottom: calc(58px + env(safe-area-inset-bottom, 0px) + 16px); z-index: 31; width: 60px; height: 60px; padding: 0; border-radius: 50%; background: #120f24; box-shadow: 0 12px 32px rgba(110, 90, 255, 0.45); }
+  .fab::before { padding: 2px; }
+  .fab::after { inset: -6px; opacity: 0.55; filter: blur(16px); }
+  .fab .orb { width: 52px; height: 52px; box-shadow: none; }
+  .fab .orb i { filter: blur(9px); }
   .stage { padding: calc(12px + env(safe-area-inset-top, 0px)) 14px calc(12px + env(safe-area-inset-bottom, 0px)); }
   .close { top: calc(12px + env(safe-area-inset-top, 0px)); right: 14px; }
   .feed { padding-top: 56px; gap: 26px; }

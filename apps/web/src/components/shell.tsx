@@ -10,7 +10,7 @@ import { useFocus } from '@/lib/focus';
 import { api } from '@/lib/api';
 import { BookingSheet } from './booking/booking-sheet';
 import { ContextPanel } from './studio/panels';
-import { Assistant } from './assistant/assistant';
+import { Assistant, AssistantTrigger } from './assistant/assistant';
 
 const PRIMARY = [
   { href: '/', label: 'Сегодня', icon: Calendar, perm: 'patient.read' },
@@ -154,11 +154,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <span className="sd-search-text">Поиск</span>
           <kbd>⌘K</kbd>
         </button>
-        <button className="sd-search sd-ask" type="button" onClick={() => setAssistant(true)} title="Помощник (⌘J)">
-          <Sparkles />
-          <span className="sd-search-text">Помощник</span>
-          <kbd>⌘J</kbd>
-        </button>
+        <AssistantTrigger variant="nav" onOpen={() => setAssistant(true)} />
         <nav className="sd-nav-list">
           {primary.map((link) => <NavLink key={link.href} link={link} active={isActive(link.href)} />)}
           {more.length > 0 && <span className="sd-nav-group">Ещё</span>}
@@ -186,7 +182,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <div className="sd-workspace">{children}</div>
       </div>
       <BookingSheet />
-      <button className="sd-ask-fab" type="button" onClick={() => setAssistant(true)} aria-label="Помощник"><Sparkles /></button>
+      <AssistantTrigger variant="fab" onOpen={() => setAssistant(true)} />
       <Assistant open={assistant} onClose={() => setAssistant(false)} />
       <aside className={`sd-panel ${panelOpen ? 'open' : ''}`}>
         <ContextPanel />
@@ -199,7 +195,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <span className="sd-user-text"><b>{fullName}</b><span>{user?.organization.name}</span></span>
             </div>
             <button className="sd-sheet-search" type="button" onClick={() => { setSheet(false); setPalette(true); }}><Search size={18} />Поиск пациента и команды</button>
-            <button className="sd-sheet-search" type="button" onClick={() => { setSheet(false); setAssistant(true); }}><Sparkles size={18} />Помощник</button>
+            <AssistantTrigger variant="inline" onOpen={() => { setSheet(false); setAssistant(true); }} />
             <div className="sd-more-sheet-grid">
               {[...more, ...(settings ? [settings] : [])].map((link) => {
                 const Icon = link.icon;
