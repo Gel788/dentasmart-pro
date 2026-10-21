@@ -306,6 +306,12 @@ export function datesIn(text: string, today: string): { date: string; dateTo?: s
 
 function withDates(action: Action, text: string, today: string): Action {
   if (action.type !== 'slots' && action.type !== 'day') return action;
+  if (action.type === 'slots') {
+    const said = clean(text);
+    if (/утр/.test(said) && !action.to) action = { ...action, to: '12:00' };
+    if (/вечер/.test(said) && !action.from) action = { ...action, from: '17:00' };
+    if (/после обеда|дн[её]м/.test(said) && !action.from) action = { ...action, from: '14:00' };
+  }
   const dates = datesIn(text, today);
   if (!dates) return action;
   return action.type === 'slots' ? { ...action, date: dates.date, dateTo: dates.dateTo ?? dates.date } : { ...action, date: dates.date };
