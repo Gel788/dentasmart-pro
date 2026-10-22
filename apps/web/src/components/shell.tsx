@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Activity, Calendar, Globe, LayoutGrid, LogOut, PanelRight, CalendarRange, ClipboardCheck, FlaskConical, Moon, Package, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users, Wallet } from 'lucide-react';
+import { Activity, Calendar, FileText, Globe, LayoutGrid, LogOut, PanelRight, CalendarRange, ClipboardCheck, FlaskConical, Moon, Package, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users, Wallet } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
 import { useFocus } from '@/lib/focus';
@@ -21,6 +21,7 @@ const PRIMARY = [
 ];
 
 const MORE = [
+  { href: '/documents', label: 'Документы', icon: FileText, perm: 'patient.read' },
   { href: '/price', label: 'Прайс', icon: Tags, perm: 'patient.read' },
   { href: '/requests', label: 'Запись с сайта', icon: Globe, perm: 'schedule.read' },
   { href: '/leads', label: 'Заявки', icon: PhoneIncoming, perm: 'patient.read' },

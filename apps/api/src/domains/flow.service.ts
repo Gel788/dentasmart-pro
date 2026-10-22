@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { clinicianWhere } from './clinicians';
 import { PrismaService } from '../prisma/prisma.service';
+import { DocumentsService } from './documents';
 import { formatRub, fromKopecks, kopecks } from '@dentasmart/shared';
 import { inputKopecks, isUniqueViolation, paymentByKey, recordPayment } from './invoice-ledger';
 import { consumeForVisit } from '../route/route-chain';
@@ -39,6 +40,7 @@ export class FlowService {
     private readonly config: ClinicConfigService,
     private readonly clinical: ClinicalService,
     private readonly finance: FinanceService,
+    private readonly documents: DocumentsService,
   ) {}
 
   async visit(orgId: string, id: string) {
@@ -220,12 +222,19 @@ export class FlowService {
     return this.visit(orgId, id);
   }
 
-  async start(orgId: string, id: string) {
+  async start(orgId: string, id: string, options: { userId?: string; skipDocumentsReason?: string } = {}) {
     const appointment = await this.must(orgId, id);
     this.assert(appointment.status, 'start');
     const patient = await this.prisma.patient.findFirst({ where: { id: appointment.patientId, organizationId: orgId } });
     if (patient && medicalReviewDue(patient.medicalConfirmedAt)) {
       throw new BadRequestException('Перед приёмом уточните анамнез у пациента и подтвердите медкарту');
+    }
+    // No treatment before the patient has signed the contract and the consents for this visit.
+    const unsigned = await this.documents.blockers(orgId, id);
+    if (unsigned.length) {
+      const reason = (options.skipDocumentsReason ?? '').trim();
+      if (reason.length < 10) throw new BadRequestException(`Пациент не подписал: ${unsigned.map((doc) => doc.title).join('; ')}`);
+      await this.prisma.auditLog.create({ data: { organizationId: orgId, userId: options.userId, entityType: 'Appointment', entityId: id, action: 'UPDATE', changes: { startedWithoutDocuments: unsigned.map((doc) => doc.number), reason: reason.slice(0, 500) } } });
     }
     await this.prisma.appointment.update({ where: { id }, data: { status: 'IN_PROGRESS' } });
     await this.prisma.receptionQueueItem.updateMany({
@@ -333,6 +342,7 @@ export class FlowService {
       where: { appointmentId: id },
       data: { status: 'DONE' },
     });
+    await this.documents.afterVisit(orgId, id).catch(() => undefined);
     if (body.followUpDate) {
       const dueAt = new Date(body.followUpDate);
       await this.prisma.followUp.create({

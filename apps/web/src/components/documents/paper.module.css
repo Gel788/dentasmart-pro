@@ -1,0 +1,36 @@
+/* A4 paper: what the patient reads and signs. Serif body for long legal text, plain black on white. */
+.sheet { box-sizing: border-box; width: 210mm; min-height: 297mm; margin: 0 auto 16px; padding: 16mm 16mm 18mm 20mm; background: #fff; color: #000; font-family: 'Times New Roman', Times, serif; font-size: 11.5pt; line-height: 1.38; box-shadow: 0 2px 16px rgba(0, 0, 0, 0.12); }
+.sheet p { margin: 0 0 6pt; text-align: justify; hyphens: auto; }
+.sheet h2 { margin: 10pt 0 4pt; font-size: 11.5pt !important; font-weight: 700; letter-spacing: 0; }
+.head { display: flex; justify-content: space-between; gap: 12mm; padding-bottom: 6pt; margin-bottom: 10pt; border-bottom: 1px solid #000; font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; line-height: 1.35; }
+.head > div:first-child { display: flex; flex-direction: column; gap: 1pt; }
+.head b { font-size: 10pt; }
+.no { flex: none; text-align: right; font-weight: 700; font-size: 10pt; }
+.no small { display: block; font-weight: 400; font-size: 8.5pt; }
+.title { margin: 4pt 0 10pt; text-align: center; font-size: 13pt !important; font-weight: 700; line-height: 1.25 !important; letter-spacing: 0; }
+.place { display: flex; justify-content: space-between; }
+.list { margin: 0 0 6pt; padding-left: 18pt; }
+.list li { margin: 0 0 2pt; }
+.table { width: 100%; border-collapse: collapse; margin: 4pt 0 8pt; font-size: 10.5pt; }
+.table th, .table td { border: 1px solid #000; padding: 3pt 5pt; text-align: left; vertical-align: top; }
+.table th { font-weight: 700; background: #f2f2f2; }
+.table tfoot td { font-weight: 700; }
+.narrow { width: 34pt; text-align: center !important; }
+.money { width: 80pt; text-align: right !important; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.box { display: inline-block; width: 9pt; height: 9pt; margin: 0 3pt -1pt 8pt; border: 1px solid #000; }
+.fill { display: block; height: 14pt; border-bottom: 1px solid #000; }
+.checks p { text-align: left; }
+.pre { white-space: pre-wrap; text-align: left !important; }
+.parties { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; margin-top: 6pt; font-size: 10.5pt; }
+.parties p { text-align: left; }
+.sign { margin-top: 14pt !important; }
+.signs { display: flex; flex-direction: column; gap: 10pt; margin-top: 16pt; break-inside: avoid; }
+.signs div { display: grid; grid-template-columns: 52mm 48mm 1fr; align-items: end; gap: 6pt; font-size: 10.5pt; }
+.signs span { font-size: 9.5pt; }
+.signs i { display: block; height: 14pt; border-bottom: 1px solid #000; }
+
+@media print {
+  .sheet { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; break-after: page; }
+  .sheet:last-child { break-after: auto; }
+}
+@page { size: A4; margin: 14mm 14mm 16mm 18mm; }

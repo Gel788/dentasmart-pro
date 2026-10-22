@@ -6,3 +6,4 @@ export * from './visit';
 export * from './schedule';
 export * from './patients';
 export * from './medical';
+export * from './documents';

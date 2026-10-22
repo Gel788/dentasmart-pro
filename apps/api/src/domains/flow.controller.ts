@@ -69,8 +69,8 @@ export class FlowController {
 
   @Post('visits/:id/start')
   @RequirePermissions('medical.write')
-  start(@OrgId() orgId: string, @Param('id') id: string) {
-    return this.flow.start(orgId, id);
+  start(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { skipDocumentsReason?: string }) {
+    return this.flow.start(orgId, id, { userId: user.id, skipDocumentsReason: body?.skipDocumentsReason });
   }
 
   @Post('visits/:id/no-show')

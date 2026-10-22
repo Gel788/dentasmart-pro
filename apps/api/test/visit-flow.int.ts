@@ -9,15 +9,21 @@ import { ClinicalService } from '../src/domains/clinical.service';
 import { FinanceService } from '../src/domains/finance.service';
 import { FlowService } from '../src/domains/flow.service';
 import type { ClinicConfigService } from '../src/domains/clinic-config.service';
+import { DocumentsService } from '../src/domains/documents';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 const prisma = new PrismaClient();
 const db = prisma as unknown as PrismaService;
-const flow = new FlowService(db, {} as ClinicConfigService, new ClinicalService(db), new FinanceService(db));
+const documents = new DocumentsService(db);
+const signAll = async (orgId: string, visitId: string, userId: string) => {
+  for (const doc of (await documents.forVisit(orgId, visitId)).unsigned) await documents.mark(orgId, userId, doc.id, 'signed');
+};
+const flow = new FlowService(db, {} as ClinicConfigService, new ClinicalService(db), new FinanceService(db), documents);
 const stamp = Date.now().toString(36);
 
 async function main() {
   const clinic = await prisma.organization.create({ data: { name: 'Тест приёма', slug: `visit-${stamp}` } });
+  const admin = await prisma.user.create({ data: { organizationId: clinic.id, email: `adm-${stamp}@t.local`, passwordHash: 'x' } });
   try {
     const branch = await prisma.branch.create({ data: { organizationId: clinic.id, name: 'Главный' } });
     const patient = await prisma.patient.create({ data: { organizationId: clinic.id, lastName: 'Орлова', firstName: 'Вера' } });
@@ -48,6 +54,10 @@ async function main() {
     await assert.rejects(flow.start(clinic.id, visit.id), /анамнез/, 'без подтверждённого анамнеза приём не начинается');
 
     await prisma.patient.update({ where: { id: patient.id }, data: { medicalConfirmedAt: new Date() } });
+    await assert.rejects(flow.start(clinic.id, visit.id), /не подписал: Договор/, 'без подписанных документов приём не начинается');
+    const papers = await documents.forVisit(clinic.id, visit.id);
+    assert.ok(papers.documents.some((doc) => doc.kind === 'IDS_INTERVENTION'), 'согласие на вмешательство по услуге визита');
+    await signAll(clinic.id, visit.id, admin.id);
     await flow.start(clinic.id, visit.id);
     await assert.rejects(flow.complete(clinic.id, visit.id, {}), /диагноз/, 'без диагноза визит не закрывается');
     await flow.saveNote(clinic.id, visit.id, 'nobody', { diagnosis: 'K02.1', treatment: 'Пломба 16' });
@@ -61,6 +71,8 @@ async function main() {
 
     const tooth16 = plan.items.find((item) => item.toothNum === 16)!;
     const closed = await flow.complete(clinic.id, visit.id, { doneItemIds: [tooth16.id] });
+    const act = await prisma.clinicDocument.findFirst({ where: { appointmentId: visit.id, kind: 'ACT' } });
+    assert.ok(act && JSON.stringify(act.data).includes('16'), 'после приёма — акт оказанных услуг');
     assert.equal(closed.status, 'COMPLETED');
     const items = await prisma.treatmentPlanItem.findMany({ where: { planId: plan.id }, include: { invoiceItem: true } });
     const done = items.find((item) => item.id === tooth16.id)!;
@@ -83,7 +95,8 @@ async function main() {
       data: { organizationId: clinic.id, branchId: branch.id, patientId: other.id, startsAt: at2, endsAt: new Date(+at2 + 1800_000), status: 'WAITING' },
     });
     await prisma.treatmentPlan.deleteMany({ where: { patientId: other.id } });
-    await flow.start(clinic.id, walkIn.id);
+    await assert.rejects(flow.start(clinic.id, walkIn.id, { skipDocumentsReason: 'коротко' }), /не подписал/);
+    await flow.start(clinic.id, walkIn.id, { userId: undefined, skipDocumentsReason: 'Пациент с острой болью, подпишет после' });
     const withLine = await flow.addVisitItem(clinic.id, walkIn.id, { serviceId: service.id, toothNum: 36 });
     const added = withLine.today.find((line) => line.toothNum === 36);
     assert.ok(added && added.booked, 'добавленная на приёме услуга видна и привязана к визиту');
@@ -96,6 +109,8 @@ async function main() {
     console.log('visit flow ok');
   } finally {
     const org = clinic.id;
+    await prisma.clinicDocument.deleteMany({ where: { organizationId: org } });
+    await prisma.auditLog.deleteMany({ where: { organizationId: org } });
     await prisma.payment.deleteMany({ where: { organizationId: org } });
     await prisma.invoiceItem.deleteMany({ where: { invoice: { organizationId: org } } });
     await prisma.invoice.deleteMany({ where: { organizationId: org } });

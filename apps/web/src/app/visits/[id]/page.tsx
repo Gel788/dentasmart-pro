@@ -10,6 +10,7 @@ import { ToothFocus } from '@/components/studio/tooth-focus';
 import { Copilot } from '@/components/studio/copilot';
 import { PricePicker, type PriceService } from '@/components/studio/price-picker';
 import { VoiceChart } from '@/components/studio/voice-chart';
+import { VisitDocuments } from '@/components/visit/visit-documents';
 import { Dictation } from '@/components/visit/dictation';
 import { XrayAssistant } from '@/components/studio/xray';
 import type { Medical } from '@/components/card/model';
@@ -77,6 +78,8 @@ function Chair() {
   const [followDate, setFollowDate] = useState('');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState('');
+  const [unsignedDocs, setUnsignedDocs] = useState(0);
+  const [skipDocs, setSkipDocs] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [saveState, setSaveState] = useState('');
   const [seconds, setSeconds] = useState(0);
@@ -224,7 +227,7 @@ function Chair() {
               <button type="button" className="sd-btn-ghost" disabled={!!busy} onClick={() => void run('check-in', () => act('check-in'))}>Пациент пришёл</button>
             )}
             {visit.actions.includes('start') && medicalWrite && (
-              <button type="button" className="sd-btn" disabled={!!busy || visit.medical.reviewDue} onClick={() => void run('start', () => act('start'))}>
+              <button type="button" className="sd-btn" disabled={!!busy || visit.medical.reviewDue || (!isDemo() && unsignedDocs > 0)} title={unsignedDocs > 0 ? 'Сначала пациент подписывает документы' : undefined} onClick={() => void run('start', () => act('start'))}>
                 {busy === 'start' ? 'Начинаем…' : 'Начать приём'}
               </button>
             )}
@@ -236,6 +239,23 @@ function Chair() {
         </div>
       </header>
 
+      {!isDemo() && (before || closed) && (
+        <VisitDocuments visitId={visit.id} refresh={closed ? 1 : 0} onUnsigned={setUnsignedDocs} />
+      )}
+      {!isDemo() && before && unsignedDocs > 0 && visit.actions.includes('start') && medicalWrite && (
+        skipDocs === null ? (
+          <button type="button" className={styles.skipDocs} onClick={() => setSkipDocs('')}>Начать без подписи (экстренный случай)</button>
+        ) : (
+          <div className={styles.skipBox}>
+            <label htmlFor="skip-docs">Почему приём начинается без подписанных документов? Причина попадёт в журнал.</label>
+            <textarea id="skip-docs" rows={2} value={skipDocs} onChange={(event) => setSkipDocs(event.target.value)} placeholder="Например: острая боль, пациент подпишет после обезболивания" />
+            <div>
+              <button type="button" className="sd-btn-ghost" onClick={() => setSkipDocs(null)}>Отмена</button>
+              <button type="button" className="sd-btn" disabled={!!busy || skipDocs.trim().length < 10} onClick={() => void run('start', async () => { await act('start', { skipDocumentsReason: skipDocs }); setSkipDocs(null); })}>Начать приём</button>
+            </div>
+          </div>
+        )
+      )}
       {before && visit.medical.reviewDue && (
         <section className={styles.review} aria-labelledby="review-title">
           <ShieldAlert size={20} aria-hidden="true" />

@@ -27,6 +27,13 @@ model Organization {
   bankAccount String?
   bik         String?
   workHours   String?
+  /// Licence and signatory printed on every patient document (rules for paid medical services).
+  licenseNumber String?
+  licenseDate   DateTime?
+  licenseIssuer String?
+  licenseWorks  String?
+  directorName  String?
+  website       String?
   /// Opening hours per weekday, Monday first: [{ opensAt, closesAt } in clinic-local minutes | null when closed].
   weekHours   Json?
   /// Whether the plan builder may draft plans from findings («Быстрый план»).
@@ -105,6 +112,7 @@ model Organization {
   materialReservations MaterialReservation[]
 
   @@map("organizations")
+  clinicDocuments ClinicDocument[]
 }
 
 model Branch {
@@ -377,6 +385,7 @@ model Patient {
   @@index([organizationId, phone])
   @@index([organizationId, lastName, firstName])
   @@map("patients")
+  clinicDocuments    ClinicDocument[]
 }
 
 enum ToothFormulaType {
@@ -653,6 +662,7 @@ model Appointment {
   @@index([doctorId, startsAt])
   @@index([patientId])
   @@map("appointments")
+  clinicDocuments ClinicDocument[]
 }
 
 // ─── Аудит ─────────────────────────────────────────────────────────────────
@@ -2371,4 +2381,63 @@ model BookingRequest {
 
   @@index([organizationId, status, startsAt])
   @@map("booking_requests")
+}
+
+// ─── Документы пациента ───────────────────────
+
+enum DocumentKind {
+  CONTRACT
+  PD_CONSENT
+  HEALTH_FORM
+  IDS_GENERAL
+  IDS_INTERVENTION
+  XRAY_CONSENT
+  REFUSAL
+  ESTIMATE
+  ACT
+  RECOMMENDATIONS
+  TAX_CERT
+}
+
+enum DocumentStatus {
+  CREATED
+  PRINTED
+  SIGNED
+  VOID
+}
+
+/// A patient document as issued: its content is frozen in `data` when it is created, so what was
+/// printed and signed never changes afterwards. A mistake is voided with a reason, never edited.
+model ClinicDocument {
+  id              String         @id @default(cuid())
+  organizationId  String
+  patientId       String
+  appointmentId   String?
+  treatmentPlanId String?
+  kind            DocumentKind
+  /// The intervention group for consents and the like, e.g. «surgery».
+  topic           String?
+  number          String
+  title           String
+  data            Json
+  templateVersion Int            @default(1)
+  status          DocumentStatus @default(CREATED)
+  printedAt       DateTime?
+  signedAt        DateTime?
+  signedById      String?
+  scanUrl         String?
+  voidReason      String?
+  createdById     String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  patient      Patient      @relation(fields: [patientId], references: [id])
+  appointment  Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+  @@index([patientId, kind])
+  @@index([appointmentId])
+  @@map("clinic_documents")
 }
