@@ -36,6 +36,14 @@ async function main() {
     assert.match(numbers[0], /^\d{4}-000001$/);
     assert.equal(new Set(numbers).size, 5);
 
+    // An unprinted paper follows corrected data; a printed one keeps what was printed.
+    await prisma.patient.update({ where: { id: patient.id }, data: { lastName: 'Орлова-Смирнова' } });
+    const contractId = pack.documents.find((doc) => doc.kind === 'CONTRACT')!.id;
+    assert.match(JSON.stringify((await docs.get(clinic.id, contractId)).data), /Орлова-Смирнова/, 'не напечатанный документ обновился');
+    await docs.mark(clinic.id, user.id, contractId, 'printed');
+    await prisma.patient.update({ where: { id: patient.id }, data: { lastName: 'Орлова' } });
+    assert.match(JSON.stringify((await docs.get(clinic.id, contractId)).data), /Орлова-Смирнова/, 'напечатанный документ не меняется');
+
     for (const doc of pack.unsigned) await docs.mark(clinic.id, user.id, doc.id, 'signed');
     assert.equal((await docs.blockers(clinic.id, first.id)).length, 0);
 

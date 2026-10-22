@@ -228,8 +228,19 @@ export class DocumentsService {
   }
 
   async get(orgId: string, id: string) {
-    const doc = await this.prisma.clinicDocument.findFirst({ where: { id, organizationId: orgId } });
+    let doc = await this.prisma.clinicDocument.findFirst({ where: { id, organizationId: orgId } });
     if (!doc) throw new NotFoundException('Документ не найден');
+    // Until it is printed a paper follows the current clinic, patient and doctor data; from print on it is frozen.
+    if (doc.status === 'CREATED') {
+      const visit = doc.appointmentId ? await this.prisma.appointment.findFirst({ where: { id: doc.appointmentId, organizationId: orgId }, include: { patient: true, doctor: true } }) : null;
+      const patient = visit?.patient ?? (await this.prisma.patient.findFirst({ where: { id: doc.patientId, organizationId: orgId } }));
+      if (patient) {
+        const fresh = await this.snapshot(orgId, { patient, doctor: visit?.doctor ?? null, startsAt: visit?.startsAt ?? doc.createdAt });
+        const old = (doc.data ?? {}) as Record<string, unknown>;
+        const data = { ...old, clinic: fresh.clinic, patient: fresh.patient, doctor: visit ? fresh.doctor : old.doctor ?? null, visitAt: visit ? fresh.visitAt : old.visitAt };
+        doc = await this.prisma.clinicDocument.update({ where: { id }, data: { data: data as Prisma.InputJsonValue } });
+      }
+    }
     return { ...view(doc), data: doc.data };
   }
 
