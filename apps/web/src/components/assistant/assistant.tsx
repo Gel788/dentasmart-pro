@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { useFocus } from '@/lib/focus';
 import styles from './assistant.module.css';
 import { chime, speak } from './voice-wake';
+import { MORE_KINDS, MoreCardView, type MoreCard } from './more-cards';
 
 type Card =
   | { kind: 'slots'; doctor: { id: string; name: string } | null; patient: { id: string; name: string } | null; serviceId: string | null; durationMin: number; service: string | null; items: { startsAt: string; endsAt: string }[] }
@@ -14,12 +15,13 @@ type Card =
   | { kind: 'day'; date: string; items: { id: string; startsAt: string; patientId: string; patient: string; doctor: string | null; service: string | null; status: string }[] }
   | { kind: 'link'; href: string; label: string }
   | { kind: 'visits'; intent: Intent; query: string; items: VisitRow[]; slots: { startsAt: string; endsAt: string }[] }
-  | { kind: 'newPatient'; lastName: string; firstName: string; middleName: string; phone: string };
+  | { kind: 'newPatient'; lastName: string; firstName: string; middleName: string; phone: string }
+  | MoreCard;
 type Intent = 'cancel' | 'confirm' | 'arrived' | 'no_show' | 'move';
 type VisitRow = { id: string; startsAt: string; endsAt: string; patientId: string; patient: string; doctor: string | null; service: string | null; status: string };
 type Exchange = { id: number; question: string; reply?: string; cards?: Card[]; error?: boolean };
 
-const IDEAS = ['Свободные окна завтра после 15:00', 'Кто записан сегодня?', 'Перенеси Орлову на понедельник', 'Новый пациент Петрова Анна +7 900 123-45-67'];
+const IDEAS = ['Свободные окна завтра после 15:00', 'Кто записан сегодня?', 'Перенеси Орлову на понедельник', 'Кто нам должен?', 'Выручка за неделю', 'Расскажи про Орлову', 'Прими у Орловой 5000 картой', 'Напомни завтра позвонить Волкову', 'Что заканчивается на складе?'];
 const STATUS: Record<string, { code: string; word: string }> = {
   SCHEDULED: { code: 'wait', word: 'не подтверждён' },
   CONFIRMED: { code: 'ok', word: 'подтверждён' },
@@ -165,7 +167,7 @@ export function Assistant({ open, onClose, wakeSignal = 0 }: { open: boolean; on
       setThread((items) => items.map((item) => (item.id === id ? { ...item, reply: data.reply, cards: data.cards } : item)));
       if (speakNext.current) {
         speakNext.current = false;
-        speak(data.cards.some((card) => card.kind === 'slots' || card.kind === 'visits' || card.kind === 'newPatient') ? `${data.reply} Выберите на экране.` : data.reply);
+        speak(data.cards.some((card) => ['slots', 'visits', 'newPatient', 'payment', 'newTask'].includes(card.kind)) ? `${data.reply} Подтвердите на экране.` : data.reply);
       }
     } catch (err) {
       if (speakNext.current) { speakNext.current = false; speak('Не получилось. Попробуйте ещё раз.'); }
@@ -296,6 +298,7 @@ function Answer({ item, onBook, onClose, onAsk }: { item: Exchange; onBook: (slo
 }
 
 function CardView({ card, onBook, onClose, onAsk }: { card: Card; onBook: (slot: { startsAt: string }, doctorId?: string, patientId?: string) => void; onClose: () => void; onAsk: (question: string) => void }) {
+  if (card.kind !== 'link' && MORE_KINDS.includes(card.kind)) return <MoreCardView card={card as MoreCard} onClose={onClose} onAsk={onAsk} />;
   if (card.kind === 'visits') return <VisitsCard card={card} onClose={onClose} />;
   if (card.kind === 'newPatient') return <NewPatientCard card={card} onClose={onClose} onAsk={onAsk} />;
   if (card.kind === 'slots') return <SlotsCard card={card} onBook={onBook} onClose={onClose} />;
@@ -339,6 +342,7 @@ function CardView({ card, onBook, onClose, onAsk }: { card: Card; onBook: (slot:
       </div>
     );
   }
+  if (card.kind !== 'link') return null;
   return <Link className={styles.jump} href={card.href} onClick={onClose}><span>{card.label}</span><ArrowRight size={20} aria-hidden="true" /></Link>;
 }
 

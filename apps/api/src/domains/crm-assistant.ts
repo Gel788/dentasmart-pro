@@ -14,6 +14,7 @@ import { clinicianWhere } from './clinicians';
 import { WidgetService } from './widget.service';
 import { WorkspaceService } from './workspace.service';
 import { DictationService } from './dictation.service';
+import { ReportsService } from './reports';
 
 /**
  * The staff assistant inside the CRM. A Russian-hosted model (GigaChat through Polza, so whatever a
@@ -51,7 +52,15 @@ type Action =
   | { type: 'open'; page?: string }
   | { type: 'visit'; intent?: string; patient?: string; date?: string; dateTo?: string; from?: string }
   | { type: 'new_patient'; lastName?: string; firstName?: string; middleName?: string; phone?: string }
+  | { type: 'report'; date?: string; dateTo?: string; doctor?: string }
+  | { type: 'debtors' }
+  | { type: 'patient_info'; patient?: string }
+  | { type: 'payment'; patient?: string; amount?: number; method?: string }
+  | { type: 'tasks' }
+  | { type: 'task_new'; title?: string; date?: string; patient?: string; assignee?: string }
+  | { type: 'stock'; query?: string }
   | { type: 'none' };
+const ACTIONS = ['slots', 'patient', 'day', 'open', 'visit', 'new_patient', 'report', 'debtors', 'patient_info', 'payment', 'tasks', 'task_new', 'stock'];
 
 export type Card =
   | { kind: 'slots'; doctor: { id: string; name: string } | null; patient: { id: string; name: string } | null; serviceId: string | null; durationMin: number; service: string | null; items: { startsAt: string; endsAt: string }[] }
@@ -59,7 +68,14 @@ export type Card =
   | { kind: 'day'; date: string; items: { id: string; startsAt: string; patientId: string; patient: string; doctor: string | null; service: string | null; status: string }[] }
   | { kind: 'link'; href: string; label: string }
   | { kind: 'visits'; intent: VisitIntent; query: string; items: VisitRow[]; slots: { startsAt: string; endsAt: string }[] }
-  | { kind: 'newPatient'; lastName: string; firstName: string; middleName: string; phone: string };
+  | { kind: 'newPatient'; lastName: string; firstName: string; middleName: string; phone: string }
+  | { kind: 'report'; from: string; to: string; doctor: string | null; visits: { total: number; completed: number; noShows: number; cancelled: number }; patients: { seen: number; new: number }; money: { moneyIn: number; net: number; averageBill: number; debtNow: number } | null }
+  | { kind: 'debtors'; total: number; items: { patientId: string; name: string; phone: string | null; amount: number }[] }
+  | { kind: 'patientInfo'; id: string; name: string; phone: string | null; age: number | null; allergies: string[] | null; debt: number | null; nextVisit: { id: string; startsAt: string; doctor: string | null; service: string | null } | null; lastVisit: { startsAt: string; service: string | null } | null; todayVisitId: string | null; plan: { title: string; total: number; left: number } | null; tasks: number }
+  | { kind: 'payment'; patient: { id: string; name: string } | null; amount: number; method: 'CASH' | 'CARD' | 'ONLINE'; debt: number | null; candidates: { id: string; name: string; phone: string | null }[] }
+  | { kind: 'tasks'; items: { id: string; title: string; dueAt: string | null; overdue: boolean; patient: { id: string; name: string } | null }[] }
+  | { kind: 'newTask'; title: string; dueAt: string | null; patient: { id: string; name: string } | null; assignee: { id: string; name: string } | null }
+  | { kind: 'stock'; query: string; items: { id: string; name: string; unit: string; quantity: number; minStock: number; low: boolean }[] };
 export type VisitIntent = 'cancel' | 'confirm' | 'arrived' | 'no_show' | 'move';
 type VisitRow = { id: string; startsAt: string; endsAt: string; patientId: string; patient: string; doctor: string | null; service: string | null; status: string };
 const INTENTS: VisitIntent[] = ['cancel', 'confirm', 'arrived', 'no_show', 'move'];
@@ -78,7 +94,7 @@ export class CrmAssistantService {
   /** Swappable in tests; production calls Polza. */
   http: Fetch = (input, init) => fetch(input, init);
 
-  constructor(private readonly prisma: PrismaService, private readonly widget: WidgetService, private readonly workspace: WorkspaceService) {}
+  constructor(private readonly prisma: PrismaService, private readonly widget: WidgetService, private readonly workspace: WorkspaceService, private readonly reports: ReportsService) {}
 
   get enabled() {
     return Boolean(process.env.POLZA_API_KEY);
@@ -108,8 +124,8 @@ export class CrmAssistantService {
     const { reply } = routed;
     // Small models miscount weekdays and miss commands, so dates and command verbs are read here too.
     const said = turns.at(-1)!.content;
-    let action = withDates(withCommand(routed.action, said), said, today);
-    if ((action.type === 'visit' && !action.patient) || (action.type === 'slots' && !action.patient && /запиш/i.test(said))) {
+    let action = withMoney(withDates(withCommand(routed.action, said), said, today), said);
+    if (((action.type === 'visit' || action.type === 'patient_info' || action.type === 'payment') && !action.patient) || (action.type === 'slots' && !action.patient && /запиш/i.test(said))) {
       const named = await this.nameIn(orgId, said);
       if (named) action = { ...action, patient: named };
     }
@@ -241,11 +257,150 @@ export class CrmAssistantService {
       if (page) cards.push({ kind: 'link', href: page.href, label: page.label });
     }
 
+    if (action.type === 'report' && can('schedule.read')) {
+      const doctor = doctorOf(action.doctor);
+      const from = isDate(action.date) ? action.date : today;
+      const to = isDate(action.dateTo) && action.dateTo >= from ? action.dateTo : from;
+      const report = await this.reports.report(orgId, permissions, { from, to, doctorId: doctor?.id });
+      cards.push({
+        kind: 'report', from, to,
+        doctor: doctor ? `${doctor.lastName} ${doctor.firstName}` : null,
+        visits: { total: report.visits.total, completed: report.visits.completed, noShows: report.visits.noShows, cancelled: report.visits.cancelled },
+        patients: { seen: report.patients.seen, new: report.patients.new },
+        money: report.finance ? { moneyIn: report.finance.moneyIn, net: report.finance.net, averageBill: report.finance.averageBill, debtNow: report.finance.debtNow } : null,
+      });
+    }
+
+    if (action.type === 'debtors' && can('finance.read')) {
+      const open = await this.prisma.invoice.findMany({
+        where: { organizationId: orgId, status: { in: ['ISSUED', 'PARTIAL'] } },
+        select: { patientId: true, totalAmount: true, paidAmount: true, discountAmount: true, patient: { select: { firstName: true, lastName: true, phone: true } } },
+        take: 2000,
+      });
+      const byPatient = new Map<string, { patientId: string; name: string; phone: string | null; amount: number }>();
+      for (const row of open) {
+        const left = Number(row.totalAmount) - Number(row.paidAmount) - Number(row.discountAmount ?? 0);
+        if (left <= 0.009) continue;
+        const entry = byPatient.get(row.patientId) ?? { patientId: row.patientId, name: `${row.patient.lastName} ${row.patient.firstName}`, phone: row.patient.phone, amount: 0 };
+        entry.amount = Math.round((entry.amount + left) * 100) / 100;
+        byPatient.set(row.patientId, entry);
+      }
+      const items = [...byPatient.values()].sort((a, b) => b.amount - a.amount);
+      cards.push({ kind: 'debtors', total: Math.round(items.reduce((sum, row) => sum + row.amount, 0) * 100) / 100, items: items.slice(0, 12) });
+    }
+
+    if (action.type === 'patient_info' && can('patient.read')) {
+      const query = String(action.patient ?? '').trim();
+      const patients = query ? await this.findPatients(orgId, query) : [];
+      if (patients.length === 1) cards.push(await this.patientInfo(orgId, patients[0].id, permissions, offset));
+      else cards.push({ kind: 'patients', query, items: patients });
+    }
+
+    if (action.type === 'payment' && can('finance.write')) {
+      const query = String(action.patient ?? '').trim();
+      const patients = query ? await this.findPatients(orgId, query) : [];
+      const one = patients.length === 1 ? patients[0] : null;
+      const method = action.method === 'CASH' || action.method === 'ONLINE' ? action.method : 'CARD';
+      cards.push({
+        kind: 'payment',
+        patient: one ? { id: one.id, name: one.name } : null,
+        amount: Math.max(0, Math.round((Number(action.amount) || 0) * 100) / 100),
+        method,
+        debt: one ? await this.debtOf(orgId, one.id) : null,
+        candidates: one ? [] : patients,
+      });
+    }
+
+    if (action.type === 'tasks' && can('patient.read')) {
+      const rows = await this.prisma.staffTask.findMany({
+        where: { organizationId: orgId, status: 'OPEN', OR: [{ assigneeId: userId }, { assigneeId: null, createdById: userId }] },
+        orderBy: [{ dueAt: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+        take: 12,
+        select: { id: true, title: true, dueAt: true, patient: { select: { id: true, firstName: true, lastName: true } } },
+      });
+      cards.push({ kind: 'tasks', items: rows.map((row) => ({ id: row.id, title: row.title, dueAt: row.dueAt?.toISOString() ?? null, overdue: !!row.dueAt && row.dueAt < new Date(), patient: row.patient ? { id: row.patient.id, name: `${row.patient.lastName} ${row.patient.firstName}` } : null })) });
+    }
+
+    if (action.type === 'task_new' && can('patient.read')) {
+      const patients = action.patient ? await this.findPatients(orgId, action.patient) : [];
+      const people = await this.prisma.user.findMany({ where: { organizationId: orgId, isActive: true }, select: { id: true, email: true, employee: { select: { firstName: true, lastName: true } } }, take: 200 });
+      const words = clean(action.assignee).split(/\s+/).filter((word) => word.length > 2);
+      const assignee = words.length ? people.find((row) => row.employee && words.some((word) => [row.employee!.firstName, row.employee!.lastName].some((part) => clean(part).startsWith(word.slice(0, Math.max(3, word.length - 2)))))) : null;
+      const due = isDate(action.date) ? new Date(Date.parse(`${action.date}T18:00:00Z`) - offset * 60000) : null;
+      cards.push({
+        kind: 'newTask',
+        title: capitalize(String(action.title ?? '').trim().slice(0, 200)),
+        dueAt: due?.toISOString() ?? null,
+        patient: patients.length === 1 ? { id: patients[0].id, name: patients[0].name } : null,
+        assignee: assignee?.employee ? { id: assignee.id, name: `${assignee.employee.lastName} ${assignee.employee.firstName}` } : null,
+      });
+    }
+
+    if (action.type === 'stock' && can('warehouse.read')) {
+      const query = String(action.query ?? '').trim().slice(0, 60);
+      const words = clean(query).split(/\s+/).filter((word) => word.length > 2).map((word) => word.slice(0, Math.max(4, word.length - 2)));
+      const rows = await this.prisma.inventoryItem.findMany({
+        where: { organizationId: orgId, isActive: true, ...(words.length ? { AND: words.map((word) => ({ name: { contains: word, mode: 'insensitive' as const } })) } : {}) },
+        select: { id: true, name: true, unit: true, minStock: true, batches: { select: { quantity: true } } },
+        take: 300,
+        orderBy: { name: 'asc' },
+      });
+      const items = rows
+        .map((row) => {
+          const quantity = Math.round(row.batches.reduce((sum, batch) => sum + Number(batch.quantity), 0) * 1000) / 1000;
+          return { id: row.id, name: row.name, unit: row.unit, quantity, minStock: Number(row.minStock), low: quantity <= Number(row.minStock) };
+        })
+        // Without a name, «что заканчивается»: only what is at or under its minimum.
+        .filter((row) => words.length || row.low)
+        .slice(0, 12);
+      cards.push({ kind: 'stock', query, items });
+    }
+
     // Who asked and what kind of lookup, never the words.
     await this.prisma.auditLog.create({ data: { organizationId: orgId, userId, entityType: 'CrmAssistant', entityId: orgId, action: 'VIEW', changes: { action: action.type, cards: cards.length } } }).catch(() => undefined);
     // For commands the words come from what will actually happen, never from the model's guess.
-    const acting = cards.some((card) => card.kind === 'visits' || card.kind === 'newPatient');
+    const acting = cards.some((card) => ['visits', 'newPatient', 'payment', 'newTask', 'report', 'debtors', 'patientInfo', 'tasks', 'stock'].includes(card.kind));
     return { reply: acting || !reply ? describe(cards) : reply, cards };
+  }
+
+  private async debtOf(orgId: string, patientId: string) {
+    const open = await this.prisma.invoice.findMany({ where: { organizationId: orgId, patientId, status: { in: ['ISSUED', 'PARTIAL'] } }, select: { totalAmount: true, paidAmount: true, discountAmount: true } });
+    return Math.max(0, Math.round(open.reduce((sum, row) => sum + Number(row.totalAmount) - Number(row.paidAmount) - Number(row.discountAmount ?? 0), 0) * 100) / 100);
+  }
+
+  /** One patient at a glance; each part only for those allowed to see it. */
+  private async patientInfo(orgId: string, patientId: string, permissions: string[], offset: number): Promise<Card> {
+    const can = (perm: string) => permissions.includes(perm);
+    const now = new Date();
+    const local = new Date(now.getTime() + offset * 60000).toISOString().slice(0, 10);
+    const dayStart = new Date(Date.parse(`${local}T00:00:00Z`) - offset * 60000);
+    const visitSelect = { id: true, startsAt: true, doctor: { select: { firstName: true, lastName: true } }, service: { select: { name: true } } } as const;
+    const [patient, next, last, today, plan, tasks] = await Promise.all([
+      this.prisma.patient.findFirstOrThrow({ where: { id: patientId, organizationId: orgId }, select: { id: true, firstName: true, lastName: true, middleName: true, phone: true, birthDate: true, allergies: true } }),
+      this.prisma.appointment.findFirst({ where: { organizationId: orgId, patientId, startsAt: { gte: now }, status: { notIn: ['CANCELLED', 'NO_SHOW', 'COMPLETED'] } }, orderBy: { startsAt: 'asc' }, select: visitSelect }),
+      this.prisma.appointment.findFirst({ where: { organizationId: orgId, patientId, status: 'COMPLETED' }, orderBy: { startsAt: 'desc' }, select: visitSelect }),
+      this.prisma.appointment.findFirst({ where: { organizationId: orgId, patientId, startsAt: { gte: dayStart, lt: new Date(dayStart.getTime() + 86400000) }, status: { notIn: ['CANCELLED', 'NO_SHOW'] } }, orderBy: { startsAt: 'asc' }, select: { id: true } }),
+      can('medical.read')
+        ? this.prisma.treatmentPlan.findFirst({ where: { organizationId: orgId, patientId, status: { in: ['ACCEPTED', 'IN_PROGRESS'] } }, orderBy: { createdAt: 'desc' }, select: { title: true, items: { select: { price: true, status: true } } } })
+        : null,
+      this.prisma.staffTask.count({ where: { organizationId: orgId, patientId, status: 'OPEN' } }),
+    ]);
+    const age = patient.birthDate ? Math.floor((now.getTime() - patient.birthDate.getTime()) / (365.25 * 86400000)) : null;
+    const short = (row: { firstName: string; lastName: string } | null) => (row ? `${row.lastName} ${row.firstName[0] ?? ''}.` : null);
+    return {
+      kind: 'patientInfo',
+      id: patient.id,
+      name: [patient.lastName, patient.firstName, patient.middleName].filter(Boolean).join(' '),
+      phone: patient.phone,
+      age,
+      allergies: can('medical.read') ? patient.allergies : null,
+      debt: can('finance.read') ? await this.debtOf(orgId, patientId) : null,
+      nextVisit: next ? { id: next.id, startsAt: next.startsAt.toISOString(), doctor: short(next.doctor), service: next.service?.name ?? null } : null,
+      lastVisit: last ? { startsAt: last.startsAt.toISOString(), service: last.service?.name ?? null } : null,
+      todayVisitId: today?.id ?? null,
+      plan: plan ? { title: plan.title, total: plan.items.reduce((sum, item) => sum + Number(item.price), 0), left: plan.items.filter((item) => item.status !== 'DONE').reduce((sum, item) => sum + Number(item.price), 0) } : null,
+      tasks,
+    };
   }
 
   /** Booking straight from the conversation: the chair is picked here, the clash checks are the usual ones. */
@@ -325,10 +480,17 @@ export class CrmAssistantService {
       '- day: кто записан на день. Поля date (YYYY-MM-DD) и doctor.',
       '- visit: действие с уже существующим визитом пациента. Поля: patient (фамилия), intent — одно из: cancel (отменить), confirm (подтвердить), arrived (пришёл, отметить приход), no_show (не пришёл), move (перенести), from (HH:MM, если для переноса назвали время).',
       '- new_patient: завести нового пациента. Поля lastName, firstName, middleName, phone.',
+      '- report: цифры за период — сколько визитов, пришло пациентов, новых, выручка, средний чек, неявки. Поля date и dateTo (YYYY-MM-DD; «сегодня», «за неделю», «за месяц» переведи в даты), doctor (если назван).',
+      '- debtors: кто должен клинике, долги пациентов. Без полей.',
+      '- patient_info: всё о пациенте — телефон, долг, ближайший и прошлый визит, план лечения, аллергии. Поле patient (фамилия).',
+      '- payment: принять оплату от пациента. Поля patient (фамилия), amount (число рублей), method — CASH (наличные), CARD (карта), ONLINE (перевод, СБП).',
+      '- tasks: мои задачи, что мне сделать. Без полей.',
+      '- task_new: создать задачу или напоминание. Поля title (что сделать, своими словами), date (YYYY-MM-DD, срок), patient (фамилия, если задача про пациента), assignee (фамилия сотрудника, если поручают другому).',
+      '- stock: остатки на складе, что заканчивается. Поле query (материал словами; пусто — показать то, что заканчивается).',
       `- open: открыть раздел. Поле page — один из адресов: ${context.pages.map((page) => `${page.href} (${page.label})`).join(', ')}.`,
       '- none: вопрос о том, как работать в CRM, или просто разговор. Тогда ответь сам в reply, в 1–4 предложениях.',
       'Когда действие не none, reply — одна короткая фраза о том, что ты показываешь («Свободные окна у Завена Седраковича завтра вечером:»). Не придумывай имена, время, суммы и диагнозы — их покажет CRM.',
-      'Ты выполняешь команды через CRM: она покажет, что будет сделано, а человек нажмёт «Подтвердить». На просьбу записать выбери slots, на отмену, перенос, подтверждение и отметки визита — visit, на нового пациента — new_patient.',
+      'Ты выполняешь команды через CRM: она покажет, что будет сделано, а человек нажмёт «Подтвердить». На просьбу записать выбери slots, на отмену, перенос, подтверждение и отметки визита — visit, на нового пациента — new_patient, на оплату — payment, на «напомни» и «поставь задачу» — task_new.',
       'Подсказки по CRM: часы работы клиники и врачей, праздники и отпуска — в Настройках; запись — кнопкой на свободном месте в Расписании или из карточки окна; протокол приёма и диктовка — на экране визита; заявки с сайта подтверждаются в разделе «Запись с сайта».',
       'В reply пиши как живой помощник: никогда не упоминай action, JSON, поля и адреса страниц.',
       'Ответь только JSON без пояснений: {"reply":"","action":{"type":"slots","patient":"","doctor":"","date":"","dateTo":"","from":"","to":"","service":""}}',
@@ -407,6 +569,12 @@ export function withCommand(action: Action, text: string): Action {
   const patient = 'patient' in action ? action.patient : action.type === 'patient' ? action.query : undefined;
   const visit = (intent: VisitIntent): Action => ({ type: 'visit', intent, patient, ...(action.type === 'visit' ? { from: action.from } : {}) });
   if (/нов\S* пациент|заведи|завести|создай пациент/.test(said)) return action.type === 'new_patient' ? action : { type: 'new_patient' };
+  if (/(прими|принять|внеси|провед\S*|заплатил|оплатил|оплата от)\s.*\d/.test(said)) return action.type === 'payment' ? action : { type: 'payment', patient };
+  if (/кто (нам )?долж|должник|долги пациент|задолженн/.test(said)) return { type: 'debtors' };
+  if (/(напомни|поставь задач|создай задач|добавь задач|новая задача)/.test(said)) return action.type === 'task_new' ? action : { type: 'task_new', title: text.replace(/^(зааза|заза)[,\s]*/i, '').slice(0, 200) };
+  if (/(мои задачи|какие\S*( у меня)? задач|задачи на сегодня|что мне (сделать|надо)|список задач)/.test(said)) return { type: 'tasks' };
+  if (/(остат|на складе|заканчива|сколько осталось)/.test(said)) return action.type === 'stock' ? action : { type: 'stock' };
+  if (/(выручк|сколько заработ|сколько денег|отч[её]т|статистик|сколько (было )?визитов|средний чек)/.test(said) && action.type !== 'report') return { type: 'report' };
   if (/перенес|перенос|передвин/.test(said)) return visit('move');
   if (/отмени|отменить|отмена/.test(said)) return visit('cancel');
   if (/не (при|яви)ш|не пришл|неявк/.test(said)) return visit('no_show');
@@ -416,6 +584,16 @@ export function withCommand(action: Action, text: string): Action {
 }
 
 function withDates(action: Action, text: string, today: string): Action {
+  if (action.type === 'report' || action.type === 'task_new') {
+    const said = clean(text);
+    const dates = datesIn(text, today);
+    if (action.type === 'task_new') return dates ? { ...action, date: dates.date } : action;
+    if (/за (эту )?недел/.test(said)) return { ...action, date: weekMonday(today), dateTo: today };
+    if (/за (этот )?месяц/.test(said)) return { ...action, date: `${today.slice(0, 8)}01`, dateTo: today };
+    if (/вчера/.test(said)) return { ...action, date: addDays(today, -1), dateTo: addDays(today, -1) };
+    if (/сегодня/.test(said)) return { ...action, date: today, dateTo: today };
+    return dates ? { ...action, date: dates.date, dateTo: dates.dateTo ?? dates.date } : action;
+  }
   if (action.type !== 'slots' && action.type !== 'day') return action;
   if (action.type === 'slots') {
     const said = clean(text);
@@ -426,6 +604,22 @@ function withDates(action: Action, text: string, today: string): Action {
   const dates = datesIn(text, today);
   if (!dates) return action;
   return action.type === 'slots' ? { ...action, date: dates.date, dateTo: dates.dateTo ?? dates.date } : { ...action, date: dates.date };
+}
+
+function weekMonday(date: string) {
+  const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+  return addDays(date, -((day + 6) % 7));
+}
+
+/** «Прими у Орловой 5 000 картой»: the sum and the way to pay are read from the words, not guessed. */
+export function withMoney(action: Action, text: string): Action {
+  if (action.type !== 'payment') return action;
+  const said = clean(text);
+  const thousands = /(\d+(?:[.,]\d+)?)\s*(тыс|к(?![а-я]))/.exec(said);
+  const plain = /(\d[\d\s]*(?:[.,]\d{1,2})?)\s*(₽|руб|р(?![а-я])|рублей)?/.exec(said.replace(/(\d)\s+(?=\d{3}\b)/g, '$1'));
+  const amount = thousands ? Number(thousands[1].replace(',', '.')) * 1000 : plain ? Number(plain[1].replace(/\s/g, '').replace(',', '.')) : Number(action.amount) || 0;
+  const method = /налич|кэш/.test(said) ? 'CASH' : /перевод|сбп|онлайн/.test(said) ? 'ONLINE' : /карт|терминал/.test(said) ? 'CARD' : action.method;
+  return { ...action, amount: amount || Number(action.amount) || 0, method };
 }
 
 const capitalize = (value: string) => value.charAt(0).toLocaleUpperCase('ru-RU') + value.slice(1);
@@ -447,8 +641,18 @@ function describe(cards: Card[]) {
     return { cancel: 'Какой визит отменить?', confirm: 'Подтверждаю визит:', arrived: 'Отмечаю приход:', no_show: 'Отмечаю неявку:', move: 'Перенос визита — выберите новое время:' }[card.intent];
   }
   if (card.kind === 'newPatient') return 'Проверьте данные нового пациента:';
+  if (card.kind === 'report') return card.from === card.to ? `Цифры за ${ruDate(card.from)}${card.doctor ? `, ${card.doctor}` : ''}:` : `Цифры с ${ruDate(card.from)} по ${ruDate(card.to)}${card.doctor ? `, ${card.doctor}` : ''}:`;
+  if (card.kind === 'debtors') return card.items.length ? `Должны клинике ${card.items.length > 1 ? `${card.items.length} пациентов` : 'один пациент'}, всего ${rub(card.total)}:` : 'Долгов нет — все счета оплачены.';
+  if (card.kind === 'patientInfo') return `${card.name}:`;
+  if (card.kind === 'payment') return card.patient ? `Оплата ${card.amount ? `${rub(card.amount)} ` : ''}— ${card.patient.name}. Проверьте и подтвердите:` : card.candidates.length ? 'От кого принять оплату?' : 'Назовите фамилию пациента и сумму.';
+  if (card.kind === 'tasks') return card.items.length ? `Открытых задач: ${card.items.length}` : 'Открытых задач нет.';
+  if (card.kind === 'newTask') return card.title ? 'Создаю задачу — проверьте:' : 'Что записать в задачу?';
+  if (card.kind === 'stock') return card.items.length ? (card.query ? 'На складе:' : 'Заканчивается:') : card.query ? `«${card.query}» на складе не нашёл.` : 'Всё в достатке, ничего не заканчивается.';
   return `Раздел «${card.label}»:`;
 }
+
+const rub = (value: number) => `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value)} ₽`;
+const ruDate = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('ru-RU', { timeZone: 'UTC', day: 'numeric', month: 'long' });
 
 function addDays(date: string, days: number) {
   return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
@@ -464,7 +668,7 @@ export function parseRoute(content: string): { reply: string; action: Action } {
   }
   const reply = typeof raw.reply === 'string' ? raw.reply.trim().slice(0, 1200) : start < 0 ? content.trim().slice(0, 1200) : '';
   const action = raw.action && typeof raw.action === 'object' ? raw.action : {};
-  const type = ['slots', 'patient', 'day', 'open', 'visit', 'new_patient'].includes(action.type) ? action.type : 'none';
+  const type = ACTIONS.includes(action.type) ? action.type : 'none';
   const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, 80) : undefined);
   return {
     reply,
@@ -485,6 +689,10 @@ export function parseRoute(content: string): { reply: string; action: Action } {
       durationMin: Number(action.durationMin) || undefined,
       query: text(action.query),
       page: text(action.page),
+      amount: Number(String(action.amount ?? '').replace(/[^\d.,]/g, '').replace(',', '.')) || undefined,
+      method: ['CASH', 'CARD', 'ONLINE'].includes(String(action.method).toUpperCase()) ? String(action.method).toUpperCase() : undefined,
+      title: typeof action.title === 'string' && action.title.trim() ? action.title.trim().slice(0, 200) : undefined,
+      assignee: text(action.assignee),
     } as Action,
   };
 }
