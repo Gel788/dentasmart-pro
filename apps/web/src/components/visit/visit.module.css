@@ -52,7 +52,7 @@
 .line[data-on] { border-color: var(--accent); background: var(--accent-soft); }
 .line[data-done] { cursor: default; opacity: 0.8; }
 .lines li[data-hot] .line { box-shadow: inset 0 0 0 2px var(--accent); }
-.tooth { display: grid; place-items: center; height: 28px; border-radius: 3px; background: var(--text); color: #f5f5f2; font-family: var(--font-mono), monospace; font-size: 13px; }
+.tooth { display: grid; place-items: center; height: 28px; border-radius: 3px; background: var(--accent-soft); color: var(--accent-ink); font-family: var(--font-mono), monospace; font-size: 13px; }
 :global(html.dark) .tooth { color: #141414; }
 .lineText { display: flex; flex-direction: column; min-width: 0; }
 .lineText b { font-weight: 600; overflow-wrap: anywhere; }
@@ -60,7 +60,7 @@
 .price { font-family: var(--font-mono), monospace; font-size: 13.5px; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
 .chart { display: flex; flex-direction: column; gap: 10px; min-width: 0; overflow: hidden; }
 .imagesLink { align-self: flex-start; color: var(--accent-ink); font-size: 13.5px; }
-.fold summary { cursor: pointer; color: var(--accent-ink); font-size: 13.5px; min-height: 32px; display: inline-flex; align-items: center; }
+.fold summary { cursor: pointer; color: var(--accent-ink); font-size: 13.5px; min-height: 32px; display: inline-flex; align-items: center; border-radius: var(--r-sm); }
 
 .templates { display: flex; flex-wrap: wrap; gap: 6px; }
 .templates button { min-height: 36px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-solid); color: var(--text); font: inherit; font-size: 13.5px; }
@@ -104,6 +104,6 @@
 .skipDocs:hover { color: var(--code-owe); }
 .skipBox { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--code-owe); background: var(--danger-soft); }
 .skipBox label { font-size: 13.5px; font-weight: 600; color: var(--danger); }
-.skipBox textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 14.5px; resize: vertical; }
+.skipBox textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 14.5px; resize: vertical; border-radius: var(--r-sm); }
 .skipBox > div { display: flex; justify-content: flex-end; gap: 8px; }
 .skipBox :global(.sd-btn), .skipBox :global(.sd-btn-ghost) { min-height: 44px; }

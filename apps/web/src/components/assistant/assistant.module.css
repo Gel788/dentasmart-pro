@@ -42,6 +42,9 @@
 .inline { min-height: 52px; margin-top: 8px; font-size: 15px; }
 
 .fab { display: none; }
+.top { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px 0 5px; border-radius: 999px; background: var(--surface-solid); color: var(--text); font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+.top .orb { width: 26px; height: 26px; }
+@media (max-width: 1100px) { .top span { display: none; } .top { padding: 0 5px; } }
 
 /* The living edge: a spectrum ring around the screen and its soft bloom. */
 .edge, .bloom { position: fixed; inset: 0; pointer-events: none; border-radius: 0; }

@@ -67,6 +67,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [sheet, setSheet] = useState(false);
   const [assistant, setAssistant] = useState(false);
   const [notes, setNotes] = useState(false);
+  const [menu, setMenu] = useState(false);
+  useEffect(() => { setMenu(false); }, [pathname]);
   const { feed, reload: reloadNotes } = useNotifications();
   const unread = feed?.unread ?? 0;
   // Set after mount so the server render and the browser agree on the date.
@@ -156,12 +158,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <span className="sd-mark" aria-hidden>С</span>
           <span className="sd-brand-text"><strong>Седракович Дент</strong><span>{today}</span></span>
         </Link>
-        <button className="sd-search" type="button" onClick={() => setPalette(true)} title="Поиск (⌘K)">
-          <Search />
-          <span className="sd-search-text">Поиск</span>
-          <kbd>⌘K</kbd>
-        </button>
-        <AssistantTrigger variant="nav" onOpen={() => setAssistant(true)} />
         <nav className="sd-nav-list">
           {primary.map((link) => <NavLink key={link.href} link={link} active={isActive(link.href)} />)}
           {more.length > 0 && <span className="sd-nav-group">Ещё</span>}
@@ -172,25 +168,44 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <span className="sd-nav-label">Ещё</span>
         </button>
         <div className="sd-nav-foot">
-          <button className="sd-link is-extra" type="button" onClick={() => setNotes(true)} title="Уведомления" aria-label={unread ? `Уведомления, новых: ${unread}` : 'Уведомления'}>
-            <span className="sd-link-ico"><Bell /></span>
-            <span className="sd-nav-label">Уведомления</span>
-            {unread > 0 && <span className="sd-count" aria-hidden="true">{unread > 99 ? '99+' : unread}</span>}
-          </button>
           {settings && <NavLink link={settings} active={isActive(settings.href)} extra />}
           <button className={`sd-link is-extra${panelOpen ? ' active' : ''}`} type="button" onClick={() => setPanelOpen(!panelOpen)} aria-pressed={panelOpen} title="Панель контекста">
             <span className="sd-link-ico"><PanelRight /></span>
             <span className="sd-nav-label">{panelOpen ? 'Скрыть контекст' : 'Контекст'}</span>
           </button>
-          <div className="sd-user">
-            <span className="sd-avatar" aria-hidden>{initials}</span>
-            <span className="sd-user-text"><b>{fullName}</b><span>{user?.organization.name}</span></span>
-            <button className="sd-user-btn" type="button" onClick={toggle} title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'} aria-label={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}>{theme === 'dark' ? <Sun /> : <Moon />}</button>
-            <button className="sd-user-btn" type="button" onClick={logout} title="Выйти" aria-label="Выйти"><LogOut /></button>
-          </div>
         </div>
       </aside>
       <div className="sd-main">
+        <header className="sd-top">
+          <div className="sd-top-where">
+            <b>{links.find((link) => isActive(link.href))?.label ?? (pathname.startsWith('/visits') ? 'Приём' : pathname.startsWith('/patients') ? 'Пациенты' : pathname.startsWith('/finance') ? 'Касса' : pathname.startsWith('/warehouse') ? 'Склад' : 'Седракович Дент')}</b>
+            <span>{today}</span>
+          </div>
+          <button className="sd-top-search" type="button" onClick={() => setPalette(true)}>
+            <Search aria-hidden="true" />
+            <span>Пациент, запись или раздел</span>
+            <kbd>⌘K</kbd>
+          </button>
+          <div className="sd-top-acts">
+            {user?.permissions.includes('schedule.write') && <Link className="sd-top-book" href="/schedule"><CalendarRange aria-hidden="true" />Записать</Link>}
+            <AssistantTrigger variant="top" onOpen={() => setAssistant(true)} />
+            <button className="sd-top-icon" type="button" onClick={() => setNotes(true)} aria-label={unread ? `Уведомления, новых: ${unread}` : 'Уведомления'} title="Уведомления">
+              <Bell aria-hidden="true" />
+              {unread > 0 && <span className="sd-top-badge" aria-hidden="true">{unread > 99 ? '99+' : unread}</span>}
+            </button>
+            <div className="sd-top-me">
+              <button type="button" className="sd-top-avatar" onClick={() => setMenu((open) => !open)} aria-expanded={menu} aria-haspopup="menu" aria-label="Профиль">{initials}</button>
+              {menu && (
+                <div className="sd-top-menu" role="menu" onMouseLeave={() => setMenu(false)}>
+                  <div className="sd-top-menu-who"><b>{fullName}</b><span>{user?.email}</span></div>
+                  <button type="button" role="menuitem" onClick={() => { toggle(); setMenu(false); }}>{theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}{theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</button>
+                  {settings && <Link role="menuitem" href="/settings" onClick={() => setMenu(false)}><Settings aria-hidden="true" />Настройки клиники</Link>}
+                  <button type="button" role="menuitem" onClick={logout}><LogOut aria-hidden="true" />Выйти</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
         <div className="sd-workspace">{children}</div>
       </div>
       <BookingSheet />

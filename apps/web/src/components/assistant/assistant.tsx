@@ -153,7 +153,10 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
 }
 
 /** How the assistant is called up: a glowing pill in the menu, a floating orb on a phone. */
-export function AssistantTrigger({ variant, onOpen }: { variant: 'nav' | 'fab' | 'inline'; onOpen: () => void }) {
+export function AssistantTrigger({ variant, onOpen }: { variant: 'nav' | 'fab' | 'inline' | 'top'; onOpen: () => void }) {
+  if (variant === 'top') {
+    return <button type="button" className={`${styles.trigger} ${styles.top}`} onClick={onOpen} title="Спросить ИИ (⌘J)"><Orb /><span>Спросить ИИ</span></button>;
+  }
   if (variant === 'fab') {
     return <button type="button" className={`${styles.trigger} ${styles.fab}`} onClick={onOpen} aria-label="Спросить ИИ-помощника"><Orb /></button>;
   }

@@ -27,7 +27,7 @@
 .contacts a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
 .tags span { padding: 1px 7px; border-radius: 2px; background: var(--surface-2); color: var(--text-secondary); font-size: 12px; line-height: 18px; }
-.tags span[data-tone='muted'] { background: transparent; border: 1px solid var(--border-strong); color: var(--muted); }
+.tags span[data-tone='muted'] { background: transparent; border: 1px solid var(--border-strong); color: var(--muted); border-radius: var(--r-sm); }
 
 .alerts { display: flex; gap: 10px; padding: 12px; border-radius: 3px; background: var(--danger-soft); color: var(--danger); }
 .alerts svg { flex: 0 0 auto; margin-top: 1px; }
@@ -118,7 +118,7 @@
 .chip button { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 2px; background: transparent; color: inherit; }
 .chip button:hover { background: rgba(155, 28, 18, 0.12); }
 .flags { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 20px; }
-.toggle { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14.5px; cursor: pointer; }
+.toggle { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14.5px; cursor: pointer; border-radius: var(--r-sm); }
 .toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
 .saveBar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding-top: 14px; border-top: 1px solid var(--border); }
 .saveState { flex: 1 1 200px; color: var(--muted); font-size: 13px; }

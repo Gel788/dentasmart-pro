@@ -7,7 +7,7 @@
 @keyframes slide { from { transform: translateX(32px); opacity: 0.4; } }
 
 .head { flex: none; display: flex; align-items: center; gap: 8px; min-height: 60px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--border); }
-.head h2 { order: -1; flex: 1; margin: 0; font-size: 18px !important; font-weight: 800; letter-spacing: -0.01em; line-height: 1.2 !important; }
+.head h2 { order: -1; flex: 1; margin: 0; font-size: 18px !important; font-weight: 650; letter-spacing: -0.01em; line-height: 1.2 !important; }
 .icon { display: grid; place-items: center; width: 44px; height: 44px; border: 0; background: transparent; color: var(--text); cursor: pointer; }
 .icon:hover { background: var(--surface-2); }
 .icon svg { width: 20px; height: 20px; }
@@ -19,9 +19,9 @@
 .date { margin: 0 0 6px; color: var(--text-secondary); font-size: 14px; font-weight: 600; }
 .date:first-letter { text-transform: uppercase; }
 .timeRow { display: flex; align-items: center; gap: 10px; }
-.time { flex: 1; font-size: 46px; font-weight: 300; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.time { flex: 1; font-size: 46px; font-weight: 400; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
 .time small { font-size: 22px; color: var(--muted); letter-spacing: -0.01em; }
-.step { display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); cursor: pointer; }
+.step { display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); cursor: pointer; border-radius: var(--r-sm); }
 .step:hover { background: var(--surface-2); }
 .step svg { width: 18px; height: 18px; }
 .note { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 0; color: var(--warning); font-size: 13.5px; font-weight: 600; line-height: 1.35; }
@@ -31,7 +31,7 @@
 .block h3 { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 10px; font-size: 13px !important; font-weight: 700; color: var(--text-secondary); }
 .block h3 em { font-style: normal; color: var(--text); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
-.search { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 12px; border: 1px solid var(--border-strong); background: var(--surface-solid); }
+.search { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 12px; border: 1px solid var(--border-strong); background: var(--surface-solid); border-radius: var(--r-sm); }
 .search:focus-within { box-shadow: inset 0 0 0 1px var(--border-strong); }
 .search svg { flex: none; width: 18px; height: 18px; color: var(--muted); }
 .search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 16px; }
@@ -47,8 +47,8 @@
 .options .addNew svg { width: 18px; height: 18px; }
 .empty { padding: 12px; color: var(--muted); font-size: 14px; }
 
-.chosen { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; min-height: 56px; padding: 8px 12px; border: 1px solid var(--border-strong); background: var(--surface-solid); }
-.avatar { display: grid; place-items: center; width: 40px; height: 40px; flex: none; background: var(--text); color: var(--surface-solid); font-size: 14px; font-weight: 700; }
+.chosen { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; min-height: 56px; padding: 8px 12px; border: 1px solid var(--border-strong); background: var(--surface-solid); border-radius: var(--r-sm); }
+.avatar { display: grid; place-items: center; width: 40px; height: 40px; flex: none; background: var(--accent-soft); color: var(--accent-ink); font-size: 14px; font-weight: 700; }
 .chosenText { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .chosenText b { font-weight: 700; font-size: 16px; overflow-wrap: anywhere; }
 .chosenText small { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -61,16 +61,16 @@
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chips + .chips { margin-top: 10px; }
-.chips button { min-height: 44px; padding: 0 14px; border: 1px solid var(--border); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums; }
+.chips button { min-height: 44px; padding: 0 14px; border: 1px solid var(--border); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums; border-radius: var(--r); }
 .chips button:hover { border-color: var(--border-strong); }
-.chips button[aria-checked='true'] { border-color: var(--text); background: var(--text); color: var(--surface-solid); }
+.chips button[aria-checked='true'] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
 
 /* The destructive action sits apart from everything else and asks once. */
 .danger { padding: 28px 16px 32px; }
 .danger p { margin: 0 0 12px; color: var(--text-secondary); font-size: 14px; }
 .danger div { display: flex; flex-wrap: wrap; gap: 8px; }
 .cancelLink { min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--danger); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
-.cancelBtn { min-height: 44px; padding: 0 16px; border: 1px solid var(--danger); background: var(--danger); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.cancelBtn { min-height: 44px; padding: 0 16px; border: 1px solid var(--danger); background: var(--danger); color: #fff; font: inherit; font-weight: 700; cursor: pointer; border-radius: var(--r-sm); }
 
 .foot { flex: none; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--border); background: var(--surface-solid); }
 .summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-secondary); font-size: 14px; font-variant-numeric: tabular-nums; }
@@ -90,7 +90,7 @@
 /* After booking: the answer in place, then back to the calendar. */
 .done { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 32px 20px; }
 .doneIcon { width: 40px; height: 40px; color: var(--code-paid); }
-.done h3 { margin: 0; font-size: 26px !important; font-weight: 800; letter-spacing: -0.02em; }
+.done h3 { margin: 0; font-size: 26px !important; font-weight: 650; letter-spacing: -0.02em; }
 .done p { display: flex; flex-direction: column; margin: 0 0 12px; font-size: 16px; }
 .done p span { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .doneActs { display: flex; flex-direction: column; align-items: stretch; gap: 8px; width: 100%; }

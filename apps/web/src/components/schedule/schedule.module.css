@@ -32,25 +32,25 @@
 }
 
 /* Header: one ruled module — date navigation, the date, the booking button; the view switches below. */
-.bar { display: flex; flex-direction: column; background: var(--surface-solid); border: 1px solid var(--border); }
+.bar { display: flex; flex-direction: column; background: var(--surface-solid); border: 1px solid var(--border); border-radius: var(--r); }
 .barTop { display: flex; align-items: center; gap: 14px; padding: 10px 12px; }
 .tools { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
 .tools::-webkit-scrollbar { display: none; }
 .tools > * { flex: none; }
-.title { flex: 1; min-width: 0; margin: 0; font-weight: 800; font-size: clamp(20px, 1.2vw + 12px, 26px) !important; line-height: 1.1 !important; letter-spacing: -0.02em; }
+.title { flex: 1; min-width: 0; margin: 0; font-weight: 650; font-size: clamp(20px, 1.2vw + 12px, 26px) !important; line-height: 1.1 !important; letter-spacing: -0.02em; }
 .title span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .title small { display: block; margin-top: 2px; font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
 .nav { display: inline-flex; align-items: center; gap: 0; flex: none; }
 .navPhone { display: none; }
-.iconBtn { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); cursor: pointer; }
+.iconBtn { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); cursor: pointer; border-radius: var(--r-sm); }
 .iconBtn:hover { background: var(--surface-2); }
-.todayBtn { height: 44px; padding: 0 14px; border: 1px solid var(--border-strong); border-left: 0; border-right: 0; background: var(--surface-solid); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+.todayBtn { height: 44px; padding: 0 14px; border: 1px solid var(--border-strong); border-left: 0; border-right: 0; background: var(--surface-solid); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; border-radius: var(--r-sm); }
 .todayBtn:hover { background: var(--surface-2); }
 .book { flex: none; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border: 0; background: var(--accent); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
 .book:hover { background: var(--accent-hover); }
 .book:disabled { opacity: 0.6; cursor: default; }
 :global(html.dark) .book { color: #0f1215; }
-.filter { height: 40px; border: 1px solid var(--border-strong); background: var(--surface-solid); padding: 0 10px; color: var(--text); max-width: 220px; }
+.filter { height: 40px; border: 1px solid var(--border-strong); background: var(--surface-solid); padding: 0 10px; color: var(--text); max-width: 220px; border-radius: var(--r-sm); }
 
 /* Month strip: one cell per day, filled by how booked the chairs are. Also the day picker. */
 .strip { display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-solid); min-width: 0; }
@@ -81,7 +81,7 @@
 .cell[data-closed] { background: repeating-linear-gradient(135deg, var(--surface-2) 0 5px, var(--surface-solid) 5px 10px); }
 .cell[data-closed] em { color: var(--muted); font-weight: 500; }
 .mday[data-closed] { background: repeating-linear-gradient(135deg, var(--surface-2) 0 6px, var(--surface-solid) 6px 12px); }
-.cell[aria-current='date'] { outline: 2px solid var(--text); outline-offset: 1px; }
+.cell[aria-current='date'] { outline: 2px solid var(--accent); outline-offset: 1px; }
 .cell:hover { filter: brightness(0.96); }
 
 .body { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
@@ -105,14 +105,14 @@
 .col[data-off='true'] { background-color: var(--surface-2); }
 /* Outside opening hours: hatched, still clickable for a booking out of hours. */
 .closed { position: absolute; left: 0; right: 0; z-index: 0; pointer-events: none; background: repeating-linear-gradient(135deg, var(--surface-2) 0 6px, transparent 6px 12px); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-.hoursBar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 14px; border: 1px solid var(--border); background: var(--surface-solid); font-size: 14px; }
+.hoursBar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 14px; border: 1px solid var(--border); background: var(--surface-solid); font-size: 14px; border-radius: var(--r); }
 .hoursBar b { font-weight: 700; }
 .hoursBar span { color: var(--muted); }
 .hoursBar .hoursNote { font-style: normal; font-weight: 600; color: var(--warning); }
 .hoursBar button { margin-left: auto; min-height: 40px; }
 @media (max-width: 720px) { .hoursBar { padding: 8px 10px; gap: 6px 10px; font-size: 13px; } .hoursBar > span { display: none; } }
-.dayOff { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 28px 20px; border: 1px solid var(--border); background: var(--surface-solid); }
-.dayOff h2 { margin: 0; font-size: 20px; font-weight: 800; }
+.dayOff { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 28px 20px; border: 1px solid var(--border); background: var(--surface-solid); border-radius: var(--r); }
+.dayOff h2 { margin: 0; font-size: 20px; font-weight: 650; }
 .dayOff p { margin: 0; color: var(--text-secondary); max-width: 56ch; }
 .hint { position: absolute; left: 4px; right: 4px; height: calc(var(--hour) / 2); border-radius: 3px; border: 1.5px dashed var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 600; padding: 4px 8px; pointer-events: none; display: none; }
 .col:hover .hint { display: block; }
@@ -131,7 +131,7 @@
 .visit[data-tone='live'] { --bg-tone: var(--tone-live-bg); --fg-tone: var(--tone-live-fg); }
 .visit[data-tone='done'] { --bg-tone: var(--tone-done-bg); --fg-tone: var(--tone-done-fg); }
 .visit[data-tone='bad'] { --bg-tone: var(--tone-bad-bg); --fg-tone: var(--tone-bad-fg); text-decoration: line-through; }
-.visit[aria-pressed='true'] { outline: 2px solid var(--text); outline-offset: 1px; z-index: 2; }
+.visit[aria-pressed='true'] { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 2; }
 .visit[data-pending='true'] { opacity: 0.6; cursor: progress; }
 .visit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -145,7 +145,7 @@
 .mday { display: flex; flex-direction: column; gap: 6px; min-height: 104px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 3px; background: var(--surface-solid); text-align: left; color: var(--text); }
 .mday:hover { border-color: var(--accent); }
 .mday[data-out='true'] { visibility: hidden; }
-.mday[aria-current='date'] { outline: 2px solid var(--text); outline-offset: 1px; }
+.mday[aria-current='date'] { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mday header { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--font-mono), monospace; font-variant-numeric: tabular-nums; }
 .mday header b { font-size: 15px; }
 .mday[data-today='true'] header b { color: var(--now); }

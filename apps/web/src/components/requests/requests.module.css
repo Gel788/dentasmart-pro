@@ -1,10 +1,10 @@
 /* Site requests as ruled rows: when, who and why, one decision per row. */
 .page { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
-.head h1 { margin: 0; font-size: clamp(22px, 1.2vw + 14px, 28px) !important; font-weight: 800; }
+.head h1 { margin: 0; font-size: clamp(22px, 1.2vw + 14px, 28px) !important; font-weight: 650; }
 .head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
 .error { display: flex; gap: 8px; align-items: center; margin: 0; padding: 10px 12px; border: 1px solid var(--danger); background: var(--danger-soft); color: var(--danger); font-weight: 600; }
-.m { background: var(--surface-solid); border: 1px solid var(--border); }
+.m { background: var(--surface-solid); border: 1px solid var(--border); border-radius: var(--r); }
 .m > h2 { display: flex; align-items: center; gap: 8px; margin: 0; min-height: 40px; padding: 0 14px; border-bottom: 1px solid var(--border); font-size: 13.5px !important; font-weight: 700; }
 .m > h2 em { font-style: normal; color: var(--muted); font-weight: 500; }
 .none { margin: 0; padding: 16px 14px; color: var(--muted); font-size: 14px; }
@@ -12,7 +12,7 @@
 .row { display: grid; grid-template-columns: 190px minmax(0, 1fr) auto; align-items: start; gap: 8px 16px; padding: 14px; border-bottom: 1px solid var(--border); }
 .row:last-child { border-bottom: 0; }
 .row[data-urgent] { background: color-mix(in srgb, var(--code-here) 6%, var(--surface-solid)); }
-.time { font-size: 18px; font-weight: 300; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.time { font-size: 18px; font-weight: 400; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .time:first-letter { text-transform: uppercase; }
 .who { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .who b { font-size: 16px; font-weight: 700; }
@@ -20,7 +20,7 @@
 .who p { display: flex; gap: 6px; align-items: flex-start; margin: 4px 0 0; max-width: 70ch; color: var(--text-secondary); font-size: 14px; }
 .who p svg { flex: none; margin-top: 3px; color: var(--accent); }
 .urgent { color: var(--code-here) !important; font-weight: 700; }
-.urgent i { width: 10px; height: 10px; background: var(--code-here); }
+.urgent i { width: 10px; height: 10px; background: var(--code-here); border-radius: 3px; }
 .acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .yes, .no { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border: 0; font: inherit; font-weight: 700; cursor: pointer; }
 .yes { background: var(--accent); color: #fff; }
@@ -31,7 +31,7 @@
 .decline { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .decline .sd-input, .decline input { min-width: 240px; height: 44px; }
 .state { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; white-space: nowrap; }
-.state i { width: 11px; height: 11px; background: var(--code-paid); }
+.state i { width: 11px; height: 11px; background: var(--code-paid); border-radius: 3px; }
 .state i[data-state='DECLINED'] { background: transparent; border: 1px solid var(--muted); }
 .row[data-done] .time, .row[data-done] .who b { color: var(--muted); }
 :global(html.dark) .yes, :global(html.dark) .no { color: #0f1215; }

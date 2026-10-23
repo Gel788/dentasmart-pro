@@ -69,7 +69,7 @@
 .tag { display: inline-block; flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 0 6px; border-radius: 2px; background: var(--surface-2); color: var(--text-secondary); font-size: 12px; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag[data-tone='alert'] { background: var(--danger-soft); color: var(--danger); }
 .tag[data-tone='warn'] { background: var(--warning-soft); color: var(--warning); }
-.tag[data-tone='muted'] { background: transparent; border: 1px solid var(--border-strong); color: var(--muted); }
+.tag[data-tone='muted'] { background: transparent; border: 1px solid var(--border-strong); color: var(--muted); border-radius: var(--r-sm); }
 
 .skeleton td i { display: block; height: 12px; width: 70%; border-radius: 2px; background: var(--surface-2); animation: pulse 1.2s ease-in-out infinite alternate; }
 @keyframes pulse { from { opacity: 1; } to { opacity: 0.45; } }

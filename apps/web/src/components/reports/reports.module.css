@@ -1,32 +1,32 @@
 /* Reports: a filter bar, six ruled tiles, a day strip, and the doctors table; definitions close the page. */
 .page { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .head { padding-bottom: 12px; border-bottom: 1px solid var(--border); }
-.head h1 { margin: 0; font-size: clamp(22px, 1.2vw + 14px, 28px) !important; font-weight: 800; }
+.head h1 { margin: 0; font-size: clamp(22px, 1.2vw + 14px, 28px) !important; font-weight: 650; }
 .head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; max-width: 80ch; }
-.filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; padding: 12px 14px; background: var(--surface-solid); border: 1px solid var(--border); }
+.filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; padding: 12px 14px; background: var(--surface-solid); border: 1px solid var(--border); border-radius: var(--r); }
 .ranges { display: flex; flex-wrap: wrap; }
-.ranges button { min-height: 44px; padding: 0 14px; border: 1px solid var(--border); margin-left: -1px; background: var(--surface-solid); color: var(--text-secondary); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.ranges button { min-height: 44px; padding: 0 14px; border: 1px solid var(--border); margin-left: -1px; background: var(--surface-solid); color: var(--text-secondary); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; border-radius: var(--r); }
 .ranges button:first-child { margin-left: 0; }
-.ranges button[aria-pressed='true'] { position: relative; z-index: 1; border-color: var(--text); background: var(--text); color: var(--surface-solid); }
+.ranges button[aria-pressed='true'] { position: relative; z-index: 1; border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
 .filters label { display: flex; flex-direction: column; gap: 4px; }
 .filters label span { color: var(--muted); font-size: 12.5px; font-weight: 600; }
-.filters input, .filters select { min-height: 44px; padding: 0 10px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 14.5px; }
+.filters input, .filters select { min-height: 44px; padding: 0 10px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 14.5px; border-radius: var(--r-sm); }
 .error { display: flex; gap: 8px; align-items: center; margin: 0; padding: 10px 12px; border: 1px solid var(--danger); background: var(--danger-soft); color: var(--danger); font-weight: 600; }
 .skeleton { height: 320px; background: linear-gradient(90deg, var(--surface-2), var(--surface-solid), var(--surface-2)); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; border: 1px solid var(--border); }
 .body { display: flex; flex-direction: column; gap: 12px; transition: opacity 160ms ease; }
 .body[data-loading] { opacity: 0.55; }
-.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--surface-solid); border: 1px solid var(--border); }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--surface-solid); border: 1px solid var(--border); border-radius: var(--r); }
 .tile { display: flex; flex-direction: column; gap: 4px; min-height: 104px; padding: 14px 16px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); color: var(--text); text-decoration: none; }
 .tile:nth-child(3n) { border-right: 0; }
 .tile:nth-last-child(-n + 3) { border-bottom: 0; }
 a.tile:hover { background: var(--surface-2); }
 .tileLabel { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
-.tileLabel i { width: 10px; height: 10px; }
-.tileLabel i[data-code='paid'] { background: var(--code-paid); }
-.tileLabel i[data-code='owe'] { background: var(--code-owe); }
-.tile b { font-size: 30px; font-weight: 300; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tileLabel i { width: 10px; height: 10px; border-radius: 3px; }
+.tileLabel i[data-code='paid'] { background: var(--code-paid); border-radius: 3px; }
+.tileLabel i[data-code='owe'] { background: var(--code-owe); border-radius: 3px; }
+.tile b { font-size: 30px; font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .tile small { color: var(--text-secondary); font-size: 13px; }
-.m { background: var(--surface-solid); border: 1px solid var(--border); min-width: 0; }
+.m { background: var(--surface-solid); border: 1px solid var(--border); min-width: 0; border-radius: var(--r); }
 .m > h2 { display: flex; align-items: baseline; gap: 10px; margin: 0; min-height: 40px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13.5px !important; font-weight: 700; }
 .m > h2 em { font-style: normal; color: var(--muted); font-weight: 500; font-size: 12.5px; }
 .none { margin: 0; padding: 16px 14px; color: var(--muted); font-size: 14px; }
