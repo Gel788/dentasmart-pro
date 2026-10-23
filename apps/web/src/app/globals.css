@@ -1562,3 +1562,23 @@ li:has(> .jn-line .jn-edit) > .jn-line { grid-column: 1 / -1; }
 .sd-btn.price-danger { background: var(--danger); box-shadow: none; }
 .sd-btn.price-danger:hover { background: color-mix(in srgb, var(--danger) 85%, #000); }
 .price-cat-empty { margin: 0; font-size: 13.5px; }
+
+/* Plan line: tooth as a button, remove with a confirm, plan discount by the total. */
+.jn-badge-btn { border: 1px dashed transparent; cursor: pointer; font: inherit; font-weight: 650; }
+.jn-badge-btn:hover { border-color: var(--accent); }
+.jn-tooth { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: 8px; padding: 10px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-solid); }
+.jn-tooth label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.jn-tooth input { width: 72px; height: 36px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 15px; font-variant-numeric: tabular-nums; }
+.jn-tooth :is(.sd-btn, .sd-btn-ghost) { min-height: 36px; padding: 0 12px; }
+.jn-line-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.jn-remove { min-height: 32px; padding: 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.jn-remove:hover { color: var(--danger); text-decoration: underline; text-underline-offset: 3px; }
+.jn-remove-ask { display: inline-flex; align-items: center; gap: 10px; color: var(--danger); font-size: 13px; font-weight: 600; }
+.jn-remove-yes { min-height: 30px; padding: 0 10px; border: 0; border-radius: var(--r-sm); background: var(--danger); color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.jn-line-error { grid-column: 1 / -1; }
+.jn-plan-discount { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.jn-plan-discount.open { padding: 10px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-2); }
+.jn-plan-discount input { width: 96px; height: 36px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 15px; font-variant-numeric: tabular-nums; }
+.jn-plan-discount small { flex-basis: 100%; color: var(--text-secondary); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.jn-plan-discount :is(.sd-btn, .sd-btn-ghost) { min-height: 36px; padding: 0 12px; }
+.jn-plan-discount .sd-seg button { height: 30px !important; padding: 0 12px !important; }

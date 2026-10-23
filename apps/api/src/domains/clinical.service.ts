@@ -443,6 +443,24 @@ export class ClinicalService {
     return item;
   }
 
+  /** Removes a line the doctor added by mistake; done or billed lines stay, they are history. */
+  async removePlanItem(orgId: string, planId: string, itemId: string, userId?: string) {
+    const item = await this.prisma.treatmentPlanItem.findFirst({
+      where: { id: itemId, planId, plan: { organizationId: orgId } },
+      include: { invoiceItem: { select: { id: true } } },
+    });
+    if (!item) throw new NotFoundException('Строка плана не найдена');
+    if (item.status === 'DONE' || item.isCompleted) throw new BadRequestException('Выполненную услугу удалить нельзя — она уже в истории лечения');
+    if (item.invoiceItem) throw new BadRequestException('По этой услуге выставлен счёт. Сначала отмените счёт');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.materialReservation.deleteMany({ where: { planItemId: itemId } });
+      await tx.treatmentPlanItem.delete({ where: { id: itemId } });
+    });
+    await this.recalcPlanTotal(planId);
+    await this.prisma.auditLog.create({ data: { organizationId: orgId, userId, entityType: 'TreatmentPlanItem', entityId: itemId, action: 'DELETE', changes: { title: item.title, toothNum: item.toothNum, price: Number(item.price) } } }).catch(() => undefined);
+    return { id: itemId, removed: true };
+  }
+
   async recalcPlanTotal(planId: string) {
     const items = await this.prisma.treatmentPlanItem.findMany({ where: { planId } });
     const plan = await this.prisma.treatmentPlan.findUnique({ where: { id: planId } });

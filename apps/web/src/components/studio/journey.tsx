@@ -275,10 +275,17 @@ export function PlanJourney({
         </section>}
       {plan && <div className="jn-dock">
         <div className="jn-sum">
-          <span>Итого</span>
+          <span>Итого{discount > 0 ? ` со скидкой ${discount}%` : ''}</span>
           <strong>{formatMoney(animated)}</strong>
+          {discount > 0 && <small>без скидки {formatMoney(subtotal)} · скидка −{formatMoney(subtotal - total)}</small>}
           {months > 1 && <small>{formatMoney(perMonth)}/мес · {months} мес.</small>}
         </div>
+        <PlanDiscount subtotal={subtotal} percent={discount} onApply={async (next) => {
+          const result = await api<{ savedAt: string }>(`/workspace/plans/${plan.id}/save`, { method: 'POST', body: JSON.stringify({ discountPercent: next }) });
+          setDiscount(next);
+          setSaved(`Скидка ${next}% сохранена ${new Date(result.savedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`);
+          await onAdded();
+        }} />
         <label className="jn-months">Оплата
           <select aria-label="Рассрочка" value={months} onChange={(event) => {
             const next = Number(event.target.value);
@@ -297,9 +304,6 @@ export function PlanJourney({
           <details className="jn-more">
             <summary>Ещё</summary>
             <div className="jn-menu">
-              <label className="jn-discount">Скидка на план, %
-                <input aria-label="Скидка, %" type="number" min={0} max={40} value={discount} onChange={(event) => setDiscount(Number(event.target.value))} />
-              </label>
               {owner && (
                 <label className="jn-toggle">
                   <input
@@ -400,21 +404,69 @@ function ServiceLine({
     }
   };
   const cancel = () => { setDraft(base); setEditing(false); setError(''); };
+  const [toothOpen, setToothOpen] = useState(false);
+  const [toothDraft, setToothDraft] = useState(item.toothNum ? String(item.toothNum) : '');
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const locked = item.status === 'DONE';
+  const saveTooth = async (value: string) => {
+    const tooth = value.trim() ? Number(value) : null;
+    const quadrant = tooth === null ? 0 : Math.floor(tooth / 10);
+    const unit = tooth === null ? 0 : tooth % 10;
+    const valid = tooth === null || (quadrant >= 1 && quadrant <= 4 && unit >= 1 && unit <= 8) || (quadrant >= 5 && quadrant <= 8 && unit >= 1 && unit <= 5);
+    if (!valid) { setError('Номер зуба по FDI: 11–18, 21–28, 31–38, 41–48 (детские 51–85)'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      await api(`/workspace/plans/${planId}/items/${item.id}`, { method: 'POST', body: JSON.stringify({ toothNum: tooth }) });
+      setToothOpen(false);
+      await onSaved();
+    } catch (err) { setError(err instanceof Error ? err.message : 'Зуб не сохранился'); }
+    finally { setSaving(false); }
+  };
+  const remove = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      await api(`/workspace/plans/${planId}/items/${item.id}/remove`, { method: 'POST' });
+      await onSaved();
+    } catch (err) { setError(err instanceof Error ? err.message : 'Не удалилось'); setConfirmRemove(false); }
+    finally { setSaving(false); }
+  };
   const onKey = (event: React.KeyboardEvent) => { if (event.key === 'Enter') { event.preventDefault(); void save(); } if (event.key === 'Escape') cancel(); };
   const dim = tooth != null && item.toothNum !== tooth;
   const parts = consumablesFor(item.title, catalog.services, catalog.stock);
   const explanation = explainPrice(item.price, parts);
   return (
     <li className={dim ? 'dim' : tooth === item.toothNum ? 'hot' : ''}>
-      <span className="jn-badge">{item.toothNum ?? '—'}</span>
+      {locked ? <span className="jn-badge">{item.toothNum ?? '—'}</span> : (
+        <button type="button" className="jn-badge jn-badge-btn" onClick={() => { setToothDraft(item.toothNum ? String(item.toothNum) : ''); setToothOpen((open) => !open); }} title={item.toothNum ? `Зуб ${item.toothNum} — изменить` : 'Указать зуб'} aria-label={item.toothNum ? `Зуб ${item.toothNum}, изменить` : 'Указать зуб'}>
+          {item.toothNum ?? '+зуб'}
+        </button>
+      )}
       <Mini surfaces={item.surfaces} />
       <div className="jn-line">
         <b>{item.title}</b>
         {((item.qty ?? 1) > 1 || (item.discountPercent ?? 0) > 0) && (
           <small>{(item.qty ?? 1) > 1 ? `${item.qty} × ${formatMoney(item.unitPrice ?? item.price)}` : formatMoney(item.unitPrice ?? item.price)}{(item.discountPercent ?? 0) > 0 ? ` − ${item.discountPercent}%` : ''}</small>
         )}
+        {toothOpen && (
+          <form className="jn-tooth" onSubmit={(event) => { event.preventDefault(); void saveTooth(toothDraft); }}>
+            <label>Зуб (FDI)<input aria-label={`Зуб для ${item.title}`} inputMode="numeric" maxLength={2} value={toothDraft} onChange={(event) => setToothDraft(event.target.value.replace(/\D/g, ''))} placeholder="36" autoFocus /></label>
+            <button type="submit" className="sd-btn" disabled={saving}>Сохранить</button>
+            {item.toothNum != null && <button type="button" className="sd-btn-ghost" disabled={saving} onClick={() => void saveTooth('')}>Без зуба</button>}
+            <button type="button" className="sd-btn-ghost" onClick={() => setToothOpen(false)}>Отмена</button>
+          </form>
+        )}
         {!editing ? (
-          <button type="button" className="jn-edit-open" onClick={() => setEditing(true)}>Изменить цену и количество</button>
+          <span className="jn-line-acts">
+            <button type="button" className="jn-edit-open" onClick={() => setEditing(true)}>Изменить цену и количество</button>
+            {!locked && (confirmRemove ? (
+              <span className="jn-remove-ask">Удалить строку?
+                <button type="button" className="jn-remove-yes" disabled={saving} onClick={() => void remove()}>{saving ? '…' : 'Удалить'}</button>
+                <button type="button" className="jn-edit-open" onClick={() => setConfirmRemove(false)}>Нет</button>
+              </span>
+            ) : <button type="button" className="jn-remove" onClick={() => setConfirmRemove(true)}>Удалить</button>)}
+          </span>
         ) : (
           <div className="jn-edit" onKeyDown={onKey}>
             <label>Кол-во<input aria-label={`Количество ${item.title}`} inputMode="numeric" value={draft.qty} onChange={(event) => setDraft({ ...draft, qty: event.target.value })} autoFocus /></label>
@@ -426,7 +478,6 @@ function ServiceLine({
               {lineDiscount >= 30 && <span className="jn-edit-warn"> · скидка {lineDiscount}% — проверьте</span>}
               {unit === 0 && <span className="jn-edit-warn"> · цена 0 ₽</span>}
             </p>
-            {error && <p className="jn-edit-warn" role="alert">{error}</p>}
             <div className="jn-edit-acts">
               <button type="button" className="sd-btn-ghost" onClick={cancel} disabled={saving}>Отмена</button>
               <button type="button" className="sd-btn" onClick={() => void save()} disabled={saving || !changed}>{saving ? 'Сохраняю…' : 'Сохранить'}</button>
@@ -434,6 +485,7 @@ function ServiceLine({
           </div>
         )}
       </div>
+      {error && <p className="jn-edit-warn jn-line-error" role="alert">{error}</p>}
       <em>{formatMoney(item.price)}</em>
       {show && (
         <details className="jn-fold">
@@ -446,6 +498,45 @@ function ServiceLine({
       {owner && !explanation.overflow && explanation.internalCost > item.price && <p className="jn-flag">Себестоимость расходников выше цены на {formatMoney(explanation.internalCost - item.price)}.</p>}
       {owner && !show && <p className="jn-own">Себестоимость {formatMoney(explanation.internalCost)} · маржа {formatMoney(explanation.margin)}</p>}
     </li>
+  );
+}
+
+/** Discount on the whole plan, in percent or in roubles; saved at once, within the role's limit. */
+function PlanDiscount({ subtotal, percent, onApply }: { subtotal: number; percent: number; onApply: (percent: number) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<'pct' | 'rub'>('pct');
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const raw = Number(value.replace(',', '.')) || 0;
+  const next = mode === 'pct' ? Math.min(100, Math.max(0, raw)) : subtotal > 0 ? Math.min(100, Math.max(0, Math.round((raw / subtotal) * 10000) / 100)) : 0;
+  const apply = async (target: number) => {
+    setBusy(true);
+    setError('');
+    try { await onApply(target); setOpen(false); setValue(''); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Скидка не сохранилась'); }
+    finally { setBusy(false); }
+  };
+  if (!open) {
+    return (
+      <div className="jn-plan-discount">
+        <button type="button" className="sd-btn-ghost" onClick={() => { setOpen(true); setValue(percent ? String(percent) : ''); setMode('pct'); }}>{percent > 0 ? `Скидка ${percent}%` : 'Скидка на итог'}</button>
+        {percent > 0 && <button type="button" className="jn-remove" disabled={busy} onClick={() => void apply(0)}>Убрать</button>}
+      </div>
+    );
+  }
+  return (
+    <form className="jn-plan-discount open" onSubmit={(event) => { event.preventDefault(); void apply(next); }}>
+      <div className="sd-seg" role="group" aria-label="Скидка в">
+        <button type="button" className={mode === 'pct' ? 'on' : ''} onClick={() => setMode('pct')}>%</button>
+        <button type="button" className={mode === 'rub' ? 'on' : ''} onClick={() => setMode('rub')}>₽</button>
+      </div>
+      <input aria-label={mode === 'pct' ? 'Скидка в процентах' : 'Скидка в рублях'} inputMode="decimal" value={value} onChange={(event) => setValue(event.target.value)} placeholder={mode === 'pct' ? '10' : '5000'} autoFocus />
+      <small>{next > 0 ? `${next}% · −${formatMoney(Math.round(subtotal * next / 100))} · итого ${formatMoney(Math.round(subtotal * (1 - next / 100)))}` : 'без скидки'}</small>
+      <button type="submit" className="sd-btn" disabled={busy}>{busy ? '…' : 'Применить'}</button>
+      <button type="button" className="sd-btn-ghost" onClick={() => setOpen(false)}>Отмена</button>
+      {error && <p className="jn-edit-warn" role="alert">{error}</p>}
+    </form>
   );
 }
 

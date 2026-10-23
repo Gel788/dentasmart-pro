@@ -64,10 +64,20 @@ export class WorkspaceController {
         ...(body.toothNum !== undefined ? { toothNum: body.toothNum } : {}),
       });
     }
+    // Only the tooth changes: price and discount stay exactly as they are.
+    if (body.price == null && body.discountPercent == null && body.toothNum !== undefined) {
+      return this.clinical.updatePlanItem(orgId, itemId, { toothNum: body.toothNum });
+    }
     return this.clinical.updatePlanItem(orgId, itemId, {
       ...(body.price != null ? { price: body.price } : { discountPercent: discount }),
       ...(body.toothNum !== undefined ? { toothNum: body.toothNum } : {}),
     });
+  }
+
+  @Post('plans/:planId/items/:itemId/remove')
+  @RequirePermissions('medical.write')
+  removeItem(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Param('planId') planId: string, @Param('itemId') itemId: string) {
+    return this.clinical.removePlanItem(orgId, planId, itemId, user.id);
   }
 
   /** Whether the patient sees what each price is made of (owner only). */
