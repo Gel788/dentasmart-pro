@@ -6,7 +6,7 @@ import { ArrowRight, ArrowUp, CalendarRange, Check, Mic, Square, X } from 'lucid
 import { api } from '@/lib/api';
 import { useFocus } from '@/lib/focus';
 import styles from './assistant.module.css';
-import { chime, speak } from './voice-wake';
+import { chime, hush, speak } from './voice-wake';
 import { MORE_KINDS, MoreCardView, type MoreCard } from './more-cards';
 
 type Card =
@@ -66,6 +66,7 @@ export function Assistant({ open, onClose, wakeSignal = 0 }: { open: boolean; on
   const speakNext = useRef(false);
   const listen = async (auto = false) => {
     if (listening) { recorder.current?.stop(); return; }
+    hush();
     setVoiceError('');
     speakNext.current = auto;
     try {
@@ -137,6 +138,7 @@ export function Assistant({ open, onClose, wakeSignal = 0 }: { open: boolean; on
   }, [open, enabled]);
 
   const close = () => {
+    hush();
     setLeaving(true);
     window.setTimeout(() => { setLeaving(false); onClose(); }, 220);
   };

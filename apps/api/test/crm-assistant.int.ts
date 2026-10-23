@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { PrismaClient } from '@dentasmart/database';
-import { CrmAssistantService, datesIn, parseRoute, withCommand, withMoney } from '../src/domains/crm-assistant';
+import { CrmAssistantService, SpeechService, datesIn, parseRoute, withCommand, withMoney } from '../src/domains/crm-assistant';
 import { ReportsService } from '../src/domains/reports';
 import { WidgetService } from '../src/domains/widget.service';
 import { WorkspaceService } from '../src/domains/workspace.service';
@@ -15,7 +15,27 @@ const db = prisma as unknown as PrismaService;
 const stamp = Date.now().toString(36);
 const ALL = ['patient.read', 'schedule.read', 'finance.read'];
 
+async function speech() {
+  const voice = new SpeechService();
+  const saved = process.env.YANDEX_SPEECHKIT_API_KEY;
+  delete process.env.YANDEX_SPEECHKIT_API_KEY;
+  await assert.rejects(voice.say('Привет'), /не подключён/);
+  process.env.YANDEX_SPEECHKIT_API_KEY = 'test-yandex';
+  let seen: { url: string; auth: string; body: string } | null = null;
+  voice.http = (async (url: string | URL | Request, init?: RequestInit) => {
+    seen = { url: String(url), auth: String((init?.headers as Record<string, string>).Authorization), body: String(init?.body) };
+    return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
+  }) as typeof fetch;
+  assert.equal((await voice.say('Записал Орлову на 10 утра')).length, 3);
+  assert.ok(seen!.url.includes('tts.api.cloud.yandex.net') && seen!.auth === 'Api-Key test-yandex' && new URLSearchParams(seen!.body).get('voice') === 'alena');
+  voice.http = (async () => new Response('{"error_code":"UNAUTHORIZED"}', { status: 401 })) as typeof fetch;
+  await assert.rejects(voice.say('Привет'), /ключ SpeechKit/);
+  await assert.rejects(voice.say('   '), /Нечего/);
+  if (saved) process.env.YANDEX_SPEECHKIT_API_KEY = saved; else delete process.env.YANDEX_SPEECHKIT_API_KEY;
+}
+
 async function main() {
+  await speech();
   assert.equal(parseRoute('Конечно! {"reply":"Ищу","action":{"type":"patient","query":"Орлова"}}').action.type, 'patient');
   assert.equal(parseRoute('{"reply":"x","action":{"type":"delete_all"}}').action.type, 'none', 'неизвестное действие — просто ответ');
   assert.equal(parseRoute('Часы работы настраиваются в Настройках.').reply, 'Часы работы настраиваются в Настройках.');

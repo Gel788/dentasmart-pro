@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { apiAudio } from '@/lib/api';
 
 export type WakeState = 'off' | 'loading' | 'listening' | 'paused' | 'denied' | 'error';
 
@@ -134,16 +135,53 @@ export function spoken(text: string) {
     .slice(0, 400);
 }
 
-/** Says the reply with a voice that runs on this device, so patient names are not sent to a cloud voice. */
-export function speak(text: string) {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window) || !text.trim()) return;
+// Whether the clinic's server has the Yandex voice; learnt from the first try, kept for the visit.
+let cloudVoice: boolean | null = null;
+let playing: HTMLAudioElement | null = null;
+
+/** Stops whatever ZaZa is saying. */
+export function hush() {
+  playing?.pause();
+  playing = null;
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+}
+
+function sayOnDevice(text: string) {
+  if (!('speechSynthesis' in window)) return;
   const voice = bestVoice();
   if (!voice) return;
-  window.speechSynthesis.cancel();
-  const phrase = new SpeechSynthesisUtterance(spoken(text));
+  const phrase = new SpeechSynthesisUtterance(text);
   phrase.voice = voice;
   phrase.lang = voice.lang;
   phrase.rate = 1;
   phrase.pitch = 1.05;
   window.speechSynthesis.speak(phrase);
+}
+
+/**
+ * Says the reply: in Yandex's natural voice when the server has it (hosted in Russia), otherwise with
+ * a voice on this device. Never with a foreign cloud voice, since replies name patients.
+ */
+export async function speak(raw: string) {
+  if (typeof window === 'undefined' || !raw.trim()) return;
+  const text = spoken(raw);
+  hush();
+  if (cloudVoice !== false) {
+    try {
+      const audio = await apiAudio('/assistant/speak', { text });
+      if (audio && audio.size > 0) {
+        cloudVoice = true;
+        const url = URL.createObjectURL(audio);
+        const player = new Audio(url);
+        playing = player;
+        player.onended = () => { URL.revokeObjectURL(url); if (playing === player) playing = null; };
+        await player.play();
+        return;
+      }
+      cloudVoice = false;
+    } catch {
+      // Autoplay refused or the network dropped: the device voice says it instead.
+    }
+  }
+  sayOnDevice(text);
 }

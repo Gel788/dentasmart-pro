@@ -21,7 +21,7 @@ import { WidgetController } from './widget.controller';
 import { WidgetService } from './widget.service';
 import { BookingAssistantService } from './booking-assistant.service';
 import { DictationService } from './dictation.service';
-import { CrmAssistantController, CrmAssistantService } from './crm-assistant';
+import { CrmAssistantController, CrmAssistantService, SpeechService } from './crm-assistant';
 import { DocumentsController, DocumentsService } from './documents';
 import { ReportsController, ReportsService } from './reports';
 import { TasksController, TasksService } from './tasks';
@@ -85,6 +85,7 @@ import { MarketService } from './market.service';
     BookingAssistantService,
     DictationService,
     CrmAssistantService,
+    SpeechService,
     DocumentsService,
     ReportsService,
     TasksService,

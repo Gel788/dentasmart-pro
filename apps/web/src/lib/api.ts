@@ -128,6 +128,19 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
   return (text ? JSON.parse(text) : null) as T;
 }
 
+/** A POST that answers with sound (ZaZa's voice); null when the server has no voice to give. */
+export async function apiAudio(path: string, body: unknown): Promise<Blob | null> {
+  if (isDemo()) return null;
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) return null;
+  return res.blob();
+}
+
 export async function uploadFile(file: File): Promise<string> {
   if (isDemo()) {
     const { demoFileUrl } = await import('./demo/handle');

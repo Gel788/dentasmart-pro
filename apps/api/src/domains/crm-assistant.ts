@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Get, Injectable, Logger, Post, ServiceUnavailableException, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Injectable, Logger, Post, Res, ServiceUnavailableException, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import type { Response as HttpResponse } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -697,12 +698,62 @@ export function parseRoute(content: string): { reply: string; action: Action } {
   };
 }
 
+/**
+ * ZaZa's voice: Yandex SpeechKit, hosted in Russia, so a reply that names a patient stays in the country.
+ * The key lives only in the server's .env (YANDEX_SPEECHKIT_API_KEY); without it the browser falls back
+ * to a voice on the device.
+ */
+@Injectable()
+export class SpeechService {
+  private readonly log = new Logger('Speech');
+  /** Swappable in tests; production calls SpeechKit. */
+  http: Fetch = (input, init) => fetch(input, init);
+
+  get enabled() {
+    return Boolean(process.env.YANDEX_SPEECHKIT_API_KEY);
+  }
+
+  async say(raw: string): Promise<Buffer> {
+    if (!this.enabled) throw new ServiceUnavailableException('Голос Яндекса не подключён');
+    const text = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 500);
+    if (!text) throw new BadRequestException('Нечего озвучивать');
+    const form = new URLSearchParams({
+      text,
+      lang: 'ru-RU',
+      voice: process.env.YANDEX_TTS_VOICE || 'alena',
+      emotion: process.env.YANDEX_TTS_EMOTION || 'good',
+      speed: process.env.YANDEX_TTS_SPEED || '1.05',
+      format: 'mp3',
+    });
+    if (process.env.YANDEX_FOLDER_ID) form.set('folderId', process.env.YANDEX_FOLDER_ID);
+    let response: Response;
+    try {
+      response = await this.http('https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize', {
+        method: 'POST',
+        headers: { Authorization: `Api-Key ${process.env.YANDEX_SPEECHKIT_API_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form.toString(),
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch (err) {
+      this.log.warn(`speechkit unreachable: ${err instanceof Error ? err.message : err}`);
+      throw new ServiceUnavailableException('Голос Яндекса сейчас недоступен');
+    }
+    if (!response.ok) {
+      // The error body names the cause (bad key, no role, no money), never the text.
+      this.log.warn(`speechkit ${response.status}: ${(await response.text().catch(() => '')).slice(0, 300)}`);
+      if (response.status === 401 || response.status === 403) throw new ServiceUnavailableException('Яндекс не принял ключ SpeechKit: проверьте ключ и роль ai.speechkit-tts.user');
+      throw new ServiceUnavailableException('Голос Яндекса ответил ошибкой');
+    }
+    return Buffer.from(await response.arrayBuffer());
+  }
+}
+
 @ApiTags('assistant')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('assistant')
 export class CrmAssistantController {
-  constructor(private readonly assistant: CrmAssistantService, private readonly dictation: DictationService) {}
+  constructor(private readonly assistant: CrmAssistantService, private readonly dictation: DictationService, private readonly speech: SpeechService) {}
 
   /** A spoken question turned into text by the Russian-hosted speech model; the text then goes through ask(). */
   @Post('transcribe')
@@ -723,7 +774,18 @@ export class CrmAssistantController {
   @Get()
   @RequirePermissions('patient.read')
   status() {
-    return { enabled: this.assistant.enabled, model: this.assistant.model };
+    return { enabled: this.assistant.enabled, model: this.assistant.model, voice: this.speech.enabled ? 'yandex' : 'device' };
+  }
+
+  /** The reply spoken in a natural voice; mp3 for the browser to play. */
+  @Post('speak')
+  @Throttle({ default: { limit: 80, ttl: 10 * 60_000 } })
+  @RequirePermissions('patient.read')
+  async speak(@Body() body: { text?: string }, @Res() res: HttpResponse) {
+    const audio = await this.speech.say(String(body?.text ?? ''));
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(audio);
   }
 
   @Post()
