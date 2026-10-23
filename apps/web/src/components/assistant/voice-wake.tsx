@@ -14,6 +14,7 @@ const WAKE = /привет\s*(за\s*за|заза)/;
  */
 export function useVoiceWake({ enabled, paused, onWake }: { enabled: boolean; paused: boolean; onWake: () => void }) {
   const [state, setState] = useState<WakeState>('off');
+  const [reason, setReason] = useState('');
   const pausedRef = useRef(paused);
   const wakeRef = useRef(onWake);
   const lastFired = useRef(0);
@@ -22,7 +23,8 @@ export function useVoiceWake({ enabled, paused, onWake }: { enabled: boolean; pa
 
   useEffect(() => {
     if (!enabled) { setState('off'); return; }
-    if (typeof window === 'undefined' || !window.isSecureContext || !navigator.mediaDevices?.getUserMedia) { setState('error'); return; }
+    if (typeof window === 'undefined' || !window.isSecureContext || !navigator.mediaDevices?.getUserMedia) { setReason('страница открыта не по https'); setState('error'); return; }
+    if (typeof WebAssembly === 'undefined' || typeof Worker === 'undefined') { setReason('браузер не поддерживает распознавание на устройстве'); setState('error'); return; }
     let cancelled = false;
     let stream: MediaStream | null = null;
     let context: AudioContext | null = null;
@@ -66,8 +68,9 @@ export function useVoiceWake({ enabled, paused, onWake }: { enabled: boolean; pa
         window.addEventListener('pointerdown', resume);
         window.addEventListener('keydown', resume);
         if (!cancelled) setState('listening');
-      } catch {
-        if (!cancelled) setState('error');
+      } catch (err) {
+        console.error('[ЗаЗа] распознавание не запустилось', err);
+        if (!cancelled) { setReason(err instanceof Error ? err.message.slice(0, 120) : String(err).slice(0, 120)); setState('error'); }
       }
     })();
 
@@ -81,7 +84,7 @@ export function useVoiceWake({ enabled, paused, onWake }: { enabled: boolean; pa
     };
   }, [enabled]);
 
-  return state === 'listening' && paused ? 'paused' : state;
+  return { state: state === 'listening' && paused ? 'paused' : state, reason };
 }
 
 /** A short two-note chime: the assistant heard its name. */

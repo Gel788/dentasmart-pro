@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Activity, BarChart3, Bell, Calendar, FileText, ListChecks, Globe, LayoutGrid, LogOut, PanelRight, CalendarRange, ClipboardCheck, FlaskConical, Moon, Package, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users, Wallet } from 'lucide-react';
+import { Activity, BarChart3, Bell, Calendar, Plug, FileText, ListChecks, Globe, LayoutGrid, LogOut, PanelRight, CalendarRange, ClipboardCheck, FlaskConical, Moon, Package, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users, Wallet } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
 import { useFocus } from '@/lib/focus';
@@ -35,6 +35,7 @@ const MORE = [
   { href: '/return', label: 'Возврат пациентов', icon: RotateCcw, perm: 'medical.read' },
   { href: '/check-in', label: 'QR стойки', icon: QrCode, perm: 'schedule.read' },
   { href: '/import', label: 'Переезд', icon: Upload, perm: 'patient.write' },
+  { href: '/integrations', label: 'Интеграции', icon: Plug, perm: 'org.manage' },
 ];
 
 const SETTINGS = { href: '/settings', label: 'Настройки', icon: Settings, perm: 'org.manage' };
@@ -75,7 +76,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [voiceOn, setVoiceOn] = useState(false);
   useEffect(() => { try { setVoiceOn(localStorage.getItem('sd_zaza') !== 'off'); } catch { setVoiceOn(true); } }, []);
   const toggleVoice = () => setVoiceOn((on) => { try { localStorage.setItem('sd_zaza', on ? 'off' : 'on'); } catch { /* the choice lasts this visit */ } return !on; });
-  const voice = useVoiceWake({ enabled: voiceOn && !isDemo(), paused: assistant, onWake: () => { setAssistant(true); setWake((n) => n + 1); } });
+  const { state: voice, reason: voiceReason } = useVoiceWake({ enabled: voiceOn && !isDemo(), paused: assistant, onWake: () => { setAssistant(true); setWake((n) => n + 1); } });
   useEffect(() => { setMenu(false); }, [pathname]);
   const { feed, reload: reloadNotes } = useNotifications();
   const unread = feed?.unread ?? 0;
@@ -197,9 +198,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className="sd-top-acts">
             {user?.permissions.includes('schedule.write') && <Link className="sd-top-book" href="/schedule"><CalendarRange aria-hidden="true" />Записать</Link>}
             <AssistantTrigger variant="top" onOpen={() => setAssistant(true)} />
-            <button type="button" className="sd-top-zaza" data-state={voice} onClick={toggleVoice} aria-pressed={voiceOn}
-              title={voice === 'listening' ? 'ЗаЗа ждёт «Привет, ЗаЗа». Нажмите, чтобы выключить' : voice === 'denied' ? 'Нет доступа к микрофону — разрешите его в браузере' : voice === 'loading' ? 'Загружаю распознавание…' : voice === 'error' ? 'Голосовой режим не запустился' : 'Включить «Привет, ЗаЗа»'}>
-              <i aria-hidden="true" /><span>{voice === 'listening' || voice === 'paused' ? 'ЗаЗа слушает' : voice === 'loading' ? 'ЗаЗа…' : voice === 'denied' ? 'Нет микрофона' : 'ЗаЗа выкл'}</span>
+            <button type="button" className="sd-top-zaza" data-state={voice} onClick={() => { if (voice === 'error' || voice === 'denied') { setVoiceOn(false); window.setTimeout(() => setVoiceOn(true), 50); } else toggleVoice(); }} aria-pressed={voiceOn}
+              title={voice === 'listening' ? 'ЗаЗа ждёт «Привет, ЗаЗа». Нажмите, чтобы выключить' : voice === 'denied' ? 'Нет доступа к микрофону — разрешите его в браузере' : voice === 'loading' ? 'Загружаю распознавание…' : voice === 'error' ? `Голосовой режим не запустился${voiceReason ? `: ${voiceReason}` : ''}. Нажмите, чтобы попробовать снова` : 'Включить «Привет, ЗаЗа»'}>
+              <i aria-hidden="true" /><span>{voice === 'listening' || voice === 'paused' ? 'ЗаЗа слушает' : voice === 'loading' ? 'ЗаЗа…' : voice === 'denied' ? 'Нет микрофона' : voice === 'error' ? 'ЗаЗа: ошибка' : 'ЗаЗа выкл'}</span>
             </button>
             <button className="sd-top-icon" type="button" onClick={() => setNotes(true)} aria-label={unread ? `Уведомления, новых: ${unread}` : 'Уведомления'} title="Уведомления">
               <Bell aria-hidden="true" />

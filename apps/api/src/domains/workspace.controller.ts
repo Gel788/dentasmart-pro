@@ -51,13 +51,21 @@ export class WorkspaceController {
     @Param('itemId') itemId: string,
     @Body() body: { qty?: number; unitPrice?: number; discountPercent?: number; price?: number; toothNum?: number | null },
   ) {
-    const qty = Number(body.qty) > 0 ? Number(body.qty) : 1;
+    // Unit price, quantity and discount are kept apart, so editing one never re-applies another.
+    const qty = Number(body.qty) > 0 ? Math.min(99, Math.round(Number(body.qty))) : 1;
     const discount = Math.min(100, Math.max(0, Number(body.discountPercent) || 0));
-    const price = body.unitPrice != null && Number.isFinite(Number(body.unitPrice))
-      ? Math.round(Number(body.unitPrice) * qty * (1 - discount / 100) * 100) / 100
-      : body.price;
+    if (body.unitPrice != null && Number.isFinite(Number(body.unitPrice))) {
+      const list = Math.round(Math.max(0, Number(body.unitPrice)) * qty * 100) / 100;
+      return this.clinical.updatePlanItem(orgId, itemId, {
+        listPrice: list,
+        qty,
+        discountPercent: discount,
+        price: Math.round(list * (1 - discount / 100) * 100) / 100,
+        ...(body.toothNum !== undefined ? { toothNum: body.toothNum } : {}),
+      });
+    }
     return this.clinical.updatePlanItem(orgId, itemId, {
-      ...(price != null ? { price } : { discountPercent: discount }),
+      ...(body.price != null ? { price: body.price } : { discountPercent: discount }),
       ...(body.toothNum !== undefined ? { toothNum: body.toothNum } : {}),
     });
   }

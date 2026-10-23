@@ -370,23 +370,37 @@ function ServiceLine({
   owner: boolean;
   onSaved: () => Promise<unknown>;
 }) {
-  const [qty, setQty] = useState(item.qty ?? 1);
-  const [unit, setUnit] = useState(item.unitPrice ?? item.price);
-  const [lineDiscount, setLineDiscount] = useState(item.discountPercent ?? 0);
-  const [kit, setKit] = useState(item.kit || kitOf(item.title));
-  const timer = useRef<number | null>(null);
+  // The line is edited as a draft: nothing is saved or reloaded while the numbers are being typed.
+  const base = { qty: String(item.qty ?? 1), unit: String(item.unitPrice ?? item.price), discount: String(item.discountPercent ?? 0), kit: item.kit || kitOf(item.title) };
+  const [draft, setDraft] = useState(base);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   useEffect(() => {
-    setQty(item.qty ?? 1);
-    setUnit(item.unitPrice ?? item.price);
-    setLineDiscount(item.discountPercent ?? 0);
-    setKit(item.kit || kitOf(item.title));
-  }, [item.id, item.price, item.qty, item.unitPrice, item.discountPercent, item.kit, item.title]);
-  const commit = (next: { qty: number; unitPrice: number; discountPercent: number; kit: string }) => {
-    if (timer.current) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => {
-      void api(`/workspace/plans/${planId}/items/${item.id}`, { method: 'POST', body: JSON.stringify(next) }).then(() => onSaved()).catch(() => undefined);
-    }, 350);
+    if (!editing) setDraft({ qty: String(item.qty ?? 1), unit: String(item.unitPrice ?? item.price), discount: String(item.discountPercent ?? 0), kit: item.kit || kitOf(item.title) });
+  }, [editing, item.id, item.price, item.qty, item.unitPrice, item.discountPercent, item.kit, item.title]);
+  const num = (value: string) => Number(value.replace(',', '.').replace(/[^\d.]/g, '')) || 0;
+  const qty = Math.max(1, Math.min(99, Math.round(num(draft.qty)) || 1));
+  const unit = Math.max(0, num(draft.unit));
+  const lineDiscount = Math.min(100, Math.max(0, num(draft.discount)));
+  const preview = Math.round(unit * qty * (1 - lineDiscount / 100) * 100) / 100;
+  const changed = qty !== (item.qty ?? 1) || unit !== (item.unitPrice ?? item.price) || lineDiscount !== (item.discountPercent ?? 0) || draft.kit !== (item.kit || kitOf(item.title));
+  const save = async () => {
+    if (!changed || saving) { setEditing(false); return; }
+    setSaving(true);
+    setError('');
+    try {
+      await api(`/workspace/plans/${planId}/items/${item.id}`, { method: 'POST', body: JSON.stringify({ qty, unitPrice: unit, discountPercent: lineDiscount, kit: draft.kit }) });
+      setEditing(false);
+      await onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не сохранилось');
+    } finally {
+      setSaving(false);
+    }
   };
+  const cancel = () => { setDraft(base); setEditing(false); setError(''); };
+  const onKey = (event: React.KeyboardEvent) => { if (event.key === 'Enter') { event.preventDefault(); void save(); } if (event.key === 'Escape') cancel(); };
   const dim = tooth != null && item.toothNum !== tooth;
   const parts = consumablesFor(item.title, catalog.services, catalog.stock);
   const explanation = explainPrice(item.price, parts);
@@ -396,18 +410,29 @@ function ServiceLine({
       <Mini surfaces={item.surfaces} />
       <div className="jn-line">
         <b>{item.title}</b>
-        {(qty > 1 || lineDiscount > 0) && (
-          <small>{qty > 1 ? `${qty} × ${formatMoney(unit)}` : formatMoney(unit)}{lineDiscount > 0 ? ` − ${lineDiscount}%` : ''}</small>
+        {((item.qty ?? 1) > 1 || (item.discountPercent ?? 0) > 0) && (
+          <small>{(item.qty ?? 1) > 1 ? `${item.qty} × ${formatMoney(item.unitPrice ?? item.price)}` : formatMoney(item.unitPrice ?? item.price)}{(item.discountPercent ?? 0) > 0 ? ` − ${item.discountPercent}%` : ''}</small>
         )}
-        <details className="jn-line-edit">
-          <summary>Изменить</summary>
-          <span className="jn-edit">
-            <label>Кол-во<input aria-label={`Количество ${item.title}`} type="number" min={1} value={qty} onChange={(event) => { const next = Math.max(1, Number(event.target.value) || 1); setQty(next); commit({ qty: next, unitPrice: unit, discountPercent: lineDiscount, kit }); }} /></label>
-            <label>Цена<input aria-label={`Цена ${item.title}`} type="number" min={0} value={unit} onChange={(event) => { const next = Math.max(0, Number(event.target.value) || 0); setUnit(next); commit({ qty, unitPrice: next, discountPercent: lineDiscount, kit }); }} /></label>
-            <label>Скидка %<input aria-label={`Скидка ${item.title}`} type="number" min={0} max={100} value={lineDiscount} onChange={(event) => { const next = Math.min(100, Math.max(0, Number(event.target.value) || 0)); setLineDiscount(next); commit({ qty, unitPrice: unit, discountPercent: next, kit }); }} /></label>
-            <label>Расходники<input aria-label={`Расходники ${item.title}`} value={kit} onChange={(event) => { setKit(event.target.value); commit({ qty, unitPrice: unit, discountPercent: lineDiscount, kit: event.target.value }); }} /></label>
-          </span>
-        </details>
+        {!editing ? (
+          <button type="button" className="jn-edit-open" onClick={() => setEditing(true)}>Изменить цену и количество</button>
+        ) : (
+          <div className="jn-edit" onKeyDown={onKey}>
+            <label>Кол-во<input aria-label={`Количество ${item.title}`} inputMode="numeric" value={draft.qty} onChange={(event) => setDraft({ ...draft, qty: event.target.value })} autoFocus /></label>
+            <label>Цена, ₽<input aria-label={`Цена ${item.title}`} inputMode="decimal" value={draft.unit} onChange={(event) => setDraft({ ...draft, unit: event.target.value })} /></label>
+            <label>Скидка %<input aria-label={`Скидка ${item.title}`} inputMode="numeric" value={draft.discount} onChange={(event) => setDraft({ ...draft, discount: event.target.value })} /></label>
+            <label className="jn-edit-kit">Расходники<input aria-label={`Расходники ${item.title}`} value={draft.kit} onChange={(event) => setDraft({ ...draft, kit: event.target.value })} /></label>
+            <p className="jn-edit-sum">
+              Итого по строке: <b>{formatMoney(preview)}</b>
+              {lineDiscount >= 30 && <span className="jn-edit-warn"> · скидка {lineDiscount}% — проверьте</span>}
+              {unit === 0 && <span className="jn-edit-warn"> · цена 0 ₽</span>}
+            </p>
+            {error && <p className="jn-edit-warn" role="alert">{error}</p>}
+            <div className="jn-edit-acts">
+              <button type="button" className="sd-btn-ghost" onClick={cancel} disabled={saving}>Отмена</button>
+              <button type="button" className="sd-btn" onClick={() => void save()} disabled={saving || !changed}>{saving ? 'Сохраняю…' : 'Сохранить'}</button>
+            </div>
+          </div>
+        )}
       </div>
       <em>{formatMoney(item.price)}</em>
       {show && (

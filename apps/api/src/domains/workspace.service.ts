@@ -838,7 +838,8 @@ export class WorkspaceService {
               phase: sort,
               sortOrder: order,
               price: round2(unit * qty * (1 - discount / 100)),
-              listPrice: round2(service.price * qty),
+              listPrice: round2(unit * qty),
+              qty,
               discountPercent: discount,
               durationMin: Math.max(10, Number(line.durationMin) || service.durationMin),
             };
@@ -1932,11 +1933,13 @@ export class WorkspaceService {
     surfaces: string[];
     price: Prisma.Decimal;
     listPrice: Prisma.Decimal | null;
+    qty?: number;
     discountPercent: Prisma.Decimal;
     status: string;
     durationMin: number;
     service?: { code: string | null } | null;
   }) {
+    const qty = i.qty && i.qty > 0 ? i.qty : 1;
     return {
       id: i.id,
       title: i.title,
@@ -1944,6 +1947,9 @@ export class WorkspaceService {
       surfaces: i.surfaces,
       price: Number(i.price),
       listPrice: i.listPrice == null ? null : Number(i.listPrice),
+      qty,
+      // Price of one before the discount: what the editor shows and edits.
+      unitPrice: Math.round(((i.listPrice == null ? Number(i.price) : Number(i.listPrice)) / qty) * 100) / 100,
       discountPercent: Number(i.discountPercent),
       status: i.status,
       durationMin: i.durationMin,

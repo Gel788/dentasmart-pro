@@ -844,6 +844,8 @@ model TreatmentPlanItem {
   sortOrder       Int            @default(0)
   price           Decimal        @default(0) @db.Decimal(12, 2)
   listPrice       Decimal?       @db.Decimal(12, 2)
+  /// How many of the service on this line; listPrice is unit × qty before the discount.
+  qty             Int            @default(1)
   discountPercent Decimal        @default(0) @db.Decimal(5, 2)
   durationMin     Int            @default(30)
   isCompleted     Boolean        @default(false)

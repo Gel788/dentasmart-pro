@@ -8,6 +8,7 @@ import { ClinicalService } from '../src/domains/clinical.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 import { WorkspaceService } from '../src/domains/workspace.service';
 import type { ClinicConfigService } from '../src/domains/clinic-config.service';
+import { WorkspaceController } from '../src/domains/workspace.controller';
 
 const prisma = new PrismaClient();
 const clinical = new ClinicalService(prisma as unknown as PrismaService);
@@ -28,6 +29,18 @@ async function main() {
     const line = await clinical.addPlanItem(clinic.id, plan.id, { serviceId: filling.id, toothNum: 16 });
     assert.equal(line.title, 'Пломба светового отверждения');
     assert.equal(Number(line.price), 4500, 'цена из прайса');
+
+    // Editing the line the way the screen does, several times in a row: the discount never compounds.
+    const controller = new WorkspaceController({} as never, {} as never, clinical);
+    const edit = (body: { qty?: number; unitPrice?: number; discountPercent?: number }) => controller.editItem(clinic.id, line.id, body);
+    await edit({ qty: 2, unitPrice: 4500, discountPercent: 10 });
+    await edit({ qty: 2, unitPrice: 4500, discountPercent: 10 });
+    let row = await prisma.treatmentPlanItem.findUniqueOrThrow({ where: { id: line.id } });
+    assert.deepEqual([Number(row.price), Number(row.listPrice), row.qty, Number(row.discountPercent)], [8100, 9000, 2, 10], 'цена, количество и скидка хранятся отдельно');
+    await edit({ qty: 2, unitPrice: 4500, discountPercent: 20 });
+    row = await prisma.treatmentPlanItem.findUniqueOrThrow({ where: { id: line.id } });
+    assert.equal(Number(row.price), 7200, 'новая скидка считается от цены без скидки');
+    await edit({ qty: 1, unitPrice: 4500, discountPercent: 0 });
     assert.equal(line.durationMin, 45);
     await clinical.addPlanItem(clinic.id, plan.id, { serviceId: filling.id });
     assert.equal(Number((await prisma.treatmentPlan.findUniqueOrThrow({ where: { id: plan.id } })).totalPrice), 9000, 'сумма плана пересчитана');

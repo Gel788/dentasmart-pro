@@ -233,7 +233,7 @@ export class ClinicalService {
   async updatePlanItem(
     orgId: string,
     itemId: string,
-    data: { price?: number; serviceId?: string; discountPercent?: number; phase?: number; surfaces?: string[]; toothNum?: number | null },
+    data: { price?: number; serviceId?: string; discountPercent?: number; phase?: number; surfaces?: string[]; toothNum?: number | null; listPrice?: number; qty?: number },
   ) {
     const item = await this.prisma.treatmentPlanItem.findUnique({
       where: { id: itemId },
@@ -241,7 +241,7 @@ export class ClinicalService {
     });
     if (!item || item.plan.organizationId !== orgId) throw new NotFoundException('Строка плана не найдена');
     if (item.status === 'DONE') throw new BadRequestException('Выполненную строку нельзя пересчитывать — она уже в истории');
-    let listPrice: number | null = item.listPrice == null ? null : Number(item.listPrice);
+    let listPrice: number | null = data.listPrice != null && Number.isFinite(data.listPrice) ? roundMoney(data.listPrice) : item.listPrice == null ? null : Number(item.listPrice);
     let serviceId = item.serviceId;
     let title = item.title;
     if (data.serviceId) {
@@ -269,7 +269,8 @@ export class ClinicalService {
         listPrice,
         serviceId,
         title,
-        discountPercent: roundMoney(data.price != null ? implied : discount),
+        discountPercent: roundMoney(data.price != null && data.discountPercent == null ? implied : discount),
+        ...(data.qty != null ? { qty: Math.max(1, Math.min(99, Math.round(data.qty))) } : {}),
         ...(data.phase != null ? { phase: Math.max(1, Math.round(data.phase)) } : {}),
         ...(data.surfaces ? { surfaces: normalizeSurfaces(data.surfaces) } : {}),
         ...(data.toothNum !== undefined ? { toothNum: data.toothNum } : {}),
