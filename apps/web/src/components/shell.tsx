@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Activity, BarChart3, Bell, Calendar, Plug, FileText, ListChecks, Globe, LayoutGrid, LogOut, PanelRight, CalendarRange, ClipboardCheck, FlaskConical, Moon, Package, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users, Wallet } from 'lucide-react';
+import { Activity, BarChart3, Bell, Calendar, Plug, FileText, ListChecks, Globe, LayoutGrid, LogOut, PanelLeftClose, PanelLeftOpen, PanelRight, CalendarRange, ClipboardCheck, FlaskConical, Moon, Package, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users, Wallet } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
 import { useFocus } from '@/lib/focus';
@@ -75,6 +75,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
   // «Привет, ЗаЗа» is on by default on every device; each person can switch it off for themselves.
   const [voiceOn, setVoiceOn] = useState(false);
   useEffect(() => { try { setVoiceOn(localStorage.getItem('sd_zaza') !== 'off'); } catch { setVoiceOn(true); } }, []);
+  // The sidebar can fold to icons on any wide screen; the choice is remembered on this device.
+  const [navFolded, setNavFolded] = useState(false);
+  useEffect(() => { try { setNavFolded(localStorage.getItem('sd_nav') === 'folded'); } catch { /* unfolded */ } }, []);
+  const toggleNav = () => setNavFolded((folded) => { try { localStorage.setItem('sd_nav', folded ? 'open' : 'folded'); } catch { /* lasts this visit */ } return !folded; });
   const toggleVoice = () => setVoiceOn((on) => { try { localStorage.setItem('sd_zaza', on ? 'off' : 'on'); } catch { /* the choice lasts this visit */ } return !on; });
   const { state: voice, reason: voiceReason } = useVoiceWake({ enabled: voiceOn && !isDemo(), paused: assistant, onWake: () => { setAssistant(true); setWake((n) => n + 1); } });
   useEffect(() => { setMenu(false); }, [pathname]);
@@ -161,7 +165,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className={`sd-app${panelOpen ? ' with-panel' : ''}`}>
+    <div className={`sd-app${panelOpen ? ' with-panel' : ''}${navFolded ? ' nav-folded' : ''}`}>
       <aside className="sd-nav" aria-label="Разделы">
         <Link href="/" className="sd-brand" aria-label="Седракович Дент — сегодня">
           <span className="sd-mark" aria-hidden>С</span>
@@ -178,6 +182,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </button>
         <div className="sd-nav-foot">
           {settings && <NavLink link={settings} active={isActive(settings.href)} extra />}
+          <button className="sd-link is-extra sd-fold" type="button" onClick={toggleNav} aria-pressed={navFolded} aria-label={navFolded ? 'Развернуть меню' : 'Свернуть меню'} title={navFolded ? 'Развернуть меню' : 'Свернуть меню'}>
+            <span className="sd-link-ico">{navFolded ? <PanelLeftOpen /> : <PanelLeftClose />}</span>
+            <span className="sd-nav-label">Свернуть меню</span>
+          </button>
           <button className={`sd-link is-extra${panelOpen ? ' active' : ''}`} type="button" onClick={() => setPanelOpen(!panelOpen)} aria-pressed={panelOpen} title="Панель контекста">
             <span className="sd-link-ico"><PanelRight /></span>
             <span className="sd-nav-label">{panelOpen ? 'Скрыть контекст' : 'Контекст'}</span>
