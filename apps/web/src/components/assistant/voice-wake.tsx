@@ -107,16 +107,43 @@ export function chime() {
   } catch { /* no audio output */ }
 }
 
+/** The most natural Russian voice that runs on this device: premium and enhanced voices first. */
+function bestVoice() {
+  const voices = window.speechSynthesis.getVoices().filter((item) => item.lang.toLowerCase().startsWith('ru') && item.localService);
+  const score = (voice: SpeechSynthesisVoice) => {
+    const name = voice.name.toLowerCase();
+    if (/premium|премиум/.test(name)) return 4;
+    if (/enhanced|улучш/.test(name)) return 3;
+    if (/siri|katya|катя|milena|милена|yuri|юрий/.test(name)) return 2;
+    return /compact|eloquence/.test(name) ? 0 : 1;
+  };
+  return voices.sort((a, b) => score(b) - score(a))[0] ?? null;
+}
+
+/** Spoken, not read out: no colons, signs or codes, short sentences, numbers as a person says them. */
+export function spoken(text: string) {
+  return text
+    .replace(/[*_#>`«»]/g, '')
+    .replace(/\s*:\s*$/g, '.')
+    .replace(/:\s*/g, ', ')
+    .replace(/(\d)\s(?=\d{3}\b)/g, '$1')
+    .replace(/₽/g, 'рублей')
+    .replace(/\s—\s/g, ', ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 400);
+}
+
 /** Says the reply with a voice that runs on this device, so patient names are not sent to a cloud voice. */
 export function speak(text: string) {
   if (typeof window === 'undefined' || !('speechSynthesis' in window) || !text.trim()) return;
-  const voices = window.speechSynthesis.getVoices();
-  const voice = voices.find((item) => item.lang.startsWith('ru') && item.localService) ?? null;
+  const voice = bestVoice();
   if (!voice) return;
   window.speechSynthesis.cancel();
-  const phrase = new SpeechSynthesisUtterance(text.replace(/[*_#>`]/g, '').slice(0, 400));
+  const phrase = new SpeechSynthesisUtterance(spoken(text));
   phrase.voice = voice;
   phrase.lang = voice.lang;
-  phrase.rate = 1.05;
+  phrase.rate = 1;
+  phrase.pitch = 1.05;
   window.speechSynthesis.speak(phrase);
 }
