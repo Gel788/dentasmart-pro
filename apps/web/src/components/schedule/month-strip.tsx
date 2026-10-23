@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { loadLevel } from '@dentasmart/shared';
 import { dayTitle, monthBounds, todayIn, weekStart, type RangeDay } from './model';
@@ -74,6 +74,7 @@ export function MonthStrip({ days, selected, offset, onPick }: { days: RangeDay[
               <span>{WEEKDAYS[weekday]}</span>
               <b>{Number(day.date.slice(8))}</b>
               <em>{day.visits || (day.hours === null ? 'вых' : '')}</em>
+              <i className={styles.load} style={{ '--fill': `${Math.min(100, percent)}%` } as CSSProperties} aria-hidden="true" />
             </button>
           );
         })}

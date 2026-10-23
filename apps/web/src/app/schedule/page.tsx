@@ -28,6 +28,14 @@ const VIEWS: { id: View; label: string }[] = [
   { id: 'agenda', label: 'Повестка' },
 ];
 
+const visitsWord = (n: number) => {
+  const tail = n % 100;
+  if (tail >= 11 && tail <= 14) return 'визитов';
+  if (n % 10 === 1) return 'визит';
+  if (n % 10 >= 2 && n % 10 <= 4) return 'визита';
+  return 'визитов';
+};
+
 export default function SchedulePage() {
   return <Protected><Calendar /></Protected>;
 }
@@ -294,37 +302,36 @@ function Calendar() {
           <h1 className={styles.title}>
             <span>{title.charAt(0).toUpperCase() + title.slice(1)}</span>
             <small>
-              {view === 'day' && daySummary ? `${daySummary.visits} визитов · кресла заняты на ${Math.round(daySummary.ratio * 100)}%` : view === 'agenda' ? 'Повестка на неделю' : 'Расписание клиники'}
+              {view === 'day' && daySummary ? `${daySummary.visits} ${visitsWord(daySummary.visits)} · кресла заняты на ${Math.round(daySummary.ratio * 100)}%` : view === 'agenda' ? 'Повестка на неделю' : 'Расписание клиники'}
             </small>
           </h1>
-          <button type="button" className={styles.book} onClick={book} disabled={!shell}><Plus size={18} aria-hidden="true" /><span>Записать</span></button>
-        </div>
-        <div className={styles.tools}>
-          <div className={`${styles.nav} ${styles.navPhone}`}>
-            <button type="button" className={styles.iconBtn} onClick={() => go(-1)} aria-label="Назад"><ChevronLeft size={18} /></button>
-            <button type="button" className={styles.todayBtn} onClick={() => setDate(todayIn(offset))}>Сегодня</button>
-            <button type="button" className={styles.iconBtn} onClick={() => go(1)} aria-label="Вперёд"><ChevronRight size={18} /></button>
-          </div>
-          <div className="sd-seg" role="tablist" aria-label="Вид календаря">
-            {VIEWS.map((item) => (
-              <button key={item.id} type="button" role="tab" aria-selected={view === item.id} className={view === item.id ? 'on' : ''} onClick={() => setView(item.id)}>{item.label}</button>
-            ))}
-          </div>
-          {view === 'day' && (
-            <div className="sd-seg" role="group" aria-label="Колонки дня">
-              <button type="button" aria-pressed={axis === 'chair'} className={axis === 'chair' ? 'on' : ''} onClick={() => setAxis('chair')}>Кресла</button>
-              <button type="button" aria-pressed={axis === 'doctor'} className={axis === 'doctor' ? 'on' : ''} onClick={() => setAxis('doctor')}>Врачи</button>
+          <div className={styles.tools}>
+            <div className={`${styles.nav} ${styles.navPhone}`}>
+              <button type="button" className={styles.iconBtn} onClick={() => go(-1)} aria-label="Назад"><ChevronLeft size={18} /></button>
+              <button type="button" className={styles.todayBtn} onClick={() => setDate(todayIn(offset))}>Сегодня</button>
+              <button type="button" className={styles.iconBtn} onClick={() => go(1)} aria-label="Вперёд"><ChevronRight size={18} /></button>
             </div>
-          )}
-          <label className="sr-only" htmlFor="calendar-doctor">Врач</label>
-          <select id="calendar-doctor" className={styles.filter} value={doctor} onChange={(event) => setDoctor(event.target.value)}>
-            <option value="">Все врачи</option>
-            {shell?.doctors.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
+            <div className="sd-seg" role="tablist" aria-label="Вид календаря">
+              {VIEWS.map((item) => (
+                <button key={item.id} type="button" role="tab" aria-selected={view === item.id} className={view === item.id ? 'on' : ''} onClick={() => setView(item.id)}>{item.label}</button>
+              ))}
+            </div>
+            {view === 'day' && (
+              <div className="sd-seg" role="group" aria-label="Колонки дня">
+                <button type="button" aria-pressed={axis === 'chair'} className={axis === 'chair' ? 'on' : ''} onClick={() => setAxis('chair')}>Кресла</button>
+                <button type="button" aria-pressed={axis === 'doctor'} className={axis === 'doctor' ? 'on' : ''} onClick={() => setAxis('doctor')}>Врачи</button>
+              </div>
+            )}
+            <label className="sr-only" htmlFor="calendar-doctor">Врач</label>
+            <select id="calendar-doctor" className={styles.filter} value={doctor} onChange={(event) => setDoctor(event.target.value)}>
+              <option value="">Все врачи</option>
+              {shell?.doctors.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </div>
+          <button type="button" className={styles.book} onClick={book} disabled={!shell} aria-label="Записать пациента"><Plus size={18} aria-hidden="true" /><span>Записать</span></button>
         </div>
+        {month && <MonthStrip days={month.days} selected={date} offset={offset} onPick={pick} />}
       </header>
-
-      {month && <MonthStrip days={month.days} selected={date} offset={offset} onPick={pick} />}
 
       {error && (
         <div className={styles.error} role="alert">
@@ -336,14 +343,14 @@ function Calendar() {
       {!shell && !error && <div className={styles.skeleton} aria-busy="true" aria-label="Загружаем расписание" />}
 
       {shell && month && week && (
-        <div className={styles.body} data-view={view}>
+        <div className={styles.body} data-view={view} data-open={!!selected && view !== 'month'}>
           <div className={styles.work}>
             {(view === 'day' || view === 'week') && (
               <div className={styles.hoursBar}>
-                <b>{view === 'day' ? `Часы работы: ${hoursLabel(todayHours)}` : 'Рабочие часы по графику'}</b>
+                <b>{view === 'day' ? `Работаем ${hoursLabel(todayHours)}` : 'Рабочие часы по графику'}</b>
                 {dayNotes.length > 0 && <em className={styles.hoursNote}>{dayNotes.join(' · ')}</em>}
-                <span>{allHours ? 'Показано всё время; нерабочее заштриховано, туда тоже можно записать.' : 'Нерабочее время скрыто.'}{(view === 'day' && axis === 'doctor') || (view === 'week' && doctor) ? ' Колонки врачей — по их личным графикам.' : ''}</span>
-                <button type="button" className="sd-btn-ghost" aria-pressed={allHours} onClick={() => setAllHours((on) => !on)}>{allHours ? 'Только рабочие часы' : 'Всё время'}</button>
+                <span>{allHours ? 'Нерабочее время заштриховано — туда тоже можно записать.' : 'Нажмите на свободное время, чтобы записать; визит можно перетащить.'}{(view === 'day' && axis === 'doctor') || (view === 'week' && doctor) ? ' Колонки врачей — по их личным графикам.' : ''}</span>
+                <button type="button" className={styles.hoursToggle} aria-pressed={allHours} onClick={() => setAllHours((on) => !on)}>{allHours ? 'Только рабочие часы' : 'Показать всё время'}</button>
               </div>
             )}
             {view === 'day' && dayOff && !allHours && dayVisits.length === 0 && (
@@ -362,7 +369,7 @@ function Calendar() {
             )}
             {view === 'day' && !(dayOff && !allHours && dayVisits.length === 0) && (
               columns.length ? (
-                <TimeGrid label="День по креслам" columns={columns} visits={dayVisits} offset={offset} hours={gridHours} dayHours={columnHours} selectedId={selectedId} pendingIds={pending}
+                <TimeGrid label="День по креслам" showDoctor={axis === 'chair'} columns={columns} visits={dayVisits} offset={offset} hours={gridHours} dayHours={columnHours} selectedId={selectedId} pendingIds={pending}
                   onSelect={(visit) => setSelectedId(visit.id)} onSlot={openSlot} onMove={move} moving={movingVisit} />
               ) : <p className={styles.empty}>В клинике пока нет кресел. Добавьте их в настройках, чтобы записывать пациентов.</p>
             )}
@@ -375,7 +382,7 @@ function Calendar() {
               <Agenda dates={Array.from({ length: 7 }, (_, index) => addDays(weekFrom, index))} visits={weekVisits} offset={offset} selectedId={selectedId} onSelect={(visit) => setSelectedId(visit.id)} />
             )}
           </div>
-          {view !== 'month' && (
+          {view !== 'month' && selected && (
             <VisitPanel visit={selected} offset={offset} busy={busy} onStatus={changeStatus} onReschedule={reschedule} onMoveOnGrid={(view === 'day' || view === 'week') ? (visit) => { setMovingId(visit.id); setSelectedId(null); } : undefined} onClose={() => setSelectedId(null)} />
           )}
         </div>

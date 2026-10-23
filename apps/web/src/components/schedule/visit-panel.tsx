@@ -40,8 +40,8 @@ export function VisitPanel({ visit, offset, busy, onStatus, onReschedule, onMove
 
   return (
     <aside className={styles.panel} aria-label={`Визит: ${visit.patient}`}>
-      <div className={styles.bar}>
-        <h2 style={{ marginRight: 'auto' }}>{visit.patient}</h2>
+      <div className={styles.panelHead}>
+        <h2>{visit.patient}</h2>
         <button type="button" className={styles.iconBtn} onClick={onClose} aria-label="Закрыть визит"><X size={18} aria-hidden="true" /></button>
       </div>
       <span className={styles.pill} data-tone={status.tone}><i aria-hidden="true" />{status.label}</span>

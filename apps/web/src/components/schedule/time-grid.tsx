@@ -22,10 +22,12 @@ type Props = {
   label: string;
   /** A visit being moved by tapping its new time (touch screens and keyboard). */
   moving?: BoardVisit | null;
+  /** Chairs as columns: the card names the doctor; otherwise it names the chair. */
+  showDoctor?: boolean;
 };
 
 /** Columns × time. Card height follows the visit's length; overlapping visits share their column. */
-export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId, pendingIds, onSelect, onSlot, onMove, label, moving = null }: Props) {
+export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId, pendingIds, onSelect, onSlot, onMove, label, moving = null, showDoctor = false }: Props) {
   const startHour = Math.floor(hours.opensAt / 60);
   const endHour = Math.ceil(hours.closesAt / 60);
   const first = startHour * 60;
@@ -38,6 +40,8 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
   const carriedLength = carried ? Math.max(15, Math.round((Date.parse(carried.endsAt) - Date.parse(carried.startsAt)) / 60000)) : 0;
   useEffect(() => { if (!moving) setGhost(null); }, [moving]);
   const [now, setNow] = useState(() => Date.now());
+  // Under the mouse: the free quarter-hour a click would book.
+  const [hover, setHover] = useState<{ column: string; minutes: number } | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -45,6 +49,8 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
   }, []);
 
   const today = todayIn(offset);
+  // Only a week has a «today» column to point at; in a day every column is the same date.
+  const manyDays = new Set(columns.map((column) => column.date)).size > 1;
   const nowMinutes = wallMinutes(new Date(now).toISOString(), offset);
   const placed = useMemo(
     () =>
@@ -70,12 +76,15 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
     <div className={styles.grid} role="region" aria-label={label} tabIndex={0}>
       <div className={styles.gridInner} style={{ '--cols': columns.length } as CSSProperties}>
         <div className={styles.corner} />
-        {columns.map((column) => (
-          <div key={column.id} className={styles.colHead} data-today={column.date === today}>
-            {column.label}
-            {column.sub && <small>{column.sub}</small>}
-          </div>
-        ))}
+        {placed.map(({ column, own }) => {
+          const live = own.filter((visit) => visit.status !== 'CANCELLED' && visit.status !== 'NO_SHOW').length;
+          return (
+            <div key={column.id} className={styles.colHead} data-today={manyDays && column.date === today}>
+              <span className={styles.colName}>{column.label}{live > 0 && <em>{live}</em>}</span>
+              {column.sub && <small>{column.sub}</small>}
+            </div>
+          );
+        })}
         <div className={styles.times}>
           {Array.from({ length: endHour - startHour }, (_, index) => (
             <div key={index} className={styles.time} aria-hidden="true">{clock((startHour + index) * 60)}</div>
@@ -97,8 +106,17 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
               if (!moving && (event.target as HTMLElement).closest('button')) return;
               onSlot(column, minutesAt(event));
             }}
-            onPointerMove={(event) => { if (moving && event.pointerType === 'mouse') setGhost({ column: column.id, minutes: minutesAt(event) }); }}
-            onPointerLeave={() => { if (moving) setGhost((current) => (current?.column === column.id ? null : current)); }}
+            onPointerMove={(event) => {
+              if (event.pointerType !== 'mouse') return;
+              if (moving) { setGhost({ column: column.id, minutes: minutesAt(event) }); return; }
+              if (dragging || (event.target as HTMLElement).closest('button')) { setHover(null); return; }
+              const minutes = minutesAt(event);
+              setHover((current) => (current?.column === column.id && current.minutes === minutes ? current : { column: column.id, minutes }));
+            }}
+            onPointerLeave={() => {
+              setHover(null);
+              if (moving) setGhost((current) => (current?.column === column.id ? null : current));
+            }}
             onDragOver={(event) => {
               event.preventDefault();
               event.dataTransfer.dropEffect = 'move';
@@ -121,6 +139,9 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
                 <b>{clock(ghost.minutes)}–{clock(ghost.minutes + carriedLength)}</b>
                 <span>{carried.patient}</span>
               </div>
+            )}
+            {!carried && hover?.column === column.id && (
+              <div className={styles.hint} style={{ top: at(hover.minutes) }} aria-hidden="true">+ {clock(hover.minutes)}</div>
             )}
             {dayHours && closedBands(dayHours(column), first, first + span).map((band) => (
               <div key={band.from} className={styles.closed} style={{ top: at(band.from), height: `calc(${(band.to - band.from) / 60} * ${hourPx})` }} aria-hidden="true" />
@@ -157,9 +178,10 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
                     <span className={styles.short}><b>{visit.patient}</b> {clock(start)} · {visit.service}</span>
                   ) : (
                     <>
+                      <span className={styles.when}>{clock(start)}–{clock(end)}<em>{status.label}</em></span>
                       <b>{visit.patient}</b>
-                      <span>{clock(start)}–{clock(end)} · {visit.service}</span>
-                      <span className={styles.meta}><i aria-hidden="true" />{status.label}</span>
+                      <span>{visit.service}</span>
+                      {end - start >= 60 && <span className={styles.who}>{showDoctor ? visit.doctor : visit.cabinet}</span>}
                     </>
                   )}
                 </button>
