@@ -11,6 +11,7 @@ import { Copilot } from '@/components/studio/copilot';
 import { PricePicker, type PriceService } from '@/components/studio/price-picker';
 import { VoiceChart } from '@/components/studio/voice-chart';
 import { VisitDocuments } from '@/components/visit/visit-documents';
+import { LineActions, ToothButton } from '@/components/visit/line-tools';
 import { Dictation } from '@/components/visit/dictation';
 import { XrayAssistant } from '@/components/studio/xray';
 import type { Medical } from '@/components/card/model';
@@ -22,7 +23,7 @@ import { formatMoney } from '@/lib/format';
 import type { VoiceNote } from '@/lib/voice';
 
 type Note = { complaints: string; anamnesis: string; objective: string; diagnosis: string; treatment: string; recommendations: string };
-type Line = { id: string; planId: string; planTitle: string; title: string; toothNum: number | null; surfaces: string[]; price: number; status: string; booked: boolean; doneHere: boolean };
+type Line = { id: string; planId: string; planTitle: string; title: string; toothNum: number | null; surfaces: string[]; price: number; qty?: number; unitPrice?: number; discountPercent?: number; status: string; booked: boolean; doneHere: boolean };
 type Visit = {
   id: string;
   status: string;
@@ -300,13 +301,14 @@ function Chair() {
                         disabled={!live || line.doneHere || !medicalWrite}
                         onChange={(event) => setPicked((current) => ({ ...current, [line.id]: event.target.checked }))}
                       />
-                      <span className={styles.tooth}>{line.toothNum ?? '—'}</span>
+                      <ToothButton line={line} enabled={medicalWrite && !closed} onSaved={load} />
                       <span className={styles.lineText}>
                         <b>{line.title}</b>
                         <small>{line.doneHere ? 'выполнено на этом визите' : line.booked ? 'запланировано на этот визит' : line.planTitle}</small>
                       </span>
                       <span className={styles.price}>{formatMoney(line.price)}</span>
                     </label>
+                    <LineActions line={line} enabled={medicalWrite && !closed} onSaved={load} />
                   </li>
                 );
               })}
