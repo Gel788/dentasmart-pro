@@ -1516,3 +1516,15 @@ html.dark .sd-top-book { color: #0d131c; }
   .sd-nav .sd-link.active, .sd-nav .sd-link[aria-current='page'], .sd-nav .sd-link-more.open { background: transparent !important; color: var(--accent) !important; box-shadow: inset 0 2px 0 var(--accent); }
   .sd-nav .sd-nav-label { font-size: 11px; }
 }
+
+/* «Привет, ЗаЗа»: always visible when the microphone is listening for the name. */
+.sd-top-zaza { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-solid); color: var(--text-secondary); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.sd-top-zaza:hover { border-color: var(--border-strong); color: var(--text); }
+.sd-top-zaza i, .sd-zaza-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--muted); flex: none; display: inline-block; }
+.sd-top-zaza[data-state='listening'] i, .sd-zaza-dot[data-state='listening'] { background: var(--code-paid); box-shadow: 0 0 0 4px color-mix(in srgb, var(--code-paid) 20%, transparent); animation: sd-zaza 2s ease-in-out infinite; }
+.sd-top-zaza[data-state='paused'] i { background: var(--accent); }
+.sd-top-zaza[data-state='loading'] i { background: var(--code-here); }
+.sd-top-zaza[data-state='denied'] i, .sd-top-zaza[data-state='error'] i, .sd-zaza-dot[data-state='denied'] { background: var(--code-owe); }
+@keyframes sd-zaza { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--code-paid) 8%, transparent); } }
+@media (max-width: 1100px) { .sd-top-zaza span { display: none; } .sd-top-zaza { padding: 0 12px; } }
+@media (prefers-reduced-motion: reduce) { .sd-top-zaza i { animation: none; } }

@@ -6,6 +6,7 @@ import { ArrowRight, ArrowUp, CalendarRange, Check, Mic, Square, X } from 'lucid
 import { api } from '@/lib/api';
 import { useFocus } from '@/lib/focus';
 import styles from './assistant.module.css';
+import { chime, speak } from './voice-wake';
 
 type Card =
   | { kind: 'slots'; doctor: { id: string; name: string } | null; patient: { id: string; name: string } | null; serviceId: string | null; durationMin: number; service: string | null; items: { startsAt: string; endsAt: string }[] }
@@ -41,7 +42,7 @@ const capital = (text: string) => text.charAt(0).toLocaleUpperCase('ru-RU') + te
  * dark glass. The model only works out what was asked; every name and time comes from the clinic's
  * data, and booking still goes through the usual sheet.
  */
-export function Assistant({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function Assistant({ open, onClose, wakeSignal = 0 }: { open: boolean; onClose: () => void; wakeSignal?: number }) {
   const { setFocus } = useFocus();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [thread, setThread] = useState<Exchange[]>([]);
@@ -60,11 +61,13 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
   const canListen = typeof window !== 'undefined' && window.isSecureContext && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined';
 
   // Voice: tap to talk, tap again to send; the speech is turned into text on Russian-hosted models.
-  const listen = async () => {
+  const speakNext = useRef(false);
+  const listen = async (auto = false) => {
     if (listening) { recorder.current?.stop(); return; }
     setVoiceError('');
+    speakNext.current = auto;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find((item) => MediaRecorder.isTypeSupported(item));
       const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
       chunks.current = [];
@@ -74,7 +77,7 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
         if (stopTimer.current) window.clearTimeout(stopTimer.current);
         setListening(false);
         const blob = new Blob(chunks.current, { type: rec.mimeType || 'audio/webm' });
-        if (blob.size < 2000) return;
+        if (blob.size < 2000) { speakNext.current = false; return; }
         setHearing(true);
         try {
           const form = new FormData();
@@ -90,12 +93,41 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
       recorder.current = rec;
       rec.start(500);
       setListening(true);
-      stopTimer.current = window.setTimeout(() => rec.state === 'recording' && rec.stop(), 30_000);
+      stopTimer.current = window.setTimeout(() => rec.state === 'recording' && rec.stop(), auto ? 12_000 : 30_000);
+      // Woken by voice: stop on its own once the person has spoken and fallen silent.
+      if (auto) {
+        const meter = new AudioContext();
+        const analyser = meter.createAnalyser();
+        analyser.fftSize = 1024;
+        meter.createMediaStreamSource(stream).connect(analyser);
+        const samples = new Float32Array(analyser.fftSize);
+        const started = Date.now();
+        let spoke = false;
+        let quietSince = 0;
+        const tick = window.setInterval(() => {
+          if (rec.state !== 'recording') { window.clearInterval(tick); void meter.close(); return; }
+          analyser.getFloatTimeDomainData(samples);
+          const level = Math.sqrt(samples.reduce((sum, value) => sum + value * value, 0) / samples.length);
+          const now = Date.now();
+          if (level > 0.02) { spoke = true; quietSince = 0; } else if (!quietSince) quietSince = now;
+          if ((spoke && quietSince && now - quietSince > 1200) || (!spoke && now - started > 4000)) rec.stop();
+        }, 100);
+      }
     } catch {
       setVoiceError('Нет доступа к микрофону. Разрешите его в браузере.');
     }
   };
   useEffect(() => () => { recorder.current?.stream.getTracks().forEach((track) => track.stop()); }, []);
+
+  // «Привет, ЗаЗа» opened the assistant: chime, then listen for the command straight away.
+  const lastWake = useRef(0);
+  useEffect(() => {
+    if (!open || !wakeSignal || wakeSignal === lastWake.current) return;
+    lastWake.current = wakeSignal;
+    chime();
+    const start = window.setTimeout(() => void listen(true), 350);
+    return () => window.clearTimeout(start);
+  }, [open, wakeSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open || enabled !== null) return;
@@ -131,7 +163,12 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
     try {
       const data = await api<{ reply: string; cards: Card[] }>('/assistant', { method: 'POST', body: JSON.stringify({ messages: [...history, { role: 'user', content: question }] }) });
       setThread((items) => items.map((item) => (item.id === id ? { ...item, reply: data.reply, cards: data.cards } : item)));
+      if (speakNext.current) {
+        speakNext.current = false;
+        speak(data.cards.some((card) => card.kind === 'slots' || card.kind === 'visits' || card.kind === 'newPatient') ? `${data.reply} Выберите на экране.` : data.reply);
+      }
     } catch (err) {
+      if (speakNext.current) { speakNext.current = false; speak('Не получилось. Попробуйте ещё раз.'); }
       setThread((items) => items.map((item) => (item.id === id ? { ...item, reply: err instanceof Error ? err.message : 'Помощник не ответил', error: true } : item)));
     } finally {
       setBusy(false);
@@ -164,8 +201,8 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
           {!thread.length && (
             <div className={styles.hello}>
               <Orb big />
-              <h2>{enabled === false ? 'Помощник не подключён' : 'Чем помочь?'}</h2>
-              <p>{enabled === false ? 'На сервере нет ключа Polza AI.' : 'Найду окно, пациента или запись. Работаю на GigaChat — данные не уходят из России.'}</p>
+              <h2>{enabled === false ? 'Помощник не подключён' : listening ? 'Слушаю…' : 'Чем помочь?'}</h2>
+              <p>{enabled === false ? 'На сервере нет ключа Polza AI.' : 'Я ЗаЗа. Скажите «Привет, ЗаЗа» или нажмите микрофон — найду окно, запишу, перенесу, отвечу голосом. Данные не уходят из России.'}</p>
               {enabled !== false && (
                 <div className={styles.ideas}>
                   {IDEAS.map((idea, index) => (
@@ -192,7 +229,7 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
             onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(text); } }}
           />
           {canListen && enabled !== false && (
-            <button type="button" className={styles.mic} data-on={listening || undefined} disabled={busy || hearing} onClick={() => void listen()} aria-label={listening ? 'Закончить и отправить' : 'Сказать голосом'} title={listening ? 'Закончить' : 'Голосом'}>
+            <button type="button" className={styles.mic} data-on={listening || undefined} disabled={busy || hearing} onClick={() => void listen(false)} aria-label={listening ? 'Закончить и отправить' : 'Сказать голосом'} title={listening ? 'Закончить' : 'Голосом'}>
               {listening ? <Square size={16} fill="currentColor" /> : <Mic size={20} />}
             </button>
           )}

@@ -23,6 +23,7 @@
     "react-dom": "^19.1.0",
     "react-odontogram": "0.5.5",
     "three": "^0.186.1",
+    "vosk-browser": "0.0.8",
     "xlsx": "0.18.5"
   },
   "devDependencies": {

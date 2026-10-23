@@ -12,6 +12,8 @@ import { BookingSheet } from './booking/booking-sheet';
 import { ContextPanel } from './studio/panels';
 import { Assistant, AssistantTrigger } from './assistant/assistant';
 import { NotificationsPanel, useNotifications } from './notifications/notifications';
+import { useVoiceWake } from './assistant/voice-wake';
+import { isDemo } from '@/lib/demo/mode';
 
 const PRIMARY = [
   { href: '/', label: 'Сегодня', icon: Calendar, perm: 'patient.read' },
@@ -68,6 +70,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [assistant, setAssistant] = useState(false);
   const [notes, setNotes] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [wake, setWake] = useState(0);
+  // «Привет, ЗаЗа» is on by default on every device; each person can switch it off for themselves.
+  const [voiceOn, setVoiceOn] = useState(false);
+  useEffect(() => { try { setVoiceOn(localStorage.getItem('sd_zaza') !== 'off'); } catch { setVoiceOn(true); } }, []);
+  const toggleVoice = () => setVoiceOn((on) => { try { localStorage.setItem('sd_zaza', on ? 'off' : 'on'); } catch { /* the choice lasts this visit */ } return !on; });
+  const voice = useVoiceWake({ enabled: voiceOn && !isDemo(), paused: assistant, onWake: () => { setAssistant(true); setWake((n) => n + 1); } });
   useEffect(() => { setMenu(false); }, [pathname]);
   const { feed, reload: reloadNotes } = useNotifications();
   const unread = feed?.unread ?? 0;
@@ -189,6 +197,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className="sd-top-acts">
             {user?.permissions.includes('schedule.write') && <Link className="sd-top-book" href="/schedule"><CalendarRange aria-hidden="true" />Записать</Link>}
             <AssistantTrigger variant="top" onOpen={() => setAssistant(true)} />
+            <button type="button" className="sd-top-zaza" data-state={voice} onClick={toggleVoice} aria-pressed={voiceOn}
+              title={voice === 'listening' ? 'ЗаЗа ждёт «Привет, ЗаЗа». Нажмите, чтобы выключить' : voice === 'denied' ? 'Нет доступа к микрофону — разрешите его в браузере' : voice === 'loading' ? 'Загружаю распознавание…' : voice === 'error' ? 'Голосовой режим не запустился' : 'Включить «Привет, ЗаЗа»'}>
+              <i aria-hidden="true" /><span>{voice === 'listening' || voice === 'paused' ? 'ЗаЗа слушает' : voice === 'loading' ? 'ЗаЗа…' : voice === 'denied' ? 'Нет микрофона' : 'ЗаЗа выкл'}</span>
+            </button>
             <button className="sd-top-icon" type="button" onClick={() => setNotes(true)} aria-label={unread ? `Уведомления, новых: ${unread}` : 'Уведомления'} title="Уведомления">
               <Bell aria-hidden="true" />
               {unread > 0 && <span className="sd-top-badge" aria-hidden="true">{unread > 99 ? '99+' : unread}</span>}
@@ -210,7 +222,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </div>
       <BookingSheet />
       <AssistantTrigger variant="fab" onOpen={() => setAssistant(true)} />
-      <Assistant open={assistant} onClose={() => setAssistant(false)} />
+      <Assistant open={assistant} onClose={() => setAssistant(false)} wakeSignal={wake} />
       <NotificationsPanel open={notes} feed={feed} onClose={() => setNotes(false)} onSeen={() => void reloadNotes()} />
       <aside className={`sd-panel ${panelOpen ? 'open' : ''}`}>
         <ContextPanel />
@@ -225,6 +237,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <button className="sd-sheet-search" type="button" onClick={() => { setSheet(false); setPalette(true); }}><Search size={18} />Поиск пациента и команды</button>
             <AssistantTrigger variant="inline" onOpen={() => { setSheet(false); setAssistant(true); }} />
             <button className="sd-sheet-search" type="button" onClick={() => { setSheet(false); setNotes(true); }}><Bell size={18} />Уведомления{unread > 0 && <span className="sd-count">{unread}</span>}</button>
+            <button className="sd-sheet-search" type="button" onClick={toggleVoice} aria-pressed={voiceOn}><span className="sd-zaza-dot" data-state={voice} aria-hidden="true" />{voiceOn ? (voice === 'denied' ? '«Привет, ЗаЗа»: нет доступа к микрофону' : '«Привет, ЗаЗа» включено — выключить') : 'Включить «Привет, ЗаЗа»'}</button>
             <div className="sd-more-sheet-grid">
               {[...more, ...(settings ? [settings] : [])].map((link) => {
                 const Icon = link.icon;

@@ -15,3 +15,6 @@ test-results
 playwright-report
 **/.impeccable/review/
 **/.impeccable/mocks/decision/payload.json
+
+# Vosk speech model: served by nginx from /var/www/dentasmart-assets/vosk on the server
+apps/web/public/vosk/
