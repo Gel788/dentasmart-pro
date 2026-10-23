@@ -24,10 +24,17 @@ type Props = {
   moving?: BoardVisit | null;
   /** Chairs as columns: the card names the doctor; otherwise it names the chair. */
   showDoctor?: boolean;
+  /** The doctor's colour: cards are painted by who treats, so a chair column shows the doctors at a glance. */
+  colorOf?: (doctorId: string | null) => string;
+  /** Columns are doctors: their header gets the doctor's colour mark. */
+  doctorAxis?: boolean;
 };
 
+const STATUS_ICON: Record<string, string> = { wait: '?', ok: '✓', here: '●', live: '▶', done: '✓', bad: '✕' };
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+
 /** Columns × time. Card height follows the visit's length; overlapping visits share their column. */
-export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId, pendingIds, onSelect, onSlot, onMove, label, moving = null, showDoctor = false }: Props) {
+export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId, pendingIds, onSelect, onSlot, onMove, label, moving = null, showDoctor = false, colorOf = () => '#2563eb', doctorAxis = false }: Props) {
   const startHour = Math.floor(hours.opensAt / 60);
   const endHour = Math.ceil(hours.closesAt / 60);
   const first = startHour * 60;
@@ -77,11 +84,20 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
       <div className={styles.gridInner} style={{ '--cols': columns.length } as CSSProperties}>
         <div className={styles.corner} />
         {placed.map(({ column, own }) => {
-          const live = own.filter((visit) => visit.status !== 'CANCELLED' && visit.status !== 'NO_SHOW').length;
+          const active = own.filter((visit) => visit.status !== 'CANCELLED' && visit.status !== 'NO_SHOW');
+          const booked = active.reduce((sum, visit) => sum + (wallMinutes(visit.endsAt, offset) - wallMinutes(visit.startsAt, offset)), 0);
+          const hoursOf = dayHours?.(column);
+          const open = hoursOf ? hoursOf.closesAt - hoursOf.opensAt : 0;
+          const load = open ? Math.min(100, Math.round((booked / open) * 100)) : 0;
           return (
             <div key={column.id} className={styles.colHead} data-today={manyDays && column.date === today}>
-              <span className={styles.colName}>{column.label}{live > 0 && <em>{live}</em>}</span>
+              <div className={styles.colTop}>
+                {doctorAxis && column.id !== 'stray' && <span className={styles.avatar} style={{ background: colorOf(column.id) }} aria-hidden="true">{initials(column.label)}</span>}
+                <span className={styles.colName}>{column.label}</span>
+                <em className={styles.colCount} title="Визитов">{active.length}</em>
+              </div>
               {column.sub && <small>{column.sub}</small>}
+              {open > 0 && <span className={styles.colLoad} title={`Занято ${load}%`} aria-label={`Занято ${load}%`}><i style={{ width: `${load}%` }} /></span>}
             </div>
           );
         })}
@@ -141,7 +157,7 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
               </div>
             )}
             {!carried && hover?.column === column.id && (
-              <div className={styles.hint} style={{ top: at(hover.minutes) }} aria-hidden="true">+ {clock(hover.minutes)}</div>
+              <div className={styles.hint} style={{ top: at(hover.minutes) }} aria-hidden="true"><b>+</b> Записать на {clock(hover.minutes)}</div>
             )}
             {dayHours && closedBands(dayHours(column), first, first + span).map((band) => (
               <div key={band.from} className={styles.closed} style={{ top: at(band.from), height: `calc(${(band.to - band.from) / 60} * ${hourPx})` }} aria-hidden="true" />
@@ -158,7 +174,9 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
                   type="button"
                   className={styles.visit}
                   data-tone={status.tone}
-                  data-short={end - start < 45}
+                  data-short={end - start < 30}
+                  data-size={end - start < 30 ? 'xs' : end - start < 50 ? 'sm' : 'md'}
+                  data-status={visit.status}
                   data-pending={pendingIds.has(visit.id)}
                   aria-pressed={selectedId === visit.id}
                   draggable={!pendingIds.has(visit.id)}
@@ -172,15 +190,21 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
                     height: `max(30px, calc(${(end - start) / 60} * ${hourPx} - 3px))`,
                     left: `calc(${lane.lane * width}% + 4px)`,
                     width: `calc(${width}% - 8px)`,
-                  }}
+                    '--c': colorOf(visit.doctorId),
+                  } as CSSProperties}
                 >
-                  {end - start < 45 ? (
+                  {end - start < 30 ? (
                     <span className={styles.short}><b>{visit.patient}</b> {clock(start)} · {visit.service}</span>
+                  ) : end - start < 50 ? (
+                    <>
+                      <span className={styles.line1}><b>{visit.patient}</b><em title={status.label}><i aria-hidden="true">{STATUS_ICON[status.tone]}</i></em></span>
+                      <span className={styles.what}>{clock(start)}–{clock(end)} · {visit.service}</span>
+                    </>
                   ) : (
                     <>
-                      <span className={styles.when}>{clock(start)}–{clock(end)}<em>{status.label}</em></span>
+                      <span className={styles.when}>{clock(start)}–{clock(end)}<em title={status.label}><i aria-hidden="true">{STATUS_ICON[status.tone]}</i><span>{status.label}</span></em></span>
                       <b>{visit.patient}</b>
-                      <span>{visit.service}</span>
+                      <span className={styles.what}>{visit.service}</span>
                       {end - start >= 60 && <span className={styles.who}>{showDoctor ? visit.doctor : visit.cabinet}</span>}
                     </>
                   )}

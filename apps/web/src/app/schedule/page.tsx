@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { effectiveHours, exceptionOn, visibleHours, weekHoursOf, type DayHours, type ScheduleException, type VisitStatus } from '@dentasmart/shared';
 import { Protected } from '@/components/protected';
 import { Agenda } from '@/components/schedule/agenda';
-import { MonthStrip } from '@/components/schedule/month-strip';
+import { WeekStrip } from '@/components/schedule/week-strip';
 import { MonthView } from '@/components/schedule/month-view';
 import { TimeGrid } from '@/components/schedule/time-grid';
 import { VisitPanel } from '@/components/schedule/visit-panel';
@@ -27,6 +27,9 @@ const VIEWS: { id: View; label: string }[] = [
   { id: 'month', label: 'Месяц' },
   { id: 'agenda', label: 'Повестка' },
 ];
+
+// One colour per doctor, the same on every screen of the calendar; white text on each stays readable.
+const DOCTOR_COLORS = ['#2563eb', '#7c3aed', '#0f8f84', '#db2777', '#c2410c', '#4f46e5', '#0e7490', '#15803d'];
 
 const visitsWord = (n: number) => {
   const tail = n % 100;
@@ -117,6 +120,10 @@ function Calendar() {
   const weekVisits = useMemo(() => (week?.appointments ?? []).filter((visit) => !doctor || visit.doctorId === doctor), [week, doctor]);
   const allVisits = useMemo(() => [...dayVisits, ...weekVisits], [dayVisits, weekVisits]);
   const selected = allVisits.find((visit) => visit.id === selectedId) ?? null;
+  const doctorColor = useMemo(() => {
+    const ids = [...(shell?.doctors ?? [])].map((item) => item.id).sort();
+    return (id: string | null) => (id && ids.includes(id) ? DOCTOR_COLORS[ids.indexOf(id) % DOCTOR_COLORS.length] : '#64748b');
+  }, [shell]);
 
   const columns: Column[] = useMemo(() => {
     if (!shell || !date) return [];
@@ -290,6 +297,33 @@ function Calendar() {
       : []),
   ];
 
+  // Free windows of at least half an hour, earliest first: one tap books it.
+  const windows = (() => {
+    if (view !== 'day' || !date) return [];
+    const nowMinutes = date === todayIn(offset) ? Math.ceil(wallMinutes(new Date().toISOString(), offset) / 15) * 15 : 0;
+    if (date < todayIn(offset)) return [];
+    const found: { column: Column; from: number; to: number }[] = [];
+    for (const column of columns) {
+      if (column.id === 'stray') continue;
+      const hours = columnHours(column);
+      if (!hours) continue;
+      const busy = dayVisits
+        .filter((visit) => column.match(visit) && visit.status !== 'CANCELLED' && visit.status !== 'NO_SHOW')
+        .map((visit) => ({ from: wallMinutes(visit.startsAt, offset), to: wallMinutes(visit.endsAt, offset) }));
+      if (hours.breakFrom !== undefined && hours.breakTo !== undefined) busy.push({ from: hours.breakFrom, to: hours.breakTo });
+      busy.sort((a, b) => a.from - b.from);
+      let cursor = Math.max(hours.opensAt, nowMinutes);
+      for (const slot of [...busy, { from: hours.closesAt, to: hours.closesAt }]) {
+        const end = Math.min(slot.from, hours.closesAt);
+        if (end - cursor >= 30) found.push({ column, from: cursor, to: end });
+        cursor = Math.max(cursor, slot.to);
+      }
+    }
+    return found.sort((a, b) => a.from - b.from).slice(0, 8);
+  })();
+  const span = (minutes: number) => (minutes >= 60 ? `${Math.floor(minutes / 60)} ч${minutes % 60 ? ` ${minutes % 60} мин` : ''}` : `${minutes} мин`);
+  const legend = (shell?.doctors ?? []).filter((item) => (view === 'week' ? weekVisits : dayVisits).some((visit) => visit.doctorId === item.id));
+
   return (
     <div className={styles.page}>
       <header className={styles.bar}>
@@ -330,7 +364,7 @@ function Calendar() {
           </div>
           <button type="button" className={styles.book} onClick={book} disabled={!shell} aria-label="Записать пациента"><Plus size={18} aria-hidden="true" /><span>Записать</span></button>
         </div>
-        {month && <MonthStrip days={month.days} selected={date} offset={offset} onPick={pick} />}
+        {week && view !== 'month' && <WeekStrip days={week.days} selected={date} offset={offset} onPick={setDate} onMonth={() => setView('month')} />}
       </header>
 
       {error && (
@@ -347,10 +381,24 @@ function Calendar() {
           <div className={styles.work}>
             {(view === 'day' || view === 'week') && (
               <div className={styles.hoursBar}>
-                <b>{view === 'day' ? `Работаем ${hoursLabel(todayHours)}` : 'Рабочие часы по графику'}</b>
+                {view === 'day' && date >= todayIn(offset) && (
+                  <div className={styles.free}>
+                    <b>{windows.length ? 'Свободно:' : dayOff ? 'Выходной по графику' : 'Свободных окон на этот день нет'}</b>
+                    {windows.map((slot) => (
+                      <button key={`${slot.column.id}-${slot.from}`} type="button" className={styles.freeChip} onClick={() => openSlot(slot.column, slot.from)}>
+                        <strong>{clock(slot.from)}</strong>
+                        <span>{slot.column.label} · {span(slot.to - slot.from)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {dayNotes.length > 0 && <em className={styles.hoursNote}>{dayNotes.join(' · ')}</em>}
-                <span>{allHours ? 'Нерабочее время заштриховано — туда тоже можно записать.' : 'Нажмите на свободное время, чтобы записать; визит можно перетащить.'}{(view === 'day' && axis === 'doctor') || (view === 'week' && doctor) ? ' Колонки врачей — по их личным графикам.' : ''}</span>
-                <button type="button" className={styles.hoursToggle} aria-pressed={allHours} onClick={() => setAllHours((on) => !on)}>{allHours ? 'Только рабочие часы' : 'Показать всё время'}</button>
+                {legend.length > 0 && (
+                  <ul className={styles.legend} aria-label="Цвета врачей">
+                    {legend.map((item) => <li key={item.id}><i style={{ background: doctorColor(item.id) }} />{item.name}</li>)}
+                  </ul>
+                )}
+                <button type="button" className={styles.hoursToggle} aria-pressed={allHours} onClick={() => setAllHours((on) => !on)} title={view === 'day' ? `Работаем ${hoursLabel(todayHours)}` : undefined}>{allHours ? 'Только рабочие часы' : 'Всё время'}</button>
               </div>
             )}
             {view === 'day' && dayOff && !allHours && dayVisits.length === 0 && (
@@ -369,12 +417,12 @@ function Calendar() {
             )}
             {view === 'day' && !(dayOff && !allHours && dayVisits.length === 0) && (
               columns.length ? (
-                <TimeGrid label="День по креслам" showDoctor={axis === 'chair'} columns={columns} visits={dayVisits} offset={offset} hours={gridHours} dayHours={columnHours} selectedId={selectedId} pendingIds={pending}
+                <TimeGrid label="День по креслам" showDoctor={axis === 'chair'} colorOf={doctorColor} doctorAxis={axis === 'doctor'} columns={columns} visits={dayVisits} offset={offset} hours={gridHours} dayHours={columnHours} selectedId={selectedId} pendingIds={pending}
                   onSelect={(visit) => setSelectedId(visit.id)} onSlot={openSlot} onMove={move} moving={movingVisit} />
               ) : <p className={styles.empty}>В клинике пока нет кресел. Добавьте их в настройках, чтобы записывать пациентов.</p>
             )}
             {view === 'week' && (
-              <TimeGrid label="Неделя" columns={columns} visits={weekVisits} offset={offset} hours={gridHours} dayHours={columnHours} selectedId={selectedId} pendingIds={pending}
+              <TimeGrid label="Неделя" colorOf={doctorColor} columns={columns} visits={weekVisits} offset={offset} hours={gridHours} dayHours={columnHours} selectedId={selectedId} pendingIds={pending}
                 onSelect={(visit) => setSelectedId(visit.id)} onSlot={openSlot} onMove={move} moving={movingVisit} />
             )}
             {view === 'month' && <MonthView days={month.days} selected={date} offset={offset} onPick={pick} />}
