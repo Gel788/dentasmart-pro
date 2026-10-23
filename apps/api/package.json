@@ -9,7 +9,7 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test:int": "tsx test/route-chain.int.ts && tsx test/ledger.int.ts && tsx test/schedule.int.ts && tsx test/patients.int.ts && tsx test/plan-items.int.ts && tsx test/visit-flow.int.ts && tsx test/finance-desk.int.ts && tsx test/today.int.ts && tsx test/staff.int.ts && tsx test/place.int.ts && tsx test/work-hours.int.ts && tsx test/booking-requests.int.ts && tsx test/dictation.int.ts && tsx test/crm-assistant.int.ts && tsx test/documents.int.ts && tsx test/reports.int.ts && tsx test/tasks.int.ts"
+    "test:int": "tsx test/route-chain.int.ts && tsx test/ledger.int.ts && tsx test/schedule.int.ts && tsx test/patients.int.ts && tsx test/plan-items.int.ts && tsx test/visit-flow.int.ts && tsx test/finance-desk.int.ts && tsx test/today.int.ts && tsx test/staff.int.ts && tsx test/place.int.ts && tsx test/work-hours.int.ts && tsx test/booking-requests.int.ts && tsx test/dictation.int.ts && tsx test/crm-assistant.int.ts && tsx test/documents.int.ts && tsx test/reports.int.ts && tsx test/tasks.int.ts && tsx test/categories.int.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.137.0",

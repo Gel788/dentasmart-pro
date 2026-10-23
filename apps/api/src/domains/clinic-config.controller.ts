@@ -46,6 +46,24 @@ export class ClinicConfigController {
     return this.config.saveService(orgId, user.id, body, body && 'id' in body ? (body as { id?: string }).id : undefined);
   }
 
+  @Post('categories')
+  @RequirePermissions('org.manage')
+  createCategory(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Body() body: { name?: string }) {
+    return this.config.saveCategory(orgId, user.id, body);
+  }
+
+  @Post('categories/:id')
+  @RequirePermissions('org.manage')
+  renameCategory(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { name?: string }) {
+    return this.config.saveCategory(orgId, user.id, body, id);
+  }
+
+  @Post('categories/:id/delete')
+  @RequirePermissions('org.manage')
+  deleteCategory(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { moveTo?: string | null }) {
+    return this.config.deleteCategory(orgId, user.id, id, body?.moveTo ?? null);
+  }
+
   @Post('services/:id/archive')
   @RequirePermissions('org.manage')
   archive(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { active?: boolean }) {

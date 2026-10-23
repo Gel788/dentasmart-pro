@@ -1545,3 +1545,20 @@ html.dark .sd-top-book { color: #0d131c; }
 li:has(> .jn-line .jn-edit) { grid-template-columns: 36px minmax(0, 1fr) auto !important; }
 li:has(> .jn-line .jn-edit) > .jn-line { grid-column: 1 / -1; }
 .jn-badge { border-radius: var(--r-sm) !important; background: var(--accent-soft) !important; color: var(--accent-ink) !important; }
+
+/* Price-list sections: a header with the section's own actions. */
+.price-cat-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.price-cat-head h2 { margin: 0; }
+.price-cat-head .sd-input { flex: 1; min-width: 200px; }
+.price-cat-acts { display: inline-flex; gap: 4px; margin-left: auto; }
+.price-link { min-height: 36px; padding: 0 10px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--accent-ink); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.price-link:hover { background: var(--accent-soft); }
+.price-link.danger { color: var(--danger); }
+.price-link.danger:hover { background: var(--danger-soft); }
+.price-cat-remove { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border)); border-radius: var(--r); background: var(--danger-soft); }
+.price-cat-remove p { margin: 0; }
+.price-cat-remove label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 14px; }
+.price-cat-remove .sd-inline { justify-content: flex-end; }
+.sd-btn.price-danger { background: var(--danger); box-shadow: none; }
+.sd-btn.price-danger:hover { background: color-mix(in srgb, var(--danger) 85%, #000); }
+.price-cat-empty { margin: 0; font-size: 13.5px; }

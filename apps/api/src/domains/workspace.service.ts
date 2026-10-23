@@ -664,7 +664,7 @@ export class WorkspaceService {
   async catalog(orgId: string) {
     const [services, listed] = await Promise.all([
       this.prisma.service.findMany({
-        where: { organizationId: orgId, isActive: true, NOT: { code: { startsWith: 'GROUP' } } },
+        where: { organizationId: orgId, isActive: true, isCategory: false, OR: [{ code: null }, { NOT: { code: { startsWith: 'GROUP' } } }] },
         orderBy: [{ sortOrder: 'asc' }],
       }),
       this.prisma.priceListItem.findMany({
@@ -672,8 +672,9 @@ export class WorkspaceService {
       }),
     ]);
     const price = new Map(listed.map((i) => [i.serviceId, Number(i.price)]));
+    // Services without a code are still bookable; only sections are left out.
     return services
-      .filter((s) => s.code)
+      .filter((s) => s.code || Number(s.basePrice) > 0 || s.durationMin > 0)
       .map((s) => ({
         id: s.id,
         code: s.code,

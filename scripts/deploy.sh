@@ -42,7 +42,8 @@ echo "== database"
 ( cd packages/database \
   && pnpm exec prisma generate >/dev/null \
   && pnpm exec prisma db push --skip-generate --accept-data-loss | tail -1 \
-  && pnpm exec prisma db execute --file prisma/sql/appointment-overlap.sql --schema prisma/schema.prisma | tail -1 )
+  && pnpm exec prisma db execute --file prisma/sql/appointment-overlap.sql --schema prisma/schema.prisma | tail -1 \
+  && pnpm exec prisma db execute --file prisma/sql/service-categories.sql --schema prisma/schema.prisma | tail -1 )
 
 echo "== build"
 NODE_OPTIONS=--max-old-space-size=1280 nice pnpm build > /tmp/dentasmart-build.log 2>&1 || { tail -40 /tmp/dentasmart-build.log; echo "build failed; nothing restarted" >&2; exit 1; }

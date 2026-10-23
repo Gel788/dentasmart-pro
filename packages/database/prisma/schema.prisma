@@ -597,6 +597,8 @@ model Service {
   requiresTooth  Boolean  @default(false)
   surfaceMode    String   @default("NONE")
   doctorPercent  Decimal  @default(0) @db.Decimal(5, 2)
+  /// A price-list section that groups services; never booked or billed itself.
+  isCategory     Boolean  @default(false)
   isActive       Boolean  @default(true)
   sortOrder      Int      @default(0)
   createdAt      DateTime @default(now())

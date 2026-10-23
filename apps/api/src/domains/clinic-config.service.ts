@@ -107,7 +107,7 @@ export class ClinicConfigService {
         surfaceMode: service.surfaceMode,
         doctorPercent: num(service.doctorPercent),
         isActive: service.isActive,
-        isCategory: service.parentId == null && services.some((row) => row.parentId === service.id),
+        isCategory: service.isCategory || (service.parentId == null && services.some((row) => row.parentId === service.id)),
         norms: service.materialNorms.map((norm) => ({
           id: norm.id,
           itemId: norm.itemId,
@@ -214,6 +214,10 @@ export class ClinicConfigService {
       const existing = await this.prisma.service.findFirst({ where: { id, organizationId: orgId } });
       if (!existing) throw new NotFoundException('Услуга не найдена');
     }
+    if (data.parentId) {
+      const parent = await this.prisma.service.findFirst({ where: { id: data.parentId, organizationId: orgId, isCategory: true } });
+      if (!parent) throw new BadRequestException('Категория не найдена');
+    }
     const service = id
       ? await this.prisma.service.update({ where: { id }, data })
       : await this.prisma.service.create({ data: { ...data, organizationId: orgId } });
@@ -228,6 +232,48 @@ export class ClinicConfigService {
     }
     await this.trail(orgId, userId, 'Service', service.id, id ? 'UPDATE' : 'CREATE', { name: service.name, price: data.basePrice });
     return { id: service.id };
+  }
+
+  /** Price-list sections: created, renamed and removed apart from services. */
+  async saveCategory(orgId: string, userId: string, body: { name?: string }, id?: string) {
+    const name = String(body?.name ?? '').trim().slice(0, 120);
+    if (!name) throw new BadRequestException('Напишите название категории');
+    const clash = await this.prisma.service.findFirst({ where: { organizationId: orgId, isCategory: true, name: { equals: name, mode: 'insensitive' }, ...(id ? { id: { not: id } } : {}) } });
+    if (clash) throw new BadRequestException('Такая категория уже есть');
+    if (id) {
+      const own = await this.prisma.service.findFirst({ where: { id, organizationId: orgId, isCategory: true } });
+      if (!own) throw new NotFoundException('Категория не найдена');
+      await this.prisma.service.update({ where: { id }, data: { name } });
+    }
+    const row = id
+      ? { id }
+      : await this.prisma.service.create({ data: { organizationId: orgId, name, isCategory: true, basePrice: 0, durationMin: 0, code: null } });
+    await this.trail(orgId, userId, 'ServiceCategory', row.id, id ? 'UPDATE' : 'CREATE', { name });
+    return { id: row.id };
+  }
+
+  /** Removes a section; its services move to another section or stay without one — none is lost. */
+  async deleteCategory(orgId: string, userId: string, id: string, moveTo?: string | null) {
+    const category = await this.prisma.service.findFirst({ where: { id, organizationId: orgId, isCategory: true } });
+    if (!category) throw new NotFoundException('Категория не найдена');
+    if (moveTo) {
+      if (moveTo === id) throw new BadRequestException('Выберите другую категорию');
+      const target = await this.prisma.service.findFirst({ where: { id: moveTo, organizationId: orgId, isCategory: true } });
+      if (!target) throw new BadRequestException('Категория для переноса не найдена');
+    }
+    const moved = await this.prisma.$transaction(async (tx) => {
+      const children = await tx.service.updateMany({ where: { organizationId: orgId, parentId: id }, data: { parentId: moveTo || null } });
+      // A section that something still points at (an old visit or price list) is hidden instead.
+      const used = await tx.appointment.count({ where: { serviceId: id } }) + await tx.treatmentPlanItem.count({ where: { serviceId: id } }) + await tx.priceListItem.count({ where: { serviceId: id } });
+      if (used) await tx.service.update({ where: { id }, data: { isActive: false, name: `${category.name} (удалена)` } });
+      else {
+        await tx.serviceMaterialNorm.deleteMany({ where: { serviceId: id } });
+        await tx.service.delete({ where: { id } });
+      }
+      return children.count;
+    });
+    await this.trail(orgId, userId, 'ServiceCategory', id, 'DELETE', { name: category.name, moved, moveTo: moveTo || null });
+    return { id, moved };
   }
 
   async archiveService(orgId: string, userId: string, id: string, active: boolean) {
