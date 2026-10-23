@@ -1554,9 +1554,22 @@ export class WorkspaceService {
     const branch = body.cabinetId
       ? await this.prisma.cabinet.findUnique({ where: { id: body.cabinetId } })
       : null;
-    const fallback = await this.prisma.branch.findFirst({ where: { organizationId: orgId, isActive: true } });
+    const fallback = await this.prisma.branch.findFirst({ where: { organizationId: orgId, isActive: true, cabinets: { some: { isActive: true } } }, orderBy: { createdAt: 'asc' } })
+      ?? await this.prisma.branch.findFirst({ where: { organizationId: orgId, isActive: true } });
     const branchId = branch?.branchId ?? fallback?.id;
     if (!branchId) throw new BadRequestException('Нет филиала');
+    // No chair named: the first free one in the branch, so the visit shows in the chairs view.
+    if (!body.cabinetId) {
+      const [cabinets, busy] = await Promise.all([
+        this.prisma.cabinet.findMany({ where: { branchId, isActive: true }, orderBy: { name: 'asc' }, select: { id: true } }),
+        this.prisma.appointment.findMany({ where: { organizationId: orgId, branchId, cabinetId: { not: null }, status: { notIn: ['CANCELLED', 'NO_SHOW'] }, startsAt: { lt: endsAt }, endsAt: { gt: startsAt } }, select: { cabinetId: true } }),
+      ]);
+      const blocked = await this.prisma.cabinetBlock.findMany({ where: { organizationId: orgId, branchId, startsAt: { lt: endsAt }, endsAt: { gt: startsAt } }, select: { cabinetId: true } });
+      const taken = new Set([...busy, ...blocked].map((row) => row.cabinetId));
+      const free = cabinets.find((cabinet) => !taken.has(cabinet.id));
+      if (!free && cabinets.length) throw new BadRequestException('Все кресла в это время заняты');
+      body = { ...body, cabinetId: free?.id };
+    }
     const appt = await this.prisma.appointment.create({
       data: {
         organizationId: orgId,

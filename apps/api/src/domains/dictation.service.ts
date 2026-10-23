@@ -126,6 +126,7 @@ export class DictationService {
     if (!response.ok) {
       this.log.warn(`polza ${response.status}: ${JSON.stringify(data)?.slice(0, 300)}`);
       if (response.status === 402) throw new ServiceUnavailableException('На счёте Polza AI закончились средства');
+      if (response.status === 403) throw new ServiceUnavailableException(`Модель ${String(url).includes('/audio/') ? STT_MODEL : TEXT_MODEL} не разрешена для ключа Polza AI. Включите её в настройках ключа в кабинете Polza — или продиктуйте текстом через микрофон клавиатуры.`);
       throw new ServiceUnavailableException('Сервис распознавания ответил ошибкой. Попробуйте ещё раз.');
     }
     return data;

@@ -126,13 +126,18 @@ function Calendar() {
         };
       });
     }
+    // A visit with no chair or doctor, or in one switched off since, gets its own column instead of vanishing.
+    const withStray = (list: Column[], label: string): Column[] => {
+      const stray = (visit: BoardVisit) => !list.some((column) => column.match(visit));
+      return dayVisits.some(stray) ? [...list, { id: 'stray', date, label, sub: 'перенесите в нужную колонку', match: stray, move: {} }] : list;
+    };
     if (axis === 'doctor') {
-      return shell.doctors
+      return withStray(shell.doctors
         .filter((item) => !doctor || item.id === doctor)
-        .map((item) => ({ id: item.id, date, label: item.name, sub: 'врач', match: (visit: BoardVisit) => visit.doctorId === item.id, move: { doctorId: item.id } }));
+        .map((item) => ({ id: item.id, date, label: item.name, sub: 'врач', match: (visit: BoardVisit) => visit.doctorId === item.id, move: { doctorId: item.id } })), 'Без врача');
     }
     const many = shell.branches.length > 1;
-    return shell.branches.flatMap((branch) =>
+    return withStray(shell.branches.flatMap((branch) =>
       branch.cabinets.map((cabinet) => ({
         id: cabinet.id,
         date,
@@ -141,8 +146,8 @@ function Calendar() {
         match: (visit: BoardVisit) => visit.cabinetId === cabinet.id,
         move: { cabinetId: cabinet.id },
       })),
-    );
-  }, [shell, date, view, axis, doctor, offset]);
+    ), 'Без кабинета');
+  }, [shell, date, view, axis, doctor, offset, dayVisits]);
 
   const go = (days: number) => {
     if (!date) return;
