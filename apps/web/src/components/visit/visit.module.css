@@ -107,3 +107,6 @@
 .skipBox textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 14.5px; resize: vertical; border-radius: var(--r-sm); }
 .skipBox > div { display: flex; justify-content: flex-end; gap: 8px; }
 .skipBox :global(.sd-btn), .skipBox :global(.sd-btn-ghost) { min-height: 44px; }
+
+.dictateHint { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: var(--r); color: var(--text-secondary); font-size: 13.5px; }
+.dictateHint svg { flex: none; color: var(--accent); }

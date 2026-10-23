@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, ArrowUp, CalendarRange, Check, X } from 'lucide-react';
+import { ArrowRight, ArrowUp, CalendarRange, Check, Mic, Square, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useFocus } from '@/lib/focus';
 import styles from './assistant.module.css';
@@ -51,6 +51,51 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
   const input = useRef<HTMLTextAreaElement>(null);
   const feed = useRef<HTMLDivElement>(null);
   const seq = useRef(0);
+  const [listening, setListening] = useState(false);
+  const [hearing, setHearing] = useState(false);
+  const [voiceError, setVoiceError] = useState('');
+  const recorder = useRef<MediaRecorder | null>(null);
+  const chunks = useRef<Blob[]>([]);
+  const stopTimer = useRef<number | null>(null);
+  const canListen = typeof window !== 'undefined' && window.isSecureContext && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined';
+
+  // Voice: tap to talk, tap again to send; the speech is turned into text on Russian-hosted models.
+  const listen = async () => {
+    if (listening) { recorder.current?.stop(); return; }
+    setVoiceError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find((item) => MediaRecorder.isTypeSupported(item));
+      const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      chunks.current = [];
+      rec.ondataavailable = (event) => { if (event.data.size) chunks.current.push(event.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        if (stopTimer.current) window.clearTimeout(stopTimer.current);
+        setListening(false);
+        const blob = new Blob(chunks.current, { type: rec.mimeType || 'audio/webm' });
+        if (blob.size < 2000) return;
+        setHearing(true);
+        try {
+          const form = new FormData();
+          form.append('audio', blob, `voice.${blob.type.includes('mp4') ? 'm4a' : 'webm'}`);
+          const { text: heard } = await api<{ text: string }>('/assistant/transcribe', { method: 'POST', body: form });
+          void send(heard);
+        } catch (err) {
+          setVoiceError(err instanceof Error ? err.message : 'Не расслышал');
+        } finally {
+          setHearing(false);
+        }
+      };
+      recorder.current = rec;
+      rec.start(500);
+      setListening(true);
+      stopTimer.current = window.setTimeout(() => rec.state === 'recording' && rec.stop(), 30_000);
+    } catch {
+      setVoiceError('Нет доступа к микрофону. Разрешите его в браузере.');
+    }
+  };
+  useEffect(() => () => { recorder.current?.stream.getTracks().forEach((track) => track.stop()); }, []);
 
   useEffect(() => {
     if (!open || enabled !== null) return;
@@ -104,7 +149,7 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
   };
 
   if (!open) return null;
-  const state = busy ? 'thinking' : text ? 'listening' : 'idle';
+  const state = busy || hearing ? 'thinking' : listening || text ? 'listening' : 'idle';
 
   return (
     <div className={styles.scene} data-state={state} data-leaving={leaving || undefined} role="dialog" aria-modal="true" aria-label="Помощник" onMouseDown={close}>
@@ -115,6 +160,7 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
         <button type="button" className={styles.close} onClick={close} aria-label="Закрыть помощника"><X size={18} /></button>
 
         <div className={styles.feed} ref={feed} aria-live="polite">
+          {voiceError && <p className={styles.voiceError} role="alert">{voiceError}</p>}
           {!thread.length && (
             <div className={styles.hello}>
               <Orb big />
@@ -141,10 +187,15 @@ export function Assistant({ open, onClose }: { open: boolean; onClose: () => voi
             rows={1}
             value={text}
             disabled={enabled === false}
-            placeholder={busy ? 'Ищу…' : 'Спросите что-нибудь'}
+            placeholder={listening ? 'Говорите… нажмите ■, когда закончите' : hearing ? 'Распознаю речь…' : busy ? 'Ищу…' : 'Спросите или нажмите микрофон'}
             onChange={(event) => setText(event.target.value)}
             onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(text); } }}
           />
+          {canListen && enabled !== false && (
+            <button type="button" className={styles.mic} data-on={listening || undefined} disabled={busy || hearing} onClick={() => void listen()} aria-label={listening ? 'Закончить и отправить' : 'Сказать голосом'} title={listening ? 'Закончить' : 'Голосом'}>
+              {listening ? <Square size={16} fill="currentColor" /> : <Mic size={20} />}
+            </button>
+          )}
           <button type="submit" className={styles.send} disabled={busy || !text.trim() || enabled === false} aria-label="Спросить"><ArrowUp size={20} /></button>
         </form>
       </div>

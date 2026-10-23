@@ -200,6 +200,11 @@ select.bookInput option { background: #1b1c26; color: var(--ink); }
 .bar:focus-within { border-color: rgba(255, 255, 255, 0.3); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1) inset, 0 24px 60px rgba(0, 0, 0, 0.45), 0 0 0 4px rgba(179, 92, 255, 0.18); }
 .bar textarea { flex: 1; min-width: 0; min-height: 28px; max-height: 140px; padding: 6px 0; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 18px; line-height: 1.4; resize: none; field-sizing: content; outline: 0; }
 .bar textarea::placeholder { color: var(--ink-3); }
+.mic { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 50%; background: rgba(255, 255, 255, 0.08); color: var(--ink); cursor: pointer; transition: background 160ms ease, transform 160ms ease; }
+.mic:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); }
+.mic[data-on] { border-color: transparent; background: linear-gradient(135deg, var(--s2), var(--s3)); color: #fff; animation: pulse 1.2s ease-in-out infinite; box-shadow: 0 0 0 6px rgba(255, 61, 139, 0.18), 0 0 24px rgba(179, 92, 255, 0.6); }
+.mic:disabled { opacity: 0.4; cursor: default; }
+.voiceError { margin: 0 0 8px; padding: 10px 14px; border-radius: 14px; background: rgba(255, 61, 139, 0.16); color: #ffb3cd; font-size: 14px; font-weight: 600; }
 .send { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border: 0; border-radius: 50%; background: #fff; color: #10111a; cursor: pointer; transition: transform 160ms ease, opacity 160ms ease; }
 .send:hover:not(:disabled) { transform: scale(1.06); }
 .send:disabled { opacity: 0.25; cursor: default; }

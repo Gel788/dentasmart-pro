@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Check, ChevronLeft, ShieldAlert } from 'lucide-react';
+import { Check, ChevronLeft, ShieldAlert, Mic } from 'lucide-react';
 import { Protected } from '@/components/protected';
 import { ToothChart, type ChartSurface } from '@/components/studio/chart';
 import { ToothFocus } from '@/components/studio/tooth-focus';
@@ -364,6 +364,9 @@ function Chair() {
             </div>
           )}
           {/* Live clinics dictate through Russian-hosted models; the browser's own speech service stays in the demo. */}
+          {before && medicalWrite && !isDemo() && (
+            <p className={styles.dictateHint}><Mic size={16} aria-hidden="true" />Диктовка голосом откроется здесь после «Начать приём»: нажмите «Диктовать», расскажите приём — CRM разложит по полям протокола.</p>
+          )}
           {live && medicalWrite && !isDemo() && (
             <Dictation
               visitId={visit.id}

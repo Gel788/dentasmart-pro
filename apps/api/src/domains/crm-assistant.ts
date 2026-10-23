@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Get, Injectable, Logger, Post, ServiceUnavailableException, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Injectable, Logger, Post, ServiceUnavailableException, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AuthUser } from '@dentasmart/shared';
@@ -12,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { clinicianWhere } from './clinicians';
 import { WidgetService } from './widget.service';
 import { WorkspaceService } from './workspace.service';
+import { DictationService } from './dictation.service';
 
 /**
  * The staff assistant inside the CRM. A Russian-hosted model (GigaChat through Polza, so whatever a
@@ -492,7 +494,23 @@ export function parseRoute(content: string): { reply: string; action: Action } {
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('assistant')
 export class CrmAssistantController {
-  constructor(private readonly assistant: CrmAssistantService) {}
+  constructor(private readonly assistant: CrmAssistantService, private readonly dictation: DictationService) {}
+
+  /** A spoken question turned into text by the Russian-hosted speech model; the text then goes through ask(). */
+  @Post('transcribe')
+  @Throttle({ default: { limit: 40, ttl: 10 * 60_000 } })
+  @RequirePermissions('patient.read')
+  @UseInterceptors(FileInterceptor('audio', {
+    limits: { fileSize: 6 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => (/^(audio|video)\/(webm|ogg|mp4|mpeg|mp3|wav|x-wav|x-m4a|m4a|aac)/.test(file.mimetype) ? cb(null, true) : cb(new BadRequestException('Этот формат записи не принимается'), false)),
+  }))
+  async transcribe(@UploadedFile() audio?: Express.Multer.File) {
+    if (!audio?.buffer?.length) throw new BadRequestException('Пустая запись');
+    if (!this.dictation.enabled) throw new ServiceUnavailableException('Голосовой ввод не подключён');
+    const text = await this.dictation.transcribe(audio.buffer, audio.mimetype);
+    if (!text) throw new BadRequestException('Не расслышал. Скажите ещё раз ближе к микрофону.');
+    return { text: text.slice(0, 1200) };
+  }
 
   @Get()
   @RequirePermissions('patient.read')
