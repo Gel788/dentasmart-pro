@@ -53,6 +53,8 @@ function Registry() {
   const [error, setError] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // «Новый пациент» from the home screen opens the form straight away.
+  useEffect(() => { if (new URLSearchParams(window.location.search).get('new') === '1') setCreating(true); }, []);
   const [attempt, setAttempt] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
   const tableRef = useRef<HTMLTableSectionElement>(null);

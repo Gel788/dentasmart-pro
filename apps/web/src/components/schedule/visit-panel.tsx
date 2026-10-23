@@ -16,11 +16,13 @@ type Props = {
   busy: boolean;
   onStatus: (visit: BoardVisit, status: VisitStatus) => void;
   onReschedule: (visit: BoardVisit) => void;
+  /** Pick the new time on the grid instead of in the form. */
+  onMoveOnGrid?: (visit: BoardVisit) => void;
   onClose: () => void;
 };
 
 /** The selected visit: who, when, where, and only the status moves the server will accept. */
-export function VisitPanel({ visit, offset, busy, onStatus, onReschedule, onClose }: Props) {
+export function VisitPanel({ visit, offset, busy, onStatus, onReschedule, onMoveOnGrid, onClose }: Props) {
   const [confirm, setConfirm] = useState<VisitStatus | null>(null);
   if (!visit) {
     return (
@@ -59,7 +61,8 @@ export function VisitPanel({ visit, offset, busy, onStatus, onReschedule, onClos
         {!isVisitClosed(visit.status) && <Link className={next ? 'sd-btn-ghost' : 'sd-btn'} href={`/visits/${visit.id}`}>{visit.status === 'IN_PROGRESS' ? 'Вернуться к приёму' : 'Открыть приём'}</Link>}
         {visit.status === 'COMPLETED' && <Link className="sd-btn-ghost" href={`/visits/${visit.id}`}>Протокол</Link>}
         <Link className="sd-btn-ghost" href={`/patients/${visit.patientId}`}>Карта пациента</Link>
-        {movable && <button type="button" className="sd-btn-ghost" disabled={busy} onClick={() => onReschedule(visit)}>Перенести</button>}
+        {movable && onMoveOnGrid && <button type="button" className="sd-btn-ghost" disabled={busy} onClick={() => onMoveOnGrid(visit)}>Перенести на сетке</button>}
+        {movable && <button type="button" className="sd-btn-ghost" disabled={busy} onClick={() => onReschedule(visit)}>{onMoveOnGrid ? 'Изменить запись' : 'Перенести'}</button>}
       </div>
       {closing.length > 0 && !confirm && (
         <div className={styles.actions}>

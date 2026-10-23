@@ -216,3 +216,15 @@
 @media (prefers-reduced-motion: no-preference) {
   .visit, .cell, .row { transition: background-color 120ms ease, outline-color 120ms ease, opacity 160ms ease; }
 }
+
+/* Moving a visit: a dashed ghost shows where it lands and its new time; the original fades. */
+.ghost { position: absolute; left: 4px; right: 4px; z-index: 4; display: flex; flex-direction: column; gap: 1px; padding: 4px 8px; border: 2px dashed var(--code-chair); background: color-mix(in srgb, var(--code-chair) 10%, var(--surface-solid)); color: var(--text); font-size: 12.5px; pointer-events: none; overflow: hidden; }
+.ghost b { color: var(--code-chair); font-size: 13px; font-variant-numeric: tabular-nums; }
+.ghost span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.visit[data-carried] { opacity: 0.4; }
+.col[data-moving] { cursor: copy; }
+.moveBar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 14px; border: 1px solid var(--code-chair); border-left: 4px solid var(--code-chair); background: color-mix(in srgb, var(--code-chair) 7%, var(--surface-solid)); font-size: 14px; }
+.moveBar b { font-weight: 700; }
+.moveBar span { flex: 1; min-width: 200px; color: var(--text-secondary); }
+.moveBar button { min-height: 40px; }
+.toast button + button { margin-left: 4px; }

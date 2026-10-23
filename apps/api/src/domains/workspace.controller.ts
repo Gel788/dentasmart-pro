@@ -102,7 +102,7 @@ export class WorkspaceController {
   @Get('today')
   @RequirePermissions('patient.read')
   today(@OrgId() orgId: string, @CurrentUser() user: AuthUser) {
-    return this.workspace.today(orgId, user.permissions, user.employee?.id);
+    return this.workspace.today(orgId, user.permissions, user.employee?.id, user.id);
   }
 
   @Get('home')

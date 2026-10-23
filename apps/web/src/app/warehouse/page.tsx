@@ -5,7 +5,6 @@ import { AlertTriangle, Package } from 'lucide-react';
 import { Protected } from '@/components/protected';
 import { PageHeader } from '@/components/ui/page-header';
 import { TabBar } from '@/components/ui/tab-bar';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Label, Select } from '@/components/ui/input';
 import { ListRow } from '@/components/ui/list-row';
@@ -91,7 +90,7 @@ export default function WarehousePage() {
     load();
   };
 
-  const stockItems = items as { id: string; name: string; sku?: string; batches: { quantity: string }[] }[];
+  const stockItems = items as { id: string; name: string; sku?: string; unit?: string; minStock?: string; batches: { quantity: string }[] }[];
   const lowCount = (low as unknown[]).length;
   const normItems = norms as { id: string; quantity: string; service: { name: string }; item: { name: string } }[];
 
@@ -137,20 +136,27 @@ export default function WarehousePage() {
           )}
           {!!lowCount && <LowStockBanner count={lowCount} />}
           {stockItems.length ? (
-            <div className="ds-card mt-6 grid overflow-hidden sm:grid-cols-2 xl:grid-cols-3">
-              {stockItems.map((it) => {
-                const qty = it.batches?.reduce((s, b) => s + Number(b.quantity), 0) ?? 0;
-                return (
-                  <Card key={it.id} hover className="!rounded-none !border-x-0 !border-t-0 p-4 sm:border-r sm:last:border-r-0">
-                    <p className="font-semibold text-[var(--text)]">{it.name}</p>
-                    <p className="mt-1 text-sm text-[var(--muted)]">{it.sku ?? '—'}</p>
-                    <p className="mt-2 text-sm">
-                      Остаток: <span className="font-medium text-[var(--text)]">{qty}</span>
-                    </p>
-                    <Button className="mt-3" variant="ghost" onClick={() => setEditing({ id: it.id, name: it.name, quantity: qty })}>Изменить</Button>
-                  </Card>
-                );
-              })}
+            <div className="ds-card mt-4 overflow-x-auto">
+              <table className="sd-table w-full text-sm">
+                <thead><tr><th className="text-left">Позиция</th><th className="text-left">Код</th><th className="text-right">Остаток</th><th className="text-right">Минимум</th><th className="text-left">Состояние</th><th /></tr></thead>
+                <tbody>
+                  {stockItems.map((it) => {
+                    const qty = it.batches?.reduce((s, b) => s + Number(b.quantity), 0) ?? 0;
+                    const min = Number(it.minStock ?? 0);
+                    const state = qty <= 0 ? { code: 'var(--code-owe)', word: 'закончилось' } : min > 0 && qty <= min ? { code: 'var(--code-here)', word: 'пора заказать' } : { code: 'var(--code-paid)', word: 'в норме' };
+                    return (
+                      <tr key={it.id} className="border-t border-[var(--border)]">
+                        <td className="font-semibold">{it.name}</td>
+                        <td className="text-[var(--muted)]">{it.sku ?? '—'}</td>
+                        <td className="text-right tabular-nums">{qty.toLocaleString('ru-RU')} {it.unit ?? 'шт'}</td>
+                        <td className="text-right tabular-nums text-[var(--muted)]">{min ? `${min.toLocaleString('ru-RU')} ${it.unit ?? 'шт'}` : '—'}</td>
+                        <td><span className="inline-flex items-center gap-2 font-semibold"><i style={{ width: 10, height: 10, background: state.code, display: 'inline-block' }} aria-hidden="true" />{state.word}</span></td>
+                        <td className="text-right"><Button variant="ghost" size="sm" onClick={() => setEditing({ id: it.id, name: it.name, quantity: qty })}>Изменить</Button></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           ) : (
             <div className="mt-6">

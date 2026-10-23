@@ -20,15 +20,23 @@ type Props = {
   onSlot: (column: Column, minutes: number) => void;
   onMove: (visit: BoardVisit, column: Column, minutes: number) => void;
   label: string;
+  /** A visit being moved by tapping its new time (touch screens and keyboard). */
+  moving?: BoardVisit | null;
 };
 
 /** Columns × time. Card height follows the visit's length; overlapping visits share their column. */
-export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId, pendingIds, onSelect, onSlot, onMove, label }: Props) {
+export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId, pendingIds, onSelect, onSlot, onMove, label, moving = null }: Props) {
   const startHour = Math.floor(hours.opensAt / 60);
   const endHour = Math.ceil(hours.closesAt / 60);
   const first = startHour * 60;
   const span = (endHour - startHour) * 60;
   const [over, setOver] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<BoardVisit | null>(null);
+  // Where the moved visit would land: column and start, shown as a ghost with its new time.
+  const [ghost, setGhost] = useState<{ column: string; minutes: number } | null>(null);
+  const carried = dragging ?? moving;
+  const carriedLength = carried ? Math.max(15, Math.round((Date.parse(carried.endsAt) - Date.parse(carried.startsAt)) / 60000)) : 0;
+  useEffect(() => { if (!moving) setGhost(null); }, [moving]);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -47,7 +55,7 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
     [columns, visits],
   );
 
-  const minutesAt = (event: React.MouseEvent<HTMLElement> | React.DragEvent<HTMLElement>) => {
+  const minutesAt = (event: React.MouseEvent<HTMLElement> | React.DragEvent<HTMLElement> | React.PointerEvent<HTMLElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const hourPx = rect.height / (endHour - startHour);
     const raw = first + ((event.clientY - rect.top) / hourPx) * 60;
@@ -84,19 +92,36 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
             className={styles.col}
             style={{ height: `calc(${endHour - startHour} * ${hourPx})` }}
             data-over={over === column.id}
+            data-moving={moving ? '' : undefined}
             onClick={(event) => {
-              if ((event.target as HTMLElement).closest('button')) return;
+              if (!moving && (event.target as HTMLElement).closest('button')) return;
               onSlot(column, minutesAt(event));
             }}
-            onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setOver(column.id); }}
+            onPointerMove={(event) => { if (moving && event.pointerType === 'mouse') setGhost({ column: column.id, minutes: minutesAt(event) }); }}
+            onPointerLeave={() => { if (moving) setGhost((current) => (current?.column === column.id ? null : current)); }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'move';
+              setOver(column.id);
+              const minutes = minutesAt(event);
+              setGhost((current) => (current?.column === column.id && current.minutes === minutes ? current : { column: column.id, minutes }));
+            }}
             onDragLeave={() => setOver((current) => (current === column.id ? null : current))}
             onDrop={(event) => {
               event.preventDefault();
               setOver(null);
+              setGhost(null);
+              setDragging(null);
               const visit = visits.find((item) => item.id === event.dataTransfer.getData('text/plain'));
               if (visit) onMove(visit, column, minutesAt(event));
             }}
           >
+            {carried && ghost?.column === column.id && (
+              <div className={styles.ghost} style={{ top: at(ghost.minutes), height: `max(30px, calc(${carriedLength / 60} * ${hourPx} - 3px))` }} aria-hidden="true">
+                <b>{clock(ghost.minutes)}–{clock(ghost.minutes + carriedLength)}</b>
+                <span>{carried.patient}</span>
+              </div>
+            )}
             {dayHours && closedBands(dayHours(column), first, first + span).map((band) => (
               <div key={band.from} className={styles.closed} style={{ top: at(band.from), height: `calc(${(band.to - band.from) / 60} * ${hourPx})` }} aria-hidden="true" />
             ))}
@@ -116,7 +141,9 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
                   data-pending={pendingIds.has(visit.id)}
                   aria-pressed={selectedId === visit.id}
                   draggable={!pendingIds.has(visit.id)}
-                  onDragStart={(event) => { event.dataTransfer.setData('text/plain', visit.id); event.dataTransfer.effectAllowed = 'move'; }}
+                  data-carried={carried?.id === visit.id || undefined}
+                  onDragStart={(event) => { event.dataTransfer.setData('text/plain', visit.id); event.dataTransfer.effectAllowed = 'move'; setDragging(visit); }}
+                  onDragEnd={() => { setDragging(null); setGhost(null); setOver(null); }}
                   onClick={() => onSelect(visit)}
                   aria-label={`${clock(start)}–${clock(end)}, ${visit.patient}, ${visit.service}, ${status.label}`}
                   style={{

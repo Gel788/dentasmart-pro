@@ -23,11 +23,16 @@
 .attnM { grid-column: span 8; }
 .sideM { grid-column: span 4; }
 
-.date { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; }
+.date { flex: 1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; }
 .date h1 { margin: 0; font-size: 26px !important; font-weight: 800; line-height: 1.1 !important; letter-spacing: -0.02em; }
 .date p { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
 .book { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; background: var(--text); color: var(--surface-solid); font-weight: 700; text-decoration: none; }
 .book:hover { background: #000; }
+.quick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); flex-basis: 100%; gap: 6px; }
+.quick > * { justify-content: center; }
+.quickLink { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 12px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); font-size: 14px; font-weight: 600; text-decoration: none; }
+.quickLink:hover { background: var(--surface-2); }
+@media (max-width: 720px) { .quick { grid-template-columns: repeat(4, minmax(0, 1fr)); } .quick > * { padding: 0 6px; font-size: 13px; } }
 
 .week { flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .week a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 64px; padding: 6px 2px; border-right: 1px solid var(--border); color: var(--text); text-decoration: none; transition: background 120ms ease; }

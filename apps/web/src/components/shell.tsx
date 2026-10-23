@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Activity, BarChart3, Calendar, FileText, Globe, LayoutGrid, LogOut, PanelRight, CalendarRange, ClipboardCheck, FlaskConical, Moon, Package, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users, Wallet } from 'lucide-react';
+import { Activity, BarChart3, Bell, Calendar, FileText, ListChecks, Globe, LayoutGrid, LogOut, PanelRight, CalendarRange, ClipboardCheck, FlaskConical, Moon, Package, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users, Wallet } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
 import { useFocus } from '@/lib/focus';
@@ -11,6 +11,7 @@ import { api } from '@/lib/api';
 import { BookingSheet } from './booking/booking-sheet';
 import { ContextPanel } from './studio/panels';
 import { Assistant, AssistantTrigger } from './assistant/assistant';
+import { NotificationsPanel, useNotifications } from './notifications/notifications';
 
 const PRIMARY = [
   { href: '/', label: 'Сегодня', icon: Calendar, perm: 'patient.read' },
@@ -21,6 +22,7 @@ const PRIMARY = [
 ];
 
 const MORE = [
+  { href: '/tasks', label: 'Задачи', icon: ListChecks, perm: 'patient.read' },
   { href: '/documents', label: 'Документы', icon: FileText, perm: 'patient.read' },
   { href: '/price', label: 'Прайс', icon: Tags, perm: 'patient.read' },
   { href: '/requests', label: 'Запись с сайта', icon: Globe, perm: 'schedule.read' },
@@ -64,6 +66,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [density, setDensity] = useState<'compact' | 'comfort'>('compact');
   const [sheet, setSheet] = useState(false);
   const [assistant, setAssistant] = useState(false);
+  const [notes, setNotes] = useState(false);
+  const { feed, reload: reloadNotes } = useNotifications();
+  const unread = feed?.unread ?? 0;
   // Set after mount so the server render and the browser agree on the date.
   const [today, setToday] = useState('');
   useEffect(() => { setToday(new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' }).format(new Date())); }, []);
@@ -163,10 +168,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
           {more.map((link) => <NavLink key={link.href} link={link} active={isActive(link.href)} extra />)}
         </nav>
         <button className={`sd-link sd-link-more${sheet ? ' open' : ''}`} type="button" onClick={() => setSheet((open) => !open)} aria-expanded={sheet} aria-current={sheetActive ? 'page' : undefined}>
-          <span className="sd-link-ico"><LayoutGrid /></span>
+          <span className="sd-link-ico"><LayoutGrid />{unread > 0 && <i className="sd-dot" aria-hidden="true" />}</span>
           <span className="sd-nav-label">Ещё</span>
         </button>
         <div className="sd-nav-foot">
+          <button className="sd-link is-extra" type="button" onClick={() => setNotes(true)} title="Уведомления" aria-label={unread ? `Уведомления, новых: ${unread}` : 'Уведомления'}>
+            <span className="sd-link-ico"><Bell /></span>
+            <span className="sd-nav-label">Уведомления</span>
+            {unread > 0 && <span className="sd-count" aria-hidden="true">{unread > 99 ? '99+' : unread}</span>}
+          </button>
           {settings && <NavLink link={settings} active={isActive(settings.href)} extra />}
           <button className={`sd-link is-extra${panelOpen ? ' active' : ''}`} type="button" onClick={() => setPanelOpen(!panelOpen)} aria-pressed={panelOpen} title="Панель контекста">
             <span className="sd-link-ico"><PanelRight /></span>
@@ -186,6 +196,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <BookingSheet />
       <AssistantTrigger variant="fab" onOpen={() => setAssistant(true)} />
       <Assistant open={assistant} onClose={() => setAssistant(false)} />
+      <NotificationsPanel open={notes} feed={feed} onClose={() => setNotes(false)} onSeen={() => void reloadNotes()} />
       <aside className={`sd-panel ${panelOpen ? 'open' : ''}`}>
         <ContextPanel />
       </aside>
@@ -198,6 +209,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </div>
             <button className="sd-sheet-search" type="button" onClick={() => { setSheet(false); setPalette(true); }}><Search size={18} />Поиск пациента и команды</button>
             <AssistantTrigger variant="inline" onOpen={() => { setSheet(false); setAssistant(true); }} />
+            <button className="sd-sheet-search" type="button" onClick={() => { setSheet(false); setNotes(true); }}><Bell size={18} />Уведомления{unread > 0 && <span className="sd-count">{unread}</span>}</button>
             <div className="sd-more-sheet-grid">
               {[...more, ...(settings ? [settings] : [])].map((link) => {
                 const Icon = link.icon;

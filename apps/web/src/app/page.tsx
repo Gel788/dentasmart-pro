@@ -12,8 +12,9 @@ export default function HomePage() {
   );
 }
 
-/** One working day for everyone; the owner also sees a line about the month. */
+/** One working day for everyone, shaped by role: a doctor sees their own patients, reception the desk's
+ * actions, the owner also the month; money and quick actions follow each person's permissions. */
 function HomeBody() {
   const { user } = useAuth();
-  return <Today owner={user?.permissions.includes('analytics.read') ?? false} />;
+  return <Today owner={user?.permissions.includes('analytics.read') ?? false} permissions={user?.permissions ?? []} />;
 }

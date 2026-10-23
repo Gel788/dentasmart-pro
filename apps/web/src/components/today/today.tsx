@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, ArrowRight, Globe, CalendarPlus, CheckCircle2, Phone, ShieldAlert, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Globe, CalendarPlus, CheckCircle2, FileText, ListChecks, Phone, ShieldAlert, UserPlus, Wallet } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { addDays, weekStart, type RangeDay } from '@/components/schedule/model';
@@ -41,7 +41,7 @@ const STATUS: Record<string, string> = {
   SCHEDULED: 'записан', CONFIRMED: 'подтвердил', WAITING: 'пришёл, ждёт', IN_PROGRESS: 'в кресле', COMPLETED: 'принят', NO_SHOW: 'не пришёл',
 };
 const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
-const ICON = { confirm: Phone, review: ShieldAlert, pay: Wallet, plan: AlertTriangle, request: Globe } as Record<string, typeof Phone>;
+const ICON = { confirm: Phone, review: ShieldAlert, pay: Wallet, plan: AlertTriangle, request: Globe, documents: FileText, task: ListChecks, overdue: AlertTriangle } as Record<string, typeof Phone>;
 /** Wall-clock time in the clinic's zone, whatever zone the device is in. */
 const clockAt = (iso: string, offset: number) => {
   const date = new Date(Date.parse(iso) + offset * 60000);
@@ -49,7 +49,7 @@ const clockAt = (iso: string, offset: number) => {
 };
 
 /** The working day: who comes and what to do with each of them, then what else needs a hand. */
-export function Today({ owner }: { owner: boolean }) {
+export function Today({ owner, permissions = [] }: { owner: boolean; permissions?: string[] }) {
   const [day, setDay] = useState<Day | null>(null);
   const [month, setMonth] = useState<Month | null>(null);
   const [error, setError] = useState('');
@@ -129,7 +129,12 @@ export function Today({ owner }: { owner: boolean }) {
               <h1>{title.charAt(0).toUpperCase() + title.slice(1)}</h1>
               <p>{[`${day.counts.total} ${plural(day.counts.total, 'пациент', 'пациента', 'пациентов')}`, summary].filter(Boolean).join(' · ')}</p>
             </div>
-            <Link className={styles.book} href="/schedule"><CalendarPlus size={17} aria-hidden="true" />Записать</Link>
+            <nav className={styles.quick} aria-label="Быстрые действия">
+              {permissions.includes('schedule.write') && <Link className={styles.book} href="/schedule"><CalendarPlus size={17} aria-hidden="true" />Записать</Link>}
+              {permissions.includes('patient.write') && <Link className={styles.quickLink} href="/patients?new=1" aria-label="Новый пациент"><UserPlus size={16} aria-hidden="true" />Пациент</Link>}
+              <Link className={styles.quickLink} href="/tasks?new=1"><ListChecks size={16} aria-hidden="true" />Задача</Link>
+              {permissions.includes('finance.write') && <Link className={styles.quickLink} href="/finance" aria-label="Принять оплату"><Wallet size={16} aria-hidden="true" />Оплата</Link>}
+            </nav>
           </div>
         </section>
 
@@ -292,7 +297,7 @@ export function Today({ owner }: { owner: boolean }) {
           </ul>
           {month && (
             <>
-              <h3>Этот месяц <Link href="/analytics">Аналитика</Link></h3>
+              <h3>Этот месяц <Link href="/reports">Отчёты</Link></h3>
               <dl className={styles.kpi}>
                 <div><dt>Выручка</dt><dd>{formatMoney(month.revenue)}</dd></div>
                 <div><dt>Визитов</dt><dd>{month.visits}</dd></div>

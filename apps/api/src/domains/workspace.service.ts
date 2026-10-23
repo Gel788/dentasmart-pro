@@ -68,7 +68,7 @@ export class WorkspaceService {
    * step, what needs attention (tomorrow's unconfirmed visits, histories to re-confirm, today's debts,
    * plans waiting for an answer), and money only for those allowed to see it.
    */
-  async today(orgId: string, permissions: string[], employeeId?: string) {
+  async today(orgId: string, permissions: string[], employeeId?: string, userId?: string) {
     const branch = await this.prisma.branch.findFirst({ where: { organizationId: orgId, isActive: true }, orderBy: { createdAt: 'asc' } });
     const now = new Date();
     const offset = tzOffsetMinutes(branch?.timezone ?? 'Europe/Moscow', now);
@@ -162,6 +162,27 @@ export class WorkspaceService {
     if (seeMoney) {
       for (const visit of day.filter((row) => row.status === 'COMPLETED' && (row.debt ?? 0) > 0)) {
         attention.push({ kind: 'pay', title: `Принять оплату: ${visit.patient}`, detail: `осталось ${Math.round(visit.debt ?? 0).toLocaleString('ru-RU')} ₽`, href: `/finance?patient=${encodeURIComponent(visit.patient.split(' ')[0])}`, patientId: visit.patientId });
+      }
+    }
+    // Papers today's patients still have to sign, and this user's tasks due today or late.
+    const unsignedDocs = await this.prisma.clinicDocument.groupBy({
+      by: ['appointmentId'],
+      where: { organizationId: orgId, status: { in: ['CREATED', 'PRINTED'] }, kind: { in: ['CONTRACT', 'PD_CONSENT', 'IDS_GENERAL', 'IDS_INTERVENTION', 'XRAY_CONSENT'] }, appointmentId: { in: day.filter((row) => !['COMPLETED', 'NO_SHOW', 'IN_PROGRESS'].includes(row.status)).map((row) => row.id) } },
+      _count: { _all: true },
+    });
+    for (const group of unsignedDocs) {
+      const visit = day.find((row) => row.id === group.appointmentId);
+      if (visit) attention.push({ kind: 'documents', title: `Подписать документы: ${visit.patient}`, detail: `${group._count._all} к приёму в ${new Date(+new Date(visit.startsAt) + offset * 60000).toISOString().slice(11, 16)}`, href: `/visits/${visit.id}`, patientId: visit.patientId });
+    }
+    if (userId) {
+      const tasks = await this.prisma.staffTask.findMany({
+        where: { organizationId: orgId, status: 'OPEN', dueAt: { lt: end }, OR: [{ assigneeId: userId }, { assigneeId: null, createdById: userId }] },
+        orderBy: { dueAt: 'asc' },
+        take: 6,
+        select: { id: true, title: true, dueAt: true, patient: { select: { lastName: true, firstName: true } } },
+      });
+      for (const task of tasks) {
+        attention.push({ kind: task.dueAt && task.dueAt < new Date() ? 'overdue' : 'task', title: task.title, detail: [task.dueAt && task.dueAt < start ? 'просрочена' : 'на сегодня', task.patient ? `${task.patient.lastName} ${task.patient.firstName}` : null].filter(Boolean).join(' · '), href: '/tasks' });
       }
     }
     for (const plan of waitingPlans.slice(0, 5)) {

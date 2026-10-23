@@ -19,7 +19,7 @@ import { useFocus } from '@/lib/focus';
 
 type View = 'day' | 'week' | 'month' | 'agenda';
 type Axis = 'chair' | 'doctor';
-type Toast = { tone: 'ok' | 'bad'; text: string } | null;
+type Toast = { tone: 'ok' | 'bad'; text: string; undo?: () => void } | null;
 
 const VIEWS: { id: View; label: string }[] = [
   { id: 'day', label: 'День' },
@@ -46,6 +46,13 @@ function Calendar() {
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
+  const [movingId, setMovingId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!movingId) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setMovingId(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [movingId]);
   const [tick, setTick] = useState(0);
   // Outside opening hours stays hidden until asked for; then the whole day opens for a booking out of hours.
   const [allHours, setAllHours] = useState(false);
@@ -92,7 +99,7 @@ function Calendar() {
 
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), toast.tone === 'bad' ? 7000 : 3500);
+    const timer = window.setTimeout(() => setToast(null), toast.tone === 'bad' ? 7000 : toast.undo ? 8000 : 3500);
     return () => window.clearTimeout(timer);
   }, [toast]);
 
@@ -149,6 +156,12 @@ function Calendar() {
 
   const openSlot = (column: Column, minutes: number) => {
     if (!shell) return;
+    const carried = movingId ? [...dayVisits, ...weekVisits].find((visit) => visit.id === movingId) : null;
+    if (carried) {
+      setMovingId(null);
+      void move(carried, column, minutes);
+      return;
+    }
     setFocus({
       type: 'slot',
       startsAt: instantAt(column.date, minutes, offset),
@@ -175,9 +188,20 @@ function Calendar() {
     const sameSeat = (!column.move.cabinetId || column.move.cabinetId === visit.cabinetId) && (!column.move.doctorId || column.move.doctorId === visit.doctorId);
     if (startsAt === visit.startsAt && sameSeat) return;
     setPending((current) => new Set(current).add(visit.id));
+    const before = { startsAt: visit.startsAt, endsAt: visit.endsAt, ...(visit.cabinetId ? { cabinetId: visit.cabinetId } : {}), ...(visit.doctorId ? { doctorId: visit.doctorId } : {}) };
     try {
       await api(`/appointments/${visit.id}`, { method: 'PATCH', body: JSON.stringify({ startsAt, endsAt, ...column.move }) });
-      setToast({ tone: 'ok', text: `${visit.patient}: перенесено на ${dayTitle(column.date, { day: 'numeric', month: 'short' })}, ${clock(minutes)}` });
+      setToast({
+        tone: 'ok',
+        text: `${visit.patient}: перенесено на ${dayTitle(column.date, { day: 'numeric', month: 'short' })}, ${clock(minutes)}`,
+        // One tap puts the visit back where it was, through the same server checks.
+        undo: () => {
+          setToast(null);
+          void api(`/appointments/${visit.id}`, { method: 'PATCH', body: JSON.stringify(before) })
+            .then(() => { setToast({ tone: 'ok', text: `${visit.patient}: возвращено на прежнее время` }); refresh(); })
+            .catch((err: Error) => setToast({ tone: 'bad', text: err.message || 'Не получилось вернуть: время уже занято' }));
+        },
+      });
       refresh();
     } catch (err) {
       setToast({ tone: 'bad', text: err instanceof Error ? err.message : 'Перенос не прошёл. Визит остался на прежнем месте' });
@@ -208,6 +232,7 @@ function Calendar() {
   };
 
   if (!date) return null;
+  const movingVisit = movingId ? [...dayVisits, ...weekVisits].find((visit) => visit.id === movingId) ?? null : null;
   const weekFrom = weekStart(date);
   const title =
     view === 'day' ? dayTitle(date, { weekday: 'long', day: 'numeric', month: 'long' })
@@ -323,15 +348,22 @@ function Calendar() {
                 <button type="button" className="sd-btn" onClick={() => setAllHours(true)}>Показать всё время</button>
               </div>
             )}
+            {movingVisit && (view === 'day' || view === 'week') && (
+              <div className={styles.moveBar} role="status">
+                <b>Перенос: {movingVisit.patient}</b>
+                <span>Нажмите новое время в сетке — можно другой день или кресло. Сервер проверит, что время свободно.</span>
+                <button type="button" className="sd-btn-ghost" onClick={() => setMovingId(null)}>Отмена</button>
+              </div>
+            )}
             {view === 'day' && !(dayOff && !allHours && dayVisits.length === 0) && (
               columns.length ? (
                 <TimeGrid label="День по креслам" columns={columns} visits={dayVisits} offset={offset} hours={gridHours} dayHours={columnHours} selectedId={selectedId} pendingIds={pending}
-                  onSelect={(visit) => setSelectedId(visit.id)} onSlot={openSlot} onMove={move} />
+                  onSelect={(visit) => setSelectedId(visit.id)} onSlot={openSlot} onMove={move} moving={movingVisit} />
               ) : <p className={styles.empty}>В клинике пока нет кресел. Добавьте их в настройках, чтобы записывать пациентов.</p>
             )}
             {view === 'week' && (
               <TimeGrid label="Неделя" columns={columns} visits={weekVisits} offset={offset} hours={gridHours} dayHours={columnHours} selectedId={selectedId} pendingIds={pending}
-                onSelect={(visit) => setSelectedId(visit.id)} onSlot={openSlot} onMove={move} />
+                onSelect={(visit) => setSelectedId(visit.id)} onSlot={openSlot} onMove={move} moving={movingVisit} />
             )}
             {view === 'month' && <MonthView days={month.days} selected={date} offset={offset} onPick={pick} />}
             {view === 'agenda' && (
@@ -339,7 +371,7 @@ function Calendar() {
             )}
           </div>
           {view !== 'month' && (
-            <VisitPanel visit={selected} offset={offset} busy={busy} onStatus={changeStatus} onReschedule={reschedule} onClose={() => setSelectedId(null)} />
+            <VisitPanel visit={selected} offset={offset} busy={busy} onStatus={changeStatus} onReschedule={reschedule} onMoveOnGrid={(view === 'day' || view === 'week') ? (visit) => { setMovingId(visit.id); setSelectedId(null); } : undefined} onClose={() => setSelectedId(null)} />
           )}
         </div>
       )}
@@ -347,7 +379,8 @@ function Calendar() {
       {toast && (
         <div className={styles.toast} data-tone={toast.tone} role={toast.tone === 'bad' ? 'alert' : 'status'}>
           <span>{toast.text}</span>
-          <button type="button" onClick={() => setToast(null)}>Понятно</button>
+          {toast.undo && <button type="button" onClick={toast.undo}>Отменить</button>}
+          <button type="button" onClick={() => setToast(null)}>{toast.undo ? 'Закрыть' : 'Понятно'}</button>
         </div>
       )}
     </div>
