@@ -19,6 +19,7 @@ type ServiceRow = {
   surfaceMode: string;
   doctorPercent: number;
   isActive: boolean;
+  isCategory?: boolean;
   norms: Norm[];
 };
 type Bundle = {
@@ -143,7 +144,7 @@ export function ClinicSettings() {
 }
 
 function Price({ data }: { data: Bundle; query: string; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
-  const count = data.services.filter((row) => row.code && row.isActive).length;
+  const count = data.services.filter((row) => !row.isCategory && row.isActive).length;
   return (
     <Panel title="Прайс" hint="Услуги, цены, длительность и расходники по каждой услуге — на отдельном экране, там же импорт и выгрузка.">
       <p>{count} {count % 10 === 1 && count % 100 !== 11 ? 'услуга' : 'услуг'} в прайсе.</p>

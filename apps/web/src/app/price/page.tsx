@@ -162,7 +162,7 @@ function Book() {
       <div className="sd-h">
         <div>
           <h1>Прайс</h1>
-          <p>{ruServices(services.filter((row) => row.code && row.isActive).length)} в прайсе.</p>
+          <p>{ruServices(services.filter((row) => !row.isCategory && row.isActive).length)} в прайсе.</p>
         </div>
         <div className="sd-inline">
           <button className="sd-btn-ghost" type="button" onClick={() => setNamingCategory((value) => !value)}>Новая категория</button>

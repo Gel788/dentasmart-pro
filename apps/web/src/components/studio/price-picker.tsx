@@ -68,7 +68,7 @@ export function PricePicker({
       if (!live) return;
       const rows = data.services ?? [];
       setCategories(rows.filter((row) => row.isCategory).map((row) => ({ id: row.id, name: row.name })));
-      setServices(rows.filter((row) => !row.isCategory && row.code && row.isActive !== false).map((row) => ({
+      setServices(rows.filter((row) => !row.isCategory && row.isActive !== false).map((row) => ({
         id: row.id,
         name: row.name,
         code: row.code ?? null,
