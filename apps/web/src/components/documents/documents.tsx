@@ -48,7 +48,7 @@ export function Documents() {
   );
 }
 
-function Journal({ waiting }: { waiting: boolean }) {
+export function Journal({ waiting, patientId }: { waiting: boolean; patientId?: string }) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
@@ -56,7 +56,10 @@ function Journal({ waiting }: { waiting: boolean }) {
   const [voiding, setVoiding] = useState<string | null>(null);
   const [reason, setReason] = useState('');
 
-  const load = useCallback(() => api<Row[]>(`/documents${waiting ? '?status=waiting' : ''}`).then(setRows).catch((err: Error) => setError(err.message)), [waiting]);
+  const load = useCallback(() => {
+    const query = new URLSearchParams({ ...(waiting ? { status: 'waiting' } : {}), ...(patientId ? { patientId } : {}) });
+    return api<Row[]>(`/documents?${query}`).then(setRows).catch((err: Error) => setError(err.message));
+  }, [waiting, patientId]);
   useEffect(() => { setRows(null); void load(); }, [load]);
 
   const shown = useMemo(() => {

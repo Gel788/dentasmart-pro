@@ -1331,3 +1331,12 @@ html.dark .sd-login-submit { color: #121212; }
 .sd-formula figcaption i[data-mark='done'] { background: #0b8a5f; }
 .sd-formula figcaption i[data-mark='plan'] { border-color: #6d93ff; }
 .sd-login-copy h1 { font-weight: 800; letter-spacing: -0.03em; }
+
+/* ── Older screens speak system D too: square corners, sentence-case labels, no eyebrows, no mono costume.
+   Scoped to the workspace so avatars, the assistant overlay and print sheets keep their own shapes. ── */
+.sd-workspace :is(.rounded, .rounded-sm, .rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl) { border-radius: 0 !important; }
+.sd-workspace :is(p, span, div, dt, th, label).uppercase { text-transform: none; letter-spacing: 0 !important; font-size: 12.5px; font-weight: 600; }
+.sd-workspace .ds-kicker { display: none; }
+.sd-workspace .font-mono { font-family: var(--font-body), sans-serif; letter-spacing: 0; }
+.sd-workspace .shadow, .sd-workspace .shadow-sm, .sd-workspace .shadow-md, .sd-workspace .shadow-lg { box-shadow: none !important; }
+.sd-workspace .backdrop-blur-sm { backdrop-filter: none; }

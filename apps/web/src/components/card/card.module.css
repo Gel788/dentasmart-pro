@@ -50,12 +50,12 @@
 .notes p { margin: 0; font-size: 13.5px; color: var(--text-secondary); white-space: pre-line; overflow-wrap: anywhere; }
 
 /* Tabs */
-.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--border); }
+.tabs { display: flex; gap: 0; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--border); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); padding-right: 24px; }
 .tabs::-webkit-scrollbar { display: none; }
-.tabs button { position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 14.5px; }
+.tabs button { position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 14.5px; cursor: pointer; }
 .tabs button:hover { color: var(--text); }
 .tabs button[aria-current='page'] { color: var(--text); font-weight: 600; }
-.tabs button[aria-current='page']::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent); }
+.tabs button[aria-current='page']::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 3px; background: var(--code-chair); }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); }
 
 .panel { display: flex; flex-direction: column; gap: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-solid); min-width: 0; }

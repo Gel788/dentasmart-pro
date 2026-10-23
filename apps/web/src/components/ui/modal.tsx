@@ -38,7 +38,7 @@ export function Modal({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+            className="flex h-11 w-11 items-center justify-center text-[var(--text)] transition hover:bg-[var(--surface-2)]"
           >
             <X size={18} />
           </button>

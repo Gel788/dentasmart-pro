@@ -1,128 +1,65 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plug } from 'lucide-react';
+import Link from 'next/link';
+import { AlertTriangle } from 'lucide-react';
 import { Protected } from '@/components/protected';
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader } from '@/components/ui/card';
-import { ListRow } from '@/components/ui/list-row';
-import { Badge } from '@/components/ui/badge';
-import { PageHeader } from '@/components/ui/page-header';
 import { api } from '@/lib/api';
+import styles from './integrations.module.css';
 
-const PROVIDERS = ['ONEC', 'YUKASSA', 'ATOL', 'EGISZ', 'HL7_FHIR', 'ROISTAT', 'YANDEX_METRIKA'];
+type Status = {
+  polza: { connected: boolean; assistantModel: string; widgetModel: string };
+  widget: { slug: string; requests: number };
+  documents: { issued: number };
+  egisz: { connected: boolean };
+  kassa: { connected: boolean };
+  messages: { connected: boolean };
+  https: { connected: boolean };
+};
 
 export default function IntegrationsPage() {
-  const [configs, setConfigs] = useState<{ provider: string; isActive: boolean; configJson: object }[]>([]);
-  const [webhooks, setWebhooks] = useState<unknown[]>([]);
-  const [chain, setChain] = useState<unknown[]>([]);
-  const [journal, setJournal] = useState<{ id: string; provider: string; action: string; status: string; message: string; createdAt: string }[]>([]);
+  return <Protected><Integrations /></Protected>;
+}
 
-  const load = () => {
-    api<typeof configs>('/integrations').then(setConfigs);
-    api<unknown[]>('/integrations/webhooks').then(setWebhooks);
-    api<unknown[]>('/integrations/blockchain-audit').then(setChain);
-    api<typeof journal>('/integrations/journal').then(setJournal);
-  };
-
-  useEffect(() => { load(); }, []);
-
-  const toggle = async (provider: string, isActive: boolean) => {
-    await api('/integrations/configs', {
-      method: 'POST',
-      body: JSON.stringify({ provider, configJson: { mode: 'stub' }, isActive }),
-    });
-    load();
-  };
+/** What the clinic is connected to, read from the server's own configuration — nothing here is simulated. */
+function Integrations() {
+  const [status, setStatus] = useState<Status | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => { api<Status>('/integrations/status').then(setStatus).catch((err: Error) => setError(err.message)); }, []);
 
   return (
-    <Protected>
-      <PageHeader
-        badge="Интеграции"
-        title="Интеграции"
-        description="Заглушки провайдеров — включите для демо, реальные API подключите позже"
-      />
+    <div className={styles.page}>
+      <header className={styles.head}>
+        <h1>Интеграции</h1>
+        <p>Что подключено по-настоящему и что нужно, чтобы подключить остальное. Неподключённое ничего не отправляет и не притворяется, что отправило.</p>
+      </header>
+      {error && <p className={styles.error} role="alert"><AlertTriangle size={16} aria-hidden="true" />{error}</p>}
+      {!status && !error && <div className={styles.skeleton} aria-label="Загружаем" />}
+      {status && (
+        <ul className={styles.list}>
+          <Row on={status.polza.connected} title="Polza AI — помощник, диктовка, виджет" detail={status.polza.connected ? `Помощник и диктовка: ${status.polza.assistantModel} (данные остаются в России). Виджет записи: ${status.polza.widgetModel}, только с согласия пациента.` : 'Ключ Polza AI на сервере не задан — помощник и диктовка выключены.'} />
+          <Row on title="Виджет записи на сайт" detail={`Страница записи /book/${status.widget.slug}, заявок получено: ${status.widget.requests}.`} action={<Link className="sd-btn-ghost" href="/widget">Код для сайта</Link>} />
+          <Row on title="Документы пациента" detail={`Договоры, согласия, акты печатаются из CRM. Выдано документов: ${status.documents.issued}.`} action={<Link className="sd-btn-ghost" href="/documents">Открыть</Link>} />
+          <Row on={false} title="ЕГИСЗ (РЭМД, ФРМО, ФРМР)" detail="Обязательна для клиник с лицензией. Нужно: OID клиники из ФРМО, СНИЛС и УКЭП врачей, договор со шлюзом ЕГИСЗ. ЕРИС (снимки) — только для городской системы Москвы." action={<Link className="sd-btn-ghost" href="/documents?tab=egisz">Что нужно</Link>} />
+          <Row on={false} title="Онлайн-касса 54-ФЗ" detail="Чеки пока пробиваются на кассе клиники отдельно. Для автоматических чеков нужен договор с ОФД и касса с API (АТОЛ Онлайн, Модулькасса и т. п.)." />
+          <Row on={false} title="SMS и мессенджеры" detail="Напоминания о визитах собираются в CRM, но не отправляются: провайдер SMS или Telegram не подключён. Нужен аккаунт у SMS-провайдера и согласие пациента на сообщения." />
+          <Row on={status.https.connected} title="HTTPS и домен" detail={status.https.connected ? 'CRM открывается по защищённому соединению.' : 'CRM открывается по адресу без HTTPS. Без домена и сертификата браузер не даёт микрофон для диктовки, а данные пациентов передаются без шифрования. Нужен домен клиники.'} />
+        </ul>
+      )}
+    </div>
+  );
+}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {PROVIDERS.map((p) => {
-          const cfg = configs.find((c) => c.provider === p);
-          return (
-            <Card key={p} hover className="flex items-center justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className={cfg?.isActive ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent)]' : 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--muted)]'}>
-                  <Plug size={16} strokeWidth={1.75} />
-                </div>
-                <div>
-                  <p className="font-mono text-sm font-semibold text-[var(--text)]">{p}</p>
-                  <div className="mt-1">
-                    <Badge variant={cfg?.isActive ? 'success' : 'default'}>
-                      {cfg?.isActive ? 'Включено (stub)' : 'Выключено'}
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-              <Button size="sm" variant={cfg?.isActive ? 'primary' : 'ghost'} aria-pressed={!!cfg?.isActive} onClick={() => toggle(p, !cfg?.isActive)}>
-                {cfg?.isActive ? 'Вкл' : 'Выкл'}
-              </Button>
-            </Card>
-          );
-        })}
+function Row({ on, title, detail, action }: { on: boolean; title: string; detail: string; action?: React.ReactNode }) {
+  return (
+    <li className={styles.row} data-on={on || undefined}>
+      <span className={styles.k} aria-hidden="true" />
+      <div>
+        <b>{title}</b>
+        <span className={styles.state}>{on ? 'подключено' : 'не подключено'}</span>
+        <p>{detail}</p>
       </div>
-
-      <Card className="mt-6">
-        <CardHeader
-          title="Журнал отправок"
-          description="ЕГИСЗ и касса 54-ФЗ пишутся сюда и не уходят наружу, пока оператор не подключён"
-          action={
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={async () => {
-                await api('/integrations/dispatch', { method: 'POST', body: JSON.stringify({ provider: 'ATOL', action: 'sell' }) });
-                await api('/integrations/dispatch', { method: 'POST', body: JSON.stringify({ provider: 'EGISZ', action: 'semd' }) });
-                load();
-              }}
-            >
-              Проверить отправку
-            </Button>
-          }
-        />
-        <div className="space-y-2">
-          {journal.map((row) => (
-            <ListRow key={row.id} trailing={<Badge variant={row.status === 'QUEUED' ? 'accent' : 'warning'}>{row.status === 'SKIPPED' ? 'Не отправлено' : row.status === 'QUEUED' ? 'В очереди' : 'Ошибка'}</Badge>}>
-              <p className="font-mono text-xs font-semibold text-[var(--text)]">{row.provider} · {row.action}</p>
-              <p className="mt-0.5 text-[var(--muted)]">{row.message}</p>
-            </ListRow>
-          ))}
-          {!journal.length && <p className="rounded-xl border border-dashed border-[var(--border)] py-8 text-center text-sm text-[var(--muted)]">Журнал пуст</p>}
-        </div>
-      </Card>
-
-      <Card className="mt-6">
-        <CardHeader title="Webhooks" description="Исходящие уведомления" />
-        <div className="space-y-2">
-          {(webhooks as { url: string; events: string[]; isActive: boolean }[]).map((w, i) => (
-            <ListRow key={i} trailing={w.isActive ? <Badge variant="success">Активен</Badge> : <Badge>Неактивен</Badge>}>
-              <p className="truncate font-mono text-xs font-semibold text-[var(--text)]">{w.url}</p>
-              <p className="mt-0.5 text-[var(--muted)]">{w.events.join(', ')}</p>
-            </ListRow>
-          ))}
-        </div>
-      </Card>
-
-      <Card className="mt-6">
-        <CardHeader title="Blockchain-аудит медкарт" description="Цепочка хешей записей" />
-        <div className="max-h-56 space-y-2 overflow-auto">
-          {(chain as { recordType: string; contentHash: string; chainedAt: string }[]).map((h, i) => (
-            <ListRow key={i}>
-              <p className="font-mono text-xs font-medium text-[var(--text)]">{h.recordType}</p>
-              <p className="font-mono text-xs text-[var(--muted)]">
-                {h.contentHash.slice(0, 24)}… · {new Date(h.chainedAt).toLocaleString('ru-RU')}
-              </p>
-            </ListRow>
-          ))}
-        </div>
-      </Card>
-    </Protected>
+      {action && <div className={styles.act}>{action}</div>}
+    </li>
   );
 }

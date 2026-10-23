@@ -1,5 +1,8 @@
 'use client';
 
+import { PatientVisits } from '@/components/card/patient-visits';
+import { PatientMoney } from '@/components/card/patient-money';
+import { Journal } from '@/components/documents/documents';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -38,11 +41,14 @@ type Card = {
 const TABS = [
   { id: 'overview', label: 'Обзор' },
   { id: 'medical', label: 'Медкарта' },
+  { id: 'visits', label: 'Визиты' },
   { id: 'route', label: 'Маршрут' },
   { id: 'plan', label: 'План' },
   { id: 'formula', label: 'Формула' },
   { id: 'perio', label: 'Пародонт' },
   { id: 'imaging', label: 'Снимки' },
+  { id: 'money', label: 'Оплаты' },
+  { id: 'docs', label: 'Документы' },
   { id: 'care', label: 'Сопровождение' },
 ] as const;
 
@@ -59,6 +65,7 @@ function CardScreen() {
   const { user } = useAuth();
   const canWrite = user?.permissions.includes('patient.write') ?? false;
   const canMedical = user?.permissions.includes('medical.write') ?? false;
+  const canMoney = user?.permissions.includes('finance.read') ?? false;
   const { setPanelOpen } = useFocus();
   const [card, setCard] = useState<Card | null>(null);
   const [error, setError] = useState('');
@@ -89,8 +96,9 @@ function CardScreen() {
 
   useEffect(() => {
     setPanelOpen(false);
+    const asked = new URLSearchParams(window.location.search).get('tab');
     const saved = sessionStorage.getItem(`sd.card.${params.id}.mode`);
-    setTab(isTab(saved) ? saved : 'overview');
+    setTab(isTab(asked) ? asked : isTab(saved) ? saved : 'overview');
     setReady(true);
     void load();
   }, [params.id, load, setPanelOpen]);
@@ -162,9 +170,9 @@ function CardScreen() {
 
         <div className={styles.work}>
           <nav className={styles.tabs} aria-label="Разделы карты">
-            {TABS.map((item) => (
-              <button key={item.id} type="button" aria-current={tab === item.id ? 'page' : undefined} onClick={() => setTab(item.id)}>
-                {item.label}
+            {TABS.filter((item) => (item.id !== 'money' || canMoney) && item.id !== 'perio' && item.id !== 'imaging').map((item) => (
+              <button key={item.id} type="button" aria-current={tab === item.id || (item.id === 'formula' && (tab === 'perio' || tab === 'imaging')) ? 'page' : undefined} onClick={() => setTab(item.id)}>
+                {item.id === 'formula' ? 'Зубы' : item.label}
                 {item.id === 'medical' && card.medical.reviewDue && <i className={styles.dot} aria-label="нужно подтвердить" />}
               </button>
             ))}
@@ -182,6 +190,9 @@ function CardScreen() {
               onSaved={() => void load()}
             />
           )}
+          {tab === 'visits' && <PatientVisits patientId={params.id} onBook={book} />}
+          {tab === 'money' && canMoney && <PatientMoney patientId={params.id} patientName={`${card.patient.lastName} ${card.patient.firstName}`} />}
+          {tab === 'docs' && <Journal waiting={false} patientId={params.id} />}
           {tab === 'route' && <RouteView patientId={params.id} onOpenPlan={() => setTab('plan')} />}
           {tab === 'plan' && (
             <PlanJourney
@@ -205,6 +216,11 @@ function CardScreen() {
           {tab === 'care' && <MarketStrip patientId={params.id} />}
           {(tab === 'formula' || tab === 'perio' || tab === 'imaging') && (
             <section className={styles.panel}>
+              <div className="sd-seg" role="group" aria-label="Зубы">
+                <button type="button" className={tab === 'formula' ? 'on' : ''} onClick={() => setTab('formula')}>Формула</button>
+                <button type="button" className={tab === 'perio' ? 'on' : ''} onClick={() => setTab('perio')}>Пародонт</button>
+                <button type="button" className={tab === 'imaging' ? 'on' : ''} onClick={() => setTab('imaging')}>Снимки</button>
+              </div>
               {tab === 'formula' && (
                 <div className={styles.toolbar}>
                   <div className="sd-seg">

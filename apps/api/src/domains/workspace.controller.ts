@@ -247,6 +247,12 @@ export class WorkspaceController {
     return this.workspace.brief(orgId, patientId);
   }
 
+  @Get('patients/:patientId/visits')
+  @RequirePermissions('patient.read')
+  visits(@OrgId() orgId: string, @Param('patientId') patientId: string) {
+    return this.workspace.visitsOf(orgId, patientId);
+  }
+
   @Get('patients/:patientId/card')
   @RequirePermissions('patient.read')
   card(@OrgId() orgId: string, @Param('patientId') patientId: string) {

@@ -329,6 +329,35 @@ export class WorkspaceService {
     return { installmentMonths: value };
   }
 
+  /** Every visit of a patient, newest first: when, what, with whom and how it ended. */
+  async visitsOf(orgId: string, patientId: string) {
+    const patient = await this.prisma.patient.findFirst({ where: { id: patientId, organizationId: orgId }, select: { id: true } });
+    if (!patient) throw new NotFoundException('Пациент не найден');
+    const rows = await this.prisma.appointment.findMany({
+      where: { organizationId: orgId, patientId },
+      orderBy: { startsAt: 'desc' },
+      take: 200,
+      select: {
+        id: true, startsAt: true, endsAt: true, status: true, noShowReason: true,
+        service: { select: { name: true } },
+        doctor: { select: { firstName: true, lastName: true } },
+        cabinet: { select: { name: true } },
+        visitNote: { select: { diagnosis: true } },
+      },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      startsAt: row.startsAt.toISOString(),
+      endsAt: row.endsAt.toISOString(),
+      status: row.status,
+      service: row.service?.name ?? null,
+      doctor: row.doctor ? `${row.doctor.lastName} ${row.doctor.firstName}` : null,
+      cabinet: row.cabinet?.name ?? null,
+      diagnosis: row.visitNote?.diagnosis || null,
+      noShowReason: row.noShowReason,
+    }));
+  }
+
   async card(orgId: string, patientId: string) {
     const patient = await this.prisma.patient.findFirst({
       where: { id: patientId, organizationId: orgId },

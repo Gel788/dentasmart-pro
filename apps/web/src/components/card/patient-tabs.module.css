@@ -1,0 +1,43 @@
+/* Patient card tabs for visits and money: ruled lists with a date column and a code square per row. */
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.m { background: var(--surface-solid); border: 1px solid var(--border); }
+.m > h2 { display: flex; align-items: center; gap: 8px; margin: 0; min-height: 44px; padding: 4px 6px 4px 14px; border-bottom: 1px solid var(--border); font-size: 13.5px !important; font-weight: 700; }
+.m > h2 em { font-style: normal; color: var(--muted); font-weight: 500; }
+.headAct { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; min-height: 40px; padding: 0 12px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.headAct:hover { background: var(--surface-2); }
+.none { margin: 0; padding: 16px 14px; color: var(--muted); font-size: 14px; }
+.error { margin: 0; padding: 10px 12px; border: 1px solid var(--danger); background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+.skeleton { height: 220px; border: 1px solid var(--border); background: var(--surface-2); }
+.list { margin: 0; padding: 0; list-style: none; }
+.list li + li { border-top: 1px solid var(--border); }
+.row { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; align-items: center; gap: 4px 14px; min-height: 60px; padding: 10px 14px; color: var(--text); text-decoration: none; }
+a.row:hover { background: var(--surface-2); }
+.when { display: flex; flex-direction: column; gap: 1px; font-variant-numeric: tabular-nums; }
+.when b { font-size: 15px; font-weight: 700; }
+.when small { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.what { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.what b { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.what small { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.state { display: inline-flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.state i, .sum i { display: inline-block; width: 11px; height: 11px; flex: none; background: var(--muted); }
+.state i[data-code='chair'], .sum i[data-code='chair'] { background: var(--code-chair); }
+.state i[data-code='here'], .sum i[data-code='here'] { background: var(--code-here); }
+.state i[data-code='paid'], .sum i[data-code='paid'] { background: var(--code-paid); }
+.state i[data-code='owe'], .sum i[data-code='owe'] { background: var(--code-owe); }
+.state i[data-code='done'], .sum i[data-code='done'] { background: var(--text); }
+.state i[data-code='ok'], .sum i[data-code='ok'] { background: transparent; border: 2px solid var(--text); }
+.state i[data-code='wait'], .sum i[data-code='wait'] { background: transparent; border: 2px dashed var(--code-owe); }
+.state i[data-code='gone'], .sum i[data-code='gone'] { background: linear-gradient(135deg, transparent 45%, var(--muted) 45% 55%, transparent 55%); border: 1px solid var(--muted); }
+.sum { display: grid; grid-template-columns: 1fr 1fr auto; align-items: center; background: var(--surface-solid); border: 1px solid var(--border); }
+.sum > div { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-right: 1px solid var(--border); }
+.sum > div:last-child { border-right: 0; }
+.sum span { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.sum b { font-size: 26px; font-weight: 300; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.sumAct :global(.sd-btn) { min-height: 44px; }
+@media (max-width: 720px) {
+  .row { grid-template-columns: 72px minmax(0, 1fr); }
+  .state { grid-column: 2; }
+  .sum { grid-template-columns: 1fr 1fr; }
+  .sumAct { grid-column: 1 / -1; border-top: 1px solid var(--border); }
+  .sum > div:nth-child(2) { border-right: 0; }
+}
