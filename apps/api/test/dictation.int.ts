@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { PrismaClient } from '@dentasmart/database';
-import { DictationService, parseDraft } from '../src/domains/dictation.service';
+import { DictationService, keepSpokenCodes, parseDraft } from '../src/domains/dictation.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 const prisma = new PrismaClient();
@@ -17,6 +17,8 @@ async function main() {
   assert.equal(parsed.fields.objective, '');
   assert.deepEqual(parsed.services, [{ index: 1, tooth: 36 }]);
   assert.deepEqual(parseDraft('не JSON').services, []);
+  assert.equal(keepSpokenCodes('средний кариес (K73.1)', 'диагноз средний кариес'), 'средний кариес', 'выдуманный код МКБ убран');
+  assert.equal(keepSpokenCodes('K02.1 кариес дентина', 'диагноз К02.1 кариес дентина'), 'K02.1 кариес дентина', 'названный врачом код остаётся');
 
   const clinic = await prisma.organization.create({ data: { name: 'Тест диктовки', slug: `dict-${stamp}` } });
   try {

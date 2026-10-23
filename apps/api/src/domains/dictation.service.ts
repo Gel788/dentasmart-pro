@@ -57,6 +57,7 @@ export class DictationService {
       take: 150,
     });
     const parsed = await this.structure(transcript, services.map((row) => row.name));
+    parsed.fields.diagnosis = keepSpokenCodes(parsed.fields.diagnosis, transcript);
     const picked = parsed.services
       .map((item) => {
         const service = services[item.index - 1];
@@ -131,6 +132,16 @@ export class DictationService {
     }
     return data;
   }
+}
+
+/** An ICD-10 code stays only if the doctor said it; a model must not add a diagnosis code on its own. */
+export function keepSpokenCodes(diagnosis: string, transcript: string) {
+  const said = transcript.toUpperCase().replace(/[КК]/g, 'K').replace(/\s+/g, '');
+  return diagnosis
+    .replace(/\(?\s*(?:МКБ(?:-10)?[:\s]*)?\b([A-ZА-Я]\d{2}(?:\.\d{1,2})?)\b\s*\)?/g, (whole, code: string) => (said.includes(code.toUpperCase().replace('К', 'K')) ? whole : ''))
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.;])/g, '$1')
+    .trim();
 }
 
 /** Reads the model's JSON even when it wraps it in prose or code fences; unknown keys are dropped. */
