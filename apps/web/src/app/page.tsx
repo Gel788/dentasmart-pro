@@ -1,20 +1,11 @@
-'use client';
+import type { Metadata } from 'next';
+import { HomeGate } from '@/components/marketing/home-gate';
 
-import { Protected } from '@/components/protected';
-import { Today } from '@/components/today/today';
-import { useAuth } from '@/lib/auth-context';
+export const metadata: Metadata = {
+  title: 'ZAZA — CRM для стоматологий',
+  description: 'План за минуты, пока пациент в кресле: три варианта, расшифровка цены и маршрут после подписи. Авторский проект Завена Агаяна.',
+};
 
 export default function HomePage() {
-  return (
-    <Protected>
-      <HomeBody />
-    </Protected>
-  );
-}
-
-/** One working day for everyone, shaped by role: a doctor sees their own patients, reception the desk's
- * actions, the owner also the month; money and quick actions follow each person's permissions. */
-function HomeBody() {
-  const { user } = useAuth();
-  return <Today owner={user?.permissions.includes('analytics.read') ?? false} permissions={user?.permissions ?? []} />;
+  return <HomeGate />;
 }
