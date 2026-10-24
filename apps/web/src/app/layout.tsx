@@ -37,7 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="manifest" href="/manifest.json" />
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('dsp_theme');if(t==='dark')document.documentElement.classList.add('dark');var d=localStorage.getItem('sd_density')||'compact';document.documentElement.dataset.density=d}catch(e){}`,
+            __html: `try{var t=localStorage.getItem('dsp_theme');if(t==='dark')document.documentElement.classList.add('dark');var d=localStorage.getItem('sd_density')||'compact';document.documentElement.dataset.density=d;if(localStorage.getItem('dsp_token'))document.documentElement.dataset.zazaApp='1';var reduce=false;try{reduce=matchMedia('(prefers-reduced-motion: reduce)').matches}catch(err){}if(sessionStorage.getItem('zaza.splash')==='1'||reduce)document.documentElement.dataset.zazaSplash='off'}catch(e){}`,
           }}
         />
       </head>
