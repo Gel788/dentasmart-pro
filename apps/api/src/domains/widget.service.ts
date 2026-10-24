@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { effectiveHours, employeeWeek, tzOffsetMinutes, weekHoursOf, type ScheduleException } from '@dentasmart/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { WidgetBookDto, WidgetLookupDto, WidgetRescheduleDto } from './dto/widget.dto';
 
@@ -30,7 +31,8 @@ export class WidgetService {
       where: { slug: orgSlug },
       include: {
         widgetConfigs: { where: { isActive: true }, take: 1 },
-        branches: { where: { isActive: true }, orderBy: { name: 'asc' }, select: { id: true, name: true } },
+        // Only branches with a working chair can take a booking.
+        branches: { where: { isActive: true, cabinets: { some: { isActive: true } } }, orderBy: { name: 'asc' }, select: { id: true, name: true } },
       },
     });
     if (!org) throw new NotFoundException('Клиника не найдена');
@@ -55,9 +57,13 @@ export class WidgetService {
     const org = await this.prisma.organization.findUnique({ where: { slug: orgSlug } });
     if (!org) throw new NotFoundException();
     const branch = await this.branchOf(org.id, branchId);
-    return this.freeSlots(org.id, branch.id, durationMin, new Date(from), new Date(to));
+    return this.freeSlots(org.id, branch.id, durationMin, new Date(from), new Date(to), { limit: 40 });
   }
 
+  /**
+   * A booking asked for on the site becomes a request the clinic confirms; it holds the slot meanwhile.
+   * The answer carries no patient data back to the anonymous caller.
+   */
   async book(orgSlug: string, data: WidgetBookDto) {
     const org = await this.prisma.organization.findUnique({ where: { slug: orgSlug } });
     if (!org) throw new NotFoundException();
@@ -65,46 +71,33 @@ export class WidgetService {
     const tail = phoneTail(data.phone);
     if (tail.length < 10) throw new BadRequestException('Укажите телефон');
     if (!data.firstName?.trim() || !data.lastName?.trim()) throw new BadRequestException('Укажите имя и фамилию');
+    if (data.consent !== true) throw new BadRequestException('Нужно согласие на обработку персональных данных');
     if (data.serviceId) {
       const service = await this.prisma.service.findFirst({ where: { id: data.serviceId, organizationId: org.id, isActive: true } });
       if (!service) throw new BadRequestException('Услуга не найдена');
     }
     const { startsAt, endsAt } = visitWindow(data.startsAt, data.endsAt);
-    const cabinetId = await this.pickCabinet(org.id, branch.id, startsAt, endsAt);
-    if (!cabinetId) throw new BadRequestException('На это время нет свободного кресла');
-
-    const known = await this.prisma.patient.findMany({
-      where: { organizationId: org.id, isActive: true, phone: { not: null } },
-      select: { id: true, phone: true },
-    });
-    const match = known.find((row) => phoneTail(row.phone) === tail);
-    const patientId = match
-      ? match.id
-      : (await this.prisma.patient.create({
-          data: {
-            organizationId: org.id,
-            firstName: data.firstName.trim(),
-            lastName: data.lastName.trim(),
-            phone: data.phone,
-            email: data.email,
-          },
-          select: { id: true },
-        })).id;
-
-    // The caller is anonymous: confirm the slot, never echo back the patient card.
-    return this.prisma.appointment.create({
+    const open = await this.freeSlots(org.id, branch.id, Math.round((endsAt.getTime() - startsAt.getTime()) / 60000), new Date(startsAt.getTime() - 60000), new Date(endsAt.getTime() + 60000), { limit: 400 });
+    if (!open.some((slot) => slot.startsAt === startsAt.toISOString())) throw new BadRequestException('Это время уже занято. Выберите другое.');
+    const chat = data.chatId ? await this.prisma.widgetChat.findFirst({ where: { id: data.chatId, organizationId: org.id } }) : null;
+    const request = await this.prisma.bookingRequest.create({
       data: {
         organizationId: org.id,
         branchId: branch.id,
-        cabinetId,
-        patientId,
-        serviceId: data.serviceId,
+        chatId: chat?.id ?? null,
+        serviceId: data.serviceId ?? chat?.serviceId ?? null,
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
+        phone: data.phone.trim(),
         startsAt,
         endsAt,
-        status: 'SCHEDULED',
+        summary: chat?.summary ?? (data.comment?.trim() || null),
+        urgent: chat?.urgent ?? false,
+        consentAt: new Date(),
       },
       select: { id: true, startsAt: true, endsAt: true, status: true },
     });
+    return request;
   }
 
   async visitsByPhone(orgSlug: string, data: WidgetLookupDto) {
@@ -157,59 +150,75 @@ export class WidgetService {
     });
   }
 
-  private async branchOf(orgId: string, branchId?: string) {
+  async branchOf(orgId: string, branchId?: string) {
     const branch = await this.prisma.branch.findFirst({
       where: branchId
         ? { id: branchId, organizationId: orgId, isActive: true }
-        : { organizationId: orgId, isActive: true },
+        : { organizationId: orgId, isActive: true, cabinets: { some: { isActive: true } } },
       orderBy: { name: 'asc' },
     });
     if (!branch) throw new BadRequestException('У клиники нет филиала для записи');
     return branch;
   }
 
-  private async freeSlots(orgId: string, branchId: string, durationMin: number, from: Date, to: Date) {
+  /**
+   * Free start times inside the clinic's working hours (its week, holidays and breaks; a doctor's own
+   * week and vacation when one is named). A pending site request holds its slot like a visit.
+   */
+  async freeSlots(orgId: string, branchId: string, durationMin: number, from: Date, to: Date, options: { doctorId?: string | null; limit?: number } = {}) {
     const duration = Math.min(180, Math.max(15, durationMin || 30));
-    const cabinets = await this.prisma.cabinet.findMany({
-      where: { branchId, isActive: true, branch: { organizationId: orgId } },
-      orderBy: { name: 'asc' },
-      select: { id: true },
-    });
+    const limit = options.limit ?? 16;
+    const [org, branch, cabinets] = await Promise.all([
+      this.prisma.organization.findUniqueOrThrow({ where: { id: orgId }, select: { weekHours: true, workHours: true } }),
+      this.prisma.branch.findFirstOrThrow({ where: { id: branchId, organizationId: orgId }, select: { timezone: true } }),
+      this.prisma.cabinet.findMany({ where: { branchId, isActive: true, branch: { organizationId: orgId } }, orderBy: { name: 'asc' }, select: { id: true } }),
+    ]);
     if (!cabinets.length) return [];
-    const visits = await this.prisma.appointment.findMany({
-      where: {
-        organizationId: orgId,
-        branchId,
-        cabinetId: { not: null },
-        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
-        startsAt: { lt: to },
-        endsAt: { gt: from },
-      },
-      select: { cabinetId: true, startsAt: true, endsAt: true },
-    });
-    const blocks = await this.prisma.cabinetBlock.findMany({
-      where: { organizationId: orgId, branchId, startsAt: { lt: to }, endsAt: { gt: from } },
-      select: { cabinetId: true, startsAt: true, endsAt: true },
-    });
+    const doctor = options.doctorId
+      ? await this.prisma.employee.findFirst({ where: { id: options.doctorId, user: { organizationId: orgId } }, include: { schedules: { where: { isActive: true } } } })
+      : null;
+    const offset = tzOffsetMinutes(branch.timezone || 'Europe/Moscow', from);
+    const week = (doctor ? employeeWeek(doctor.schedules) : null) ?? weekHoursOf(org.weekHours, org.workHours);
+    const fromDate = new Date(from.getTime() + offset * 60000).toISOString().slice(0, 10);
+    const toDate = new Date(to.getTime() + offset * 60000).toISOString().slice(0, 10);
+    const exceptions = (await this.prisma.scheduleException.findMany({
+      where: { organizationId: orgId, dateFrom: { lte: toDate }, dateTo: { gte: fromDate } },
+    })) as ScheduleException[];
+    const [visits, blocks, pending] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: { organizationId: orgId, branchId, cabinetId: { not: null }, status: { notIn: ['CANCELLED', 'NO_SHOW'] }, startsAt: { lt: to }, endsAt: { gt: from } },
+        select: { cabinetId: true, startsAt: true, endsAt: true, doctorId: true },
+      }),
+      this.prisma.cabinetBlock.findMany({
+        where: { organizationId: orgId, branchId, startsAt: { lt: to }, endsAt: { gt: from } },
+        select: { cabinetId: true, startsAt: true, endsAt: true },
+      }),
+      this.prisma.bookingRequest.findMany({
+        where: { organizationId: orgId, branchId, status: 'PENDING', startsAt: { lt: to }, endsAt: { gt: from } },
+        select: { startsAt: true, endsAt: true },
+      }),
+    ]);
+    const now = Date.now();
     const slots: { startsAt: string; endsAt: string }[] = [];
-    const day = new Date(from);
-    day.setHours(0, 0, 0, 0);
-    const last = new Date(to);
-    while (day <= last && slots.length < 16) {
-      for (let minute = 8 * 60; minute + duration <= 20 * 60 && slots.length < 16; minute += 30) {
-        const startsAt = new Date(day);
-        startsAt.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
-        const endsAt = new Date(startsAt.getTime() + duration * 60_000);
-        if (startsAt <= new Date()) continue;
-        const open = cabinets.some((cabinet) => this.chairFree(cabinet.id, startsAt, endsAt, visits, blocks));
-        if (open) slots.push({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
+    for (let day = Date.parse(`${fromDate}T00:00:00Z`); day <= Date.parse(`${toDate}T00:00:00Z`) && slots.length < limit; day += 86400000) {
+      const date = new Date(day).toISOString().slice(0, 10);
+      const hours = effectiveHours(week, date, exceptions, doctor?.id ?? null);
+      if (!hours) continue;
+      for (let minute = Math.ceil(hours.opensAt / 30) * 30; minute + duration <= hours.closesAt && slots.length < limit; minute += 30) {
+        if (hours.breakFrom !== undefined && hours.breakTo !== undefined && minute < hours.breakTo && minute + duration > hours.breakFrom) continue;
+        const startsAt = new Date(day + (minute - offset) * 60000);
+        const endsAt = new Date(startsAt.getTime() + duration * 60000);
+        if (startsAt.getTime() <= now + 30 * 60000 || startsAt < from || endsAt > to) continue;
+        if (doctor && visits.some((row) => row.doctorId === doctor.id && startsAt < row.endsAt && endsAt > row.startsAt)) continue;
+        const freeChairs = cabinets.filter((cabinet) => this.chairFree(cabinet.id, startsAt, endsAt, visits, blocks)).length;
+        const held = pending.filter((row) => startsAt < row.endsAt && endsAt > row.startsAt).length;
+        if (freeChairs > held) slots.push({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
       }
-      day.setDate(day.getDate() + 1);
     }
     return slots;
   }
 
-  private async pickCabinet(orgId: string, branchId: string, startsAt: Date, endsAt: Date, ignoreId?: string) {
+  async pickCabinet(orgId: string, branchId: string, startsAt: Date, endsAt: Date, ignoreId?: string) {
     const cabinets = await this.prisma.cabinet.findMany({
       where: { branchId, isActive: true, branch: { organizationId: orgId } },
       orderBy: { name: 'asc' },

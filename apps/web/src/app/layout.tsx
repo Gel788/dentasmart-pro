@@ -1,16 +1,14 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import type { Metadata, Viewport } from 'next';
+import { Golos_Text, Unbounded } from 'next/font/google';
 import { AuthProvider } from '@/lib/auth-context';
 import { BranchProvider } from '@/lib/branch-context';
 import { ThemeProvider } from '@/lib/theme-context';
 import { PwaRegister } from '@/components/pwa-register';
 import './globals.css';
 
-const inter = Inter({
-  subsets: ['cyrillic', 'latin'],
-  display: 'swap',
-  variable: '--font-sans',
-});
+// Golos Text for everything you read, Unbounded for page titles and big figures on display screens.
+const body = Golos_Text({ subsets: ['cyrillic', 'latin'], weight: ['400', '500', '600', '700', '800'], display: 'swap', variable: '--font-body' });
+const display = Unbounded({ subsets: ['cyrillic', 'latin'], weight: ['500', '600', '700'], display: 'swap', variable: '--font-unbounded' });
 
 export const metadata: Metadata = {
   title: 'Седракович Дент',
@@ -19,19 +17,32 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: 'Седракович Дент' },
 };
 
+/**
+ * maximumScale stops iPhone Safari from zooming into a field on tap and staying zoomed (which cut the
+ * right edge off every screen); iOS still lets people pinch-zoom, so nothing is lost for accessibility.
+ * viewport-fit=cover lets the bottom menu sit above the home bar using the safe-area insets.
+ */
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#f2f3f5',
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru" className={inter.variable}>
+    // The inline script below sets the theme class and density before React hydrates.
+    <html lang="ru" className={`${body.variable} ${display.variable}`} suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#0f766e" />
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('dsp_theme');if(t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark');var d=localStorage.getItem('sd_density')||'compact';document.documentElement.dataset.density=d}catch(e){}`,
+            __html: `try{var t=localStorage.getItem('dsp_theme');if(t==='dark')document.documentElement.classList.add('dark');var d=localStorage.getItem('sd_density')||'compact';document.documentElement.dataset.density=d}catch(e){}`,
           }}
         />
       </head>
-      <body className={inter.className}>
+      <body>
         <ThemeProvider>
           <AuthProvider>
             <BranchProvider>

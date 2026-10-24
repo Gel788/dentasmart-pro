@@ -11,3 +11,10 @@ apps/api/uploads/
 coverage
 *.tsbuildinfo
 packages/database/src/generated/
+test-results
+playwright-report
+**/.impeccable/review/
+**/.impeccable/mocks/decision/payload.json
+
+# Vosk speech model: served by nginx from /var/www/dentasmart-assets/vosk on the server
+apps/web/public/vosk/

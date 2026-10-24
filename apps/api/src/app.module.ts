@@ -12,6 +12,7 @@ import { DomainsModule } from './domains/domains.module';
 import { ServicesCatalogModule } from './services-catalog/services.module';
 import { SettingsModule } from './settings/settings.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { RouteModule } from './route/route.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { UploadsModule } from './uploads/uploads.module';
     ServicesCatalogModule,
     SettingsModule,
     UploadsModule,
+    RouteModule,
     DomainsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -183,7 +183,12 @@ export function AiPlan({
     }
     setBusy(true);
     try {
-      if (!planId) {
+      if (!planId && (template.phases as unknown[] | undefined)?.length) {
+        // A saved template with phases: start an empty plan, then lay the template into it.
+        const plan = await api<{ id: string }>(`/workspace/patients/${patientId}/plans`, { method: 'POST', body: '{}' });
+        await api(`/workspace/plans/${plan.id}/apply-template`, { method: 'POST', body: JSON.stringify({ templateId: template.id, toothNum: tooth }) });
+        await onDone(plan.id);
+      } else if (!planId) {
         const marksForPlan = (template.marks ?? []).map((mark) => ({ ...mark, tooth: mark.tooth ?? tooth }));
         const family = composeFamily(marksForPlan, services);
         if (!family) throw new Error('Шаблон пустой');
@@ -225,24 +230,21 @@ export function AiPlan({
   };
 
   if (!enabled) {
-    return owner ? <p className="ai-off">ИИ-план выключен. <Link href="/settings">Включить в настройках</Link></p> : null;
+    return owner ? <p className="ai-off">Быстрый план выключен. <Link href="/settings">Включить в настройках</Link></p> : null;
   }
 
   return (
-    <section className="ai">
+    <section className="ai" aria-labelledby="ai-title">
       <div className="ai-head">
-        <div>
-          <p className="ai-kicker">ИИ-план за минуту</p>
-          <h2>Отметьте находки — соберём этапы и цены из прайса</h2>
-        </div>
-        <button className="sd-btn" type="button" disabled={busy} onClick={() => void generate()}>{busy ? 'Собираем…' : 'Собрать план ИИ'}</button>
+        <h2 id="ai-title">Находки</h2>
+        <button className="sd-btn" type="button" disabled={busy || (!marks.length && !note.trim())} onClick={() => void generate()}>{busy ? 'Собираем…' : 'Собрать план'}</button>
       </div>
-      <div className="ai-chips">
+      <div className="ai-chips" role="group" aria-label="Диагноз для отметки на формуле">
         {FINDINGS.map((item) => (
-          <button key={item.code} type="button" className={armed === item.code ? 'on' : ''} onClick={() => setArmed(armed === item.code ? null : item.code)}>{item.label}</button>
+          <button key={item.code} type="button" aria-pressed={armed === item.code} className={armed === item.code ? 'on' : ''} onClick={() => setArmed(armed === item.code ? null : item.code)}>{item.label}</button>
         ))}
       </div>
-      <p className="ai-hint">{armed ? `Нажмите зуб, чтобы поставить «${labelOf(armed)}». Повторный клик снимает.` : 'Выберите диагноз, затем зуб. Или продиктуйте жалобу.'}</p>
+      <p className="ai-hint">{armed ? `Нажмите зуб на формуле, чтобы поставить «${labelOf(armed)}». Повторный клик снимает.` : 'Выберите диагноз и нажмите зуб. План с этапами и ценами соберётся из прайса.'}</p>
       {marks.length > 0 && (
         <div className="ai-marks">
           {marks.map((mark) => (
@@ -252,10 +254,20 @@ export function AiPlan({
           ))}
         </div>
       )}
-      <div className="ai-note">
-        <textarea aria-label="Жалоба или находка" placeholder="Например: зуб 16 кариес, 36 нет зуба" value={note} onChange={(event) => setNote(event.target.value)} />
-        <button className="sd-btn-ghost" type="button" onClick={dictate}>{listening ? 'Слушаем…' : 'Надиктовать'}</button>
-      </div>
+      <details className="ai-more" open={Boolean(note) || listening || undefined}>
+        <summary>Диктовка и шаблоны</summary>
+        <div className="ai-note">
+          <textarea aria-label="Жалоба или находка" placeholder="Например: зуб 16 кариес, 36 нет зуба" value={note} onChange={(event) => setNote(event.target.value)} />
+          <button className="sd-btn-ghost" type="button" onClick={dictate}>{listening ? 'Слушаем…' : 'Надиктовать'}</button>
+        </div>
+        <div className="ai-actions">
+          <button className="sd-btn-ghost" type="button" onClick={() => setTemplatesOpen(true)}>Применить шаблон</button>
+          <label>Сохранить как шаблон
+            <input aria-label="Название шаблона" value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="Название" />
+          </label>
+          <button className="sd-btn-ghost" type="button" disabled={busy} onClick={() => void saveTemplate()}>Сохранить</button>
+        </div>
+      </details>
       {reel && (
         <ol className="ai-reel">
           <li className="ai-status">{status}</li>
@@ -263,14 +275,7 @@ export function AiPlan({
         </ol>
       )}
       {!reel && status && <p className="ai-status">{status}</p>}
-      {error && <p className="sd-chip danger">{error}</p>}
-      <div className="ai-actions">
-        <button className="sd-btn-ghost" type="button" onClick={() => setTemplatesOpen(true)}>Применить шаблон</button>
-        <label>Сохранить как шаблон
-          <input aria-label="Название шаблона" value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="Название" />
-        </label>
-        <button className="sd-btn-ghost" type="button" disabled={busy} onClick={() => void saveTemplate()}>Сохранить</button>
-      </div>
+      {error && <p className="ai-error" role="alert">{error}</p>}
       {templatesOpen && (
         <div className="sd-sheet-back" role="presentation" onClick={() => setTemplatesOpen(false)}>
           <div className="sd-sheet" role="dialog" aria-label="Шаблоны планов" onClick={(event) => event.stopPropagation()}>

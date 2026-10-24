@@ -22,15 +22,13 @@ export function StatCard({
   tone?: keyof typeof tones;
 }) {
   return (
-    <div className="ds-card flex items-start justify-between gap-4 p-5">
+    <div className="ds-card ds-stat flex items-start justify-between gap-4 p-5">
       <div className="min-w-0">
-        <p className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--muted)]">{label}</p>
-        <p className="ds-display mt-2 text-[1.7rem] leading-none text-[var(--text)]">{value}</p>
+        <p className="text-[12.5px] font-semibold text-[var(--muted)]">{label}</p>
+        <p className="ds-display mt-1.5 text-[1.85rem] leading-none text-[var(--text)]">{value}</p>
         {hint && <p className="mt-2 text-xs text-[var(--muted)]">{hint}</p>}
       </div>
-      <div className={clsx('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', tones[tone])}>
-        <Icon size={16} strokeWidth={1.75} />
-      </div>
+      <Icon size={16} strokeWidth={1.75} aria-hidden="true" className={clsx('mt-0.5 shrink-0', tones[tone].split(' ').find((cls) => cls.startsWith('text-')))} />
     </div>
   );
 }

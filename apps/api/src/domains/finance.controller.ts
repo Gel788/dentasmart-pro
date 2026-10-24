@@ -5,6 +5,7 @@ import { PermissionsGuard } from '../auth/permissions.guard';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { OrgId } from '../common/org.decorator';
 import { CurrentUser } from '../common/current-user.decorator';
+import { IdempotencyKey } from '../common/idempotency.decorator';
 import { AuthUser } from '@dentasmart/shared';
 import { FinanceService } from './finance.service';
 import { InvoiceFromPlanDto } from './dto/invoice-from-plan.dto';
@@ -22,6 +23,18 @@ export class FinanceController {
   @RequirePermissions('finance.read')
   summary(@OrgId() orgId: string) {
     return this.svc.summary(orgId);
+  }
+
+  @Get('overview')
+  @RequirePermissions('finance.read')
+  overview(@OrgId() orgId: string) {
+    return this.svc.overview(orgId);
+  }
+
+  @Get('desk')
+  @RequirePermissions('finance.read')
+  desk(@OrgId() orgId: string, @Query('branchId') branchId?: string) {
+    return this.svc.desk(orgId, branchId);
   }
 
   @Get('invoices')
@@ -74,8 +87,14 @@ export class FinanceController {
 
   @Post('payments/:id/refund')
   @RequirePermissions('finance.write')
-  refund(@OrgId() orgId: string, @Param('id') id: string, @Body() body: { amount: number }) {
-    return this.svc.refundPayment(orgId, id, Number(body.amount));
+  refund(
+    @OrgId() orgId: string,
+    @CurrentUser() user: AuthUser,
+    @IdempotencyKey() idempotencyKey: string | undefined,
+    @Param('id') id: string,
+    @Body() body: { amount: number },
+  ) {
+    return this.svc.refundPayment(orgId, id, body.amount, { userId: user.id, idempotencyKey });
   }
 
   @Post('invoices/:id/discount')
@@ -95,9 +114,11 @@ export class FinanceController {
   @RequirePermissions('finance.write')
   createPayment(
     @OrgId() orgId: string,
+    @CurrentUser() user: AuthUser,
+    @IdempotencyKey() idempotencyKey: string | undefined,
     @Body() body: { patientId: string; amount: number; method: string; invoiceId?: string },
   ) {
-    return this.svc.createPayment(orgId, body);
+    return this.svc.createPayment(orgId, body, { userId: user.id, idempotencyKey });
   }
 
   @Post('promo-codes')
@@ -153,8 +174,13 @@ export class FinanceController {
 
   @Post('deposits/pay')
   @RequirePermissions('finance.write')
-  payDeposit(@OrgId() orgId: string, @Body() body: { patientId: string; amount: number; invoiceId?: string }) {
-    return this.svc.payFromDeposit(orgId, body.patientId, body.amount, body.invoiceId);
+  payDeposit(
+    @OrgId() orgId: string,
+    @CurrentUser() user: AuthUser,
+    @IdempotencyKey() idempotencyKey: string | undefined,
+    @Body() body: { patientId: string; amount: number; invoiceId?: string },
+  ) {
+    return this.svc.payFromDeposit(orgId, body.patientId, body.amount, body.invoiceId, { userId: user.id, idempotencyKey });
   }
 
   @Get('installments')
@@ -174,8 +200,8 @@ export class FinanceController {
 
   @Post('installments/lines/:lineId/pay')
   @RequirePermissions('finance.write')
-  payLine(@OrgId() orgId: string, @Param('lineId') lineId: string, @Body() body: { patientId: string }) {
-    return this.svc.payInstallmentLine(orgId, lineId, body.patientId);
+  payLine(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Param('lineId') lineId: string, @Body() body: { patientId: string }) {
+    return this.svc.payInstallmentLine(orgId, lineId, body.patientId, { userId: user.id });
   }
 
   @Get('family-groups')

@@ -53,15 +53,36 @@ function Book() {
 
   useEffect(() => { void load(); }, []);
 
-  const categories = useMemo(() => services.filter((row) => row.isCategory || (!row.parentId && !row.code)), [services]);
+  const categories = useMemo(() => services.filter((row) => row.isCategory && row.isActive), [services]);
   const groups = useMemo(() => {
     const named = categories.map((category) => ({
       category,
-      items: services.filter((row) => row.parentId === category.id && (showArchive || row.isActive)),
+      items: services.filter((row) => !row.isCategory && row.parentId === category.id && (showArchive || row.isActive)),
     }));
-    const loose = services.filter((row) => !row.isCategory && row.code && !row.parentId && (showArchive || row.isActive));
+    const known = new Set(categories.map((row) => row.id));
+    const loose = services.filter((row) => !row.isCategory && (!row.parentId || !known.has(row.parentId)) && (showArchive || row.isActive));
     return { named, loose };
   }, [categories, services, showArchive]);
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [removing, setRemoving] = useState<{ id: string; moveTo: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const run = async (job: () => Promise<unknown>, done: string) => {
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try { await job(); setNotice(done); await load(); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Не получилось'); }
+    finally { setBusy(false); }
+  };
+  const renameCategory = (id: string, name: string) => run(async () => {
+    await api(`/config/categories/${id}`, { method: 'POST', body: JSON.stringify({ name }) });
+    setRenaming(null);
+  }, 'Категория переименована');
+  const removeCategory = (id: string, moveTo: string, count: number) => run(async () => {
+    await api(`/config/categories/${id}/delete`, { method: 'POST', body: JSON.stringify({ moveTo: moveTo || null }) });
+    setRemoving(null);
+  }, count ? `Категория удалена, услуги перенесены${moveTo ? '' : ' в «Без категории»'}` : 'Категория удалена');
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -92,11 +113,11 @@ function Book() {
   const addCategory = async (event: FormEvent) => {
     event.preventDefault();
     if (!categoryName.trim()) return;
-    await api('/config/services', { method: 'POST', body: JSON.stringify({ name: categoryName.trim(), price: 0, durationMin: 0 }) });
-    setCategoryName('');
-    setNamingCategory(false);
-    setNotice('Категория добавлена');
-    await load();
+    await run(async () => {
+      await api('/config/categories', { method: 'POST', body: JSON.stringify({ name: categoryName.trim() }) });
+      setCategoryName('');
+      setNamingCategory(false);
+    }, 'Категория добавлена');
   };
 
   const downloadPrice = async () => {
@@ -134,16 +155,19 @@ function Book() {
   };
 
   const composing = adding || Boolean(draft.id);
-  const listed = groups.named.filter(({ items }) => items.length > 0);
+  const listed = groups.named;
 
   return (
     <div className="sd-stack price-book">
       <div className="sd-h">
         <div>
           <h1>Прайс</h1>
-          <p>{ruServices(services.filter((row) => row.code && row.isActive).length)} в прайсе.</p>
+          <p>{ruServices(services.filter((row) => !row.isCategory && row.isActive).length)} в прайсе.</p>
         </div>
-        {!composing && <button className="sd-btn" type="button" onClick={() => { setDraft(emptyDraft()); setAdding(true); }}>Добавить услугу</button>}
+        <div className="sd-inline">
+          <button className="sd-btn-ghost" type="button" onClick={() => setNamingCategory((value) => !value)}>Новая категория</button>
+          {!composing && <button className="sd-btn" type="button" onClick={() => { setDraft(emptyDraft()); setAdding(true); }}>Добавить услугу</button>}
+        </div>
       </div>
       {notice && <p className="wow-note">{notice}</p>}
       {error && <p className="sd-chip danger">{error}</p>}
@@ -173,13 +197,13 @@ function Book() {
           <button className="sd-btn" type="submit">{draft.id ? 'Сохранить услугу' : 'Добавить услугу'}</button>
           <button className="sd-btn-ghost" type="button" onClick={() => { setDraft(emptyDraft()); setAdding(false); setNamingCategory(false); }}>Закрыть</button>
           {draft.id && <button className="sd-btn-ghost" type="button" onClick={() => { const row = services.find((item) => item.id === draft.id); if (row) void archive(row); }}>{services.find((item) => item.id === draft.id)?.isActive ? 'В архив' : 'Вернуть'}</button>}
-          <button className="sd-btn-ghost" type="button" onClick={() => setNamingCategory((value) => !value)}>Новая категория</button>
         </div>
       </form>}
       {namingCategory && (
         <form className="sd-card sd-inline price-composer" onSubmit={addCategory}>
-          <input className="sd-input" placeholder="Название категории" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} autoFocus />
-          <button className="sd-btn-ghost" type="submit">Добавить категорию</button>
+          <input className="sd-input" placeholder="Название категории, например «Терапия»" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} autoFocus maxLength={120} />
+          <button className="sd-btn" type="submit" disabled={busy || !categoryName.trim()}>Добавить категорию</button>
+          <button className="sd-btn-ghost" type="button" onClick={() => { setNamingCategory(false); setCategoryName(''); }}>Отмена</button>
         </form>
       )}
 
@@ -194,12 +218,41 @@ function Book() {
       </details>
 
       {listed.map(({ category, items }) => (
-        <section key={category.id} className="sd-card sd-stack">
-          <div className="sd-inline">
-            <h2>{category.name}</h2>
-            <span className="sd-muted">{ruServices(items.length)}</span>
-          </div>
+        <section key={category.id} className="sd-card sd-stack price-cat">
+          {renaming?.id === category.id ? (
+            <form className="price-cat-head" onSubmit={(event) => { event.preventDefault(); if (renaming.name.trim()) void renameCategory(category.id, renaming.name.trim()); }}>
+              <input className="sd-input" aria-label="Новое название категории" value={renaming.name} onChange={(event) => setRenaming({ id: category.id, name: event.target.value })} autoFocus maxLength={120} onKeyDown={(event) => { if (event.key === 'Escape') setRenaming(null); }} />
+              <button className="sd-btn" type="submit" disabled={busy || !renaming.name.trim()}>Сохранить</button>
+              <button className="sd-btn-ghost" type="button" onClick={() => setRenaming(null)}>Отмена</button>
+            </form>
+          ) : (
+            <div className="price-cat-head">
+              <h2>{category.name}</h2>
+              <span className="sd-muted">{ruServices(items.length)}</span>
+              <span className="price-cat-acts">
+                <button className="price-link" type="button" onClick={() => { setRemoving(null); setRenaming({ id: category.id, name: category.name }); }}>Переименовать</button>
+                <button className="price-link danger" type="button" onClick={() => { setRenaming(null); setRemoving({ id: category.id, moveTo: '' }); }}>Удалить</button>
+              </span>
+            </div>
+          )}
+          {removing?.id === category.id && (
+            <div className="price-cat-remove" role="alertdialog" aria-label={`Удалить категорию ${category.name}`}>
+              {items.length > 0 ? (
+                <label>В категории {ruServices(items.length)}. Куда их перенести?
+                  <select className="sd-input" value={removing.moveTo} onChange={(event) => setRemoving({ id: category.id, moveTo: event.target.value })}>
+                    <option value="">Без категории</option>
+                    {categories.filter((row) => row.id !== category.id).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
+                  </select>
+                </label>
+              ) : <p>Категория пустая — удалить её?</p>}
+              <div className="sd-inline">
+                <button className="sd-btn-ghost" type="button" onClick={() => setRemoving(null)}>Отмена</button>
+                <button className="sd-btn price-danger" type="button" disabled={busy} onClick={() => void removeCategory(category.id, removing.moveTo, items.length)}>Удалить категорию</button>
+              </div>
+            </div>
+          )}
           {items.map((row) => <ServiceLine key={row.id} row={row} onEdit={() => edit(row)} />)}
+          {items.length === 0 && <p className="sd-muted price-cat-empty">Пусто. Добавьте услугу и выберите эту категорию.</p>}
         </section>
       ))}
       {listed.length === 0 && groups.loose.length === 0 && (

@@ -1,6 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { formatRub, fromKopecks, kopecks, tzOffsetMinutes } from '@dentasmart/shared';
+import { inputKopecks, isUniqueViolation, paymentByKey, recordPayment, refreshInvoice, splitKopecks } from './invoice-ledger';
 import { resolveBranchId } from '../common/resolve-branch';
+import { clinicianWhere } from './clinicians';
 
 function localDay(iso: string, end: boolean) {
   const [year, month, day] = iso.slice(0, 10).split('-').map(Number);
@@ -29,7 +32,92 @@ export class FinanceService {
     return svc ? Number(svc.basePrice) : 0;
   }
 
-  summary(orgId: string) {
+  /** Start and end of today in the clinic's time zone. */
+  private async clinicDay(orgId: string, branchId?: string) {
+    const branch = await this.prisma.branch.findFirst({
+      where: { organizationId: orgId, ...(branchId ? { id: branchId } : {}), isActive: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const now = new Date();
+    const offset = tzOffsetMinutes(branch?.timezone ?? 'Europe/Moscow', now);
+    const wall = new Date(now.getTime() + offset * 60000);
+    const start = new Date(Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate()) - offset * 60000);
+    return { branch, offset, start, end: new Date(start.getTime() + 86400000) };
+  }
+
+  /**
+   * The money page in one call: what came in today, this week and this month (each against the period
+   * before), thirty days for the sparkline, who owes, the instalments that fall due, and each doctor's take.
+   * Refunds count against the day they were made; bonus points are not money.
+   */
+  async overview(orgId: string) {
+    const { offset, start: today } = await this.clinicDay(orgId);
+    const DAY = 86400000;
+    const rub = (value: number) => Math.round(value) / 100;
+    const wall = new Date(today.getTime() + offset * 60000);
+    const weekday = (wall.getUTCDay() + 6) % 7;
+    const week = new Date(today.getTime() - weekday * DAY);
+    const month = new Date(Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), 1) - offset * 60000);
+    const prevMonth = new Date(Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth() - 1, 1) - offset * 60000);
+    const since = new Date(Math.min(prevMonth.getTime(), today.getTime() - 34 * DAY));
+    const payments = await this.prisma.payment.findMany({
+      where: { organizationId: orgId, paidAt: { gte: since }, method: { not: 'BONUS' } },
+      select: { amount: true, paidAt: true, refundOfId: true, invoice: { select: { appointment: { select: { doctorId: true } } } } },
+    });
+    const signed = (row: (typeof payments)[number]) => (row.refundOfId ? -Math.abs(kopecks(row.amount)) : kopecks(row.amount));
+    const sum = (from: Date, to: Date) => payments.filter((row) => row.paidAt >= from && row.paidAt < to).reduce((total, row) => total + signed(row), 0);
+    const now = new Date();
+    const elapsed = now.getTime() - today.getTime();
+    const series = Array.from({ length: 30 }, (_, index) => {
+      const from = new Date(today.getTime() - (29 - index) * DAY);
+      return { date: new Date(from.getTime() + offset * 60000).toISOString().slice(0, 10), amount: rub(sum(from, new Date(from.getTime() + DAY))) };
+    });
+    const doctors = await this.prisma.employee.findMany({ where: clinicianWhere(orgId), select: { id: true, firstName: true, lastName: true } });
+    const byDoctor = new Map<string, number>();
+    for (const row of payments.filter((item) => item.paidAt >= month)) {
+      const id = row.invoice?.appointment?.doctorId ?? '';
+      byDoctor.set(id, (byDoctor.get(id) ?? 0) + signed(row));
+    }
+    const open = await this.prisma.invoice.findMany({
+      where: { organizationId: orgId, status: { in: ['ISSUED', 'PARTIAL'] } },
+      select: { patientId: true, totalAmount: true, paidAmount: true, discountAmount: true, createdAt: true, patient: { select: { firstName: true, lastName: true, phone: true } } },
+    });
+    const debts = new Map<string, { patientId: string; name: string; phone: string | null; amount: number; since: Date }>();
+    for (const row of open) {
+      const left = kopecks(row.totalAmount) - kopecks(row.discountAmount) - kopecks(row.paidAmount);
+      if (left <= 0) continue;
+      const entry = debts.get(row.patientId) ?? { patientId: row.patientId, name: `${row.patient.lastName} ${row.patient.firstName}`, phone: row.patient.phone, amount: 0, since: row.createdAt };
+      entry.amount += left;
+      if (row.createdAt < entry.since) entry.since = row.createdAt;
+      debts.set(row.patientId, entry);
+    }
+    const debtors = [...debts.values()].sort((a, b) => b.amount - a.amount);
+    const lines = await this.prisma.installmentSchedule.findMany({
+      where: { status: { in: ['PENDING', 'OVERDUE'] }, dueDate: { lt: new Date(today.getTime() + 31 * DAY) }, plan: { organizationId: orgId, status: 'ACTIVE' } },
+      orderBy: { dueDate: 'asc' },
+      take: 20,
+      select: { id: true, dueDate: true, amount: true, plan: { select: { months: true, patientId: true, patient: { select: { firstName: true, lastName: true } } } } },
+    });
+    const period = (from: Date, to: Date, prevFrom: Date, prevTo: Date) => ({ amount: rub(sum(from, to)), previous: rub(sum(prevFrom, prevTo)) });
+    return {
+      today: period(today, new Date(today.getTime() + DAY), new Date(today.getTime() - DAY), new Date(today.getTime() - DAY + elapsed)),
+      week: period(week, new Date(today.getTime() + DAY), new Date(week.getTime() - 7 * DAY), new Date(week.getTime() - 7 * DAY + (now.getTime() - week.getTime()))),
+      month: period(month, new Date(today.getTime() + DAY), prevMonth, new Date(prevMonth.getTime() + (now.getTime() - month.getTime()))),
+      series,
+      debt: { total: rub(debtors.reduce((total, row) => total + row.amount, 0)), patients: debtors.length, top: debtors.slice(0, 8).map((row) => ({ ...row, amount: rub(row.amount), since: row.since.toISOString() })) },
+      installments: lines.map((row) => ({ id: row.id, dueDate: row.dueDate.toISOString(), amount: Number(row.amount), overdue: row.dueDate < today, patientId: row.plan.patientId, patient: `${row.plan.patient.lastName} ${row.plan.patient.firstName}`, months: row.plan.months })),
+      doctors: [...byDoctor.entries()]
+        .map(([id, amount]) => {
+          const doctor = doctors.find((row) => row.id === id);
+          return { id: id || null, name: doctor ? `${doctor.lastName} ${doctor.firstName}` : 'Без врача', amount: rub(amount) };
+        })
+        .filter((row) => row.amount !== 0)
+        .sort((a, b) => b.amount - a.amount),
+    };
+  }
+
+  async summary(orgId: string) {
+    const { start, end } = await this.clinicDay(orgId);
     return Promise.all([
       this.prisma.invoice.aggregate({
         where: { organizationId: orgId, status: { in: ['ISSUED', 'PARTIAL'] } },
@@ -44,7 +132,7 @@ export class FinanceService {
       this.prisma.payment.aggregate({
         where: {
           organizationId: orgId,
-          paidAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+          paidAt: { gte: start, lt: end },
         },
         _sum: { amount: true },
       }),
@@ -58,6 +146,94 @@ export class FinanceService {
       paymentCount: payments._count,
       revenueToday: Number(todayPayments._sum.amount ?? 0),
     }));
+  }
+
+  /**
+   * The cash desk: today's money in the clinic's own day (branch time zone, not the server's),
+   * every invoice that still has something to pay with today's visits first, and today's payments.
+   */
+  async desk(orgId: string, branchId?: string) {
+    const { branch, offset, start: dayStart, end: dayEnd } = await this.clinicDay(orgId, branchId);
+
+    const [open, payments, visits] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where: { organizationId: orgId, status: { in: ['ISSUED', 'PARTIAL'] } },
+        include: { patient: { select: { id: true, firstName: true, lastName: true, phone: true } }, appointment: { select: { startsAt: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+      }),
+      this.prisma.payment.findMany({
+        where: { organizationId: orgId, paidAt: { gte: dayStart, lt: dayEnd } },
+        include: { invoice: { select: { number: true } }, refunds: { select: { amount: true } } },
+        orderBy: { paidAt: 'desc' },
+      }),
+      this.prisma.appointment.findMany({
+        where: { organizationId: orgId, startsAt: { gte: dayStart, lt: dayEnd }, status: { notIn: ['CANCELLED', 'NO_SHOW'] } },
+        select: { patientId: true, startsAt: true, status: true },
+      }),
+    ]);
+    const todayByPatient = new Map(visits.map((visit) => [visit.patientId, visit]));
+    const payers = await this.prisma.patient.findMany({
+      where: { organizationId: orgId, id: { in: [...new Set(payments.map((payment) => payment.patientId))] } },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    const payerName = new Map(payers.map((row) => [row.id, `${row.lastName} ${row.firstName}`.trim()]));
+    const due = open
+      .map((invoice) => {
+        const total = kopecks(invoice.totalAmount);
+        const discount = kopecks(invoice.discountAmount);
+        const paid = kopecks(invoice.paidAmount);
+        const left = Math.max(0, total - discount - paid);
+        const today = todayByPatient.get(invoice.patientId);
+        return {
+          invoiceId: invoice.id,
+          number: invoice.number,
+          createdAt: invoice.createdAt,
+          dueDate: invoice.dueDate,
+          promiseNote: invoice.promiseNote,
+          patient: { id: invoice.patient.id, name: `${invoice.patient.lastName} ${invoice.patient.firstName}`.trim(), phone: invoice.patient.phone },
+          total: fromKopecks(total),
+          discount: fromKopecks(discount),
+          paid: fromKopecks(paid),
+          due: fromKopecks(left),
+          dueKopecks: left,
+          visitToday: today ? { startsAt: today.startsAt, status: today.status } : null,
+        };
+      })
+      .filter((row) => row.dueKopecks > 0)
+      .sort((a, b) => Number(!!b.visitToday) - Number(!!a.visitToday) || +new Date(b.createdAt) - +new Date(a.createdAt));
+
+    const sum = (rows: { amount: unknown }[]) => rows.reduce((acc, row) => acc + kopecks(row.amount as string), 0);
+    const cash = payments.filter((payment) => payment.method === 'CASH');
+    const card = payments.filter((payment) => payment.method !== 'CASH');
+    return {
+      day: new Date(dayStart.getTime() + offset * 60000).toISOString().slice(0, 10),
+      timezone: branch?.timezone ?? 'Europe/Moscow',
+      branchId: branch?.id ?? null,
+      totals: {
+        revenueToday: fromKopecks(sum(payments)),
+        cashToday: fromKopecks(sum(cash)),
+        otherToday: fromKopecks(sum(card)),
+        receivable: fromKopecks(due.reduce((acc, row) => acc + row.dueKopecks, 0)),
+        openInvoices: due.length,
+        dueToday: fromKopecks(due.filter((row) => row.visitToday).reduce((acc, row) => acc + row.dueKopecks, 0)),
+      },
+      due: due.map(({ dueKopecks: _drop, ...row }) => row),
+      payments: payments.map((payment) => {
+        const amount = kopecks(payment.amount);
+        const refunded = Math.abs(sum(payment.refunds));
+        return {
+          id: payment.id,
+          paidAt: payment.paidAt,
+          amount: fromKopecks(amount),
+          method: payment.method,
+          isRefund: amount < 0,
+          refundable: amount > 0 ? fromKopecks(Math.max(0, amount - refunded)) : '0.00',
+          patient: { id: payment.patientId, name: payerName.get(payment.patientId) ?? 'Пациент' },
+          invoiceNumber: payment.invoice?.number ?? null,
+        };
+      }),
+    };
   }
 
   listInvoices(orgId: string, patientId?: string) {
@@ -209,120 +385,93 @@ export class FinanceService {
         })),
       });
       const lines = await tx.invoiceItem.findMany({ where: { invoiceId: invoice.id } });
-      const total = lines.reduce((sum, line) => sum + Number(line.price), 0);
-      const paid = Number(invoice.paidAmount);
-      return tx.invoice.update({
-        where: { id: invoice.id },
-        data: {
-          totalAmount: total,
-          status: paid <= 0 ? 'ISSUED' : paid >= total ? 'PAID' : 'PARTIAL',
-        },
-        include: { items: { orderBy: { title: 'asc' } } },
-      });
+      const total = lines.reduce((sum, line) => sum + kopecks(line.price), 0);
+      await tx.invoice.update({ where: { id: invoice.id }, data: { totalAmount: fromKopecks(total) } });
+      await refreshInvoice(tx, orgId, invoice.id);
+      return tx.invoice.findUniqueOrThrow({ where: { id: invoice.id }, include: { items: { orderBy: { title: 'asc' } } } });
     });
   }
 
-  createPayment(orgId: string, data: { patientId: string; amount: number; method: string; invoiceId?: string }) {
-    return this.prisma.$transaction(async (tx) => {
-      if (data.method === 'DMS') {
-        const policy = await tx.insurancePolicy.findFirst({
-          where: {
-            organizationId: orgId,
-            patientId: data.patientId,
-            OR: [{ validTo: null }, { validTo: { gte: new Date() } }],
-          },
-          orderBy: { createdAt: 'desc' },
-        });
-        if (!policy) throw new BadRequestException('У пациента нет действующего полиса ДМС');
-        const spent = await tx.payment.aggregate({
-          where: { organizationId: orgId, patientId: data.patientId, method: 'DMS' },
-          _sum: { amount: true },
-        });
-        const left = Number(policy.limitAmount) - Number(spent._sum.amount ?? 0);
-        if (data.amount > left + 0.001) {
-          throw new BadRequestException(`По полису осталось ${left.toLocaleString('ru-RU')} ₽`);
+  async createPayment(
+    orgId: string,
+    data: { patientId: string; amount: number | string; method: string; invoiceId?: string },
+    actor: { userId?: string; idempotencyKey?: string } = {},
+  ) {
+    const amount = inputKopecks(data.amount);
+    if (amount <= 0) throw new BadRequestException('Укажите сумму больше нуля');
+    const repeated = await paymentByKey(this.prisma, orgId, actor.idempotencyKey);
+    if (repeated) return repeated;
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        if (data.method === 'DMS') {
+          const policy = await tx.insurancePolicy.findFirst({
+            where: {
+              organizationId: orgId,
+              patientId: data.patientId,
+              OR: [{ validTo: null }, { validTo: { gte: new Date() } }],
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+          if (!policy) throw new BadRequestException('У пациента нет действующего полиса ДМС');
+          const spent = await tx.payment.aggregate({
+            where: { organizationId: orgId, patientId: data.patientId, method: 'DMS' },
+            _sum: { amount: true },
+          });
+          const left = kopecks(policy.limitAmount) - kopecks(spent._sum.amount);
+          if (amount > left) throw new BadRequestException(`По полису осталось ${formatRub(left)}`);
         }
-      }
-      const payment = await tx.payment.create({
-        data: {
+        return recordPayment(tx, {
           organizationId: orgId,
           patientId: data.patientId,
-          amount: data.amount,
-          method: data.method as never,
           invoiceId: data.invoiceId,
-        },
+          amountKopecks: amount,
+          method: data.method as never,
+          createdById: actor.userId,
+          idempotencyKey: actor.idempotencyKey,
+        });
       });
-      if (data.invoiceId) {
-        const inv = await tx.invoice.findUnique({ where: { id: data.invoiceId } });
-        if (inv) {
-          const paid = Number(inv.paidAmount) + data.amount;
-          await tx.invoice.update({
-            where: { id: data.invoiceId },
-            data: {
-              paidAmount: paid,
-              status: paid >= Number(inv.totalAmount) ? 'PAID' : 'PARTIAL',
-            },
-          });
-        }
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const first = await paymentByKey(this.prisma, orgId, actor.idempotencyKey);
+        if (first) return first;
       }
-      return payment;
-    });
+      throw error;
+    }
   }
 
-  async setDiscount(orgId: string, invoiceId: string, discountAmount: number) {
-    const invoice = await this.prisma.invoice.findFirst({ where: { id: invoiceId, organizationId: orgId } });
-    if (!invoice) throw new NotFoundException('Счёт не найден');
-    const total = Number(invoice.totalAmount);
-    const discount = Math.min(Math.max(0, discountAmount), total);
-    const paid = Number(invoice.paidAmount);
-    const due = total - discount;
-    return this.prisma.invoice.update({
-      where: { id: invoiceId },
-      data: {
-        discountAmount: discount,
-        status: paid <= 0 ? (invoice.status === 'CANCELLED' ? 'CANCELLED' : 'ISSUED') : paid >= due ? 'PAID' : 'PARTIAL',
-      },
-    });
-  }
-
-  async refundPayment(orgId: string, paymentId: string, amount: number) {
+  async setDiscount(orgId: string, invoiceId: string, discountAmount: number | string) {
     return this.prisma.$transaction(async (tx) => {
-      const payment = await tx.payment.findFirst({ where: { id: paymentId, organizationId: orgId } });
-      if (!payment || Number(payment.amount) <= 0) throw new BadRequestException('Оплата для возврата не найдена');
-      const already = await tx.payment.aggregate({
-        where: { refundOfId: paymentId },
-        _sum: { amount: true },
+      const invoice = await tx.invoice.findFirst({ where: { id: invoiceId, organizationId: orgId } });
+      if (!invoice) throw new NotFoundException('Счёт не найден');
+      const discount = Math.min(Math.max(0, inputKopecks(discountAmount)), kopecks(invoice.totalAmount));
+      await tx.invoice.update({ where: { id: invoiceId }, data: { discountAmount: fromKopecks(discount) } });
+      return refreshInvoice(tx, orgId, invoiceId);
+    });
+  }
+
+  async refundPayment(orgId: string, paymentId: string, amountRub: number | string, actor: { userId?: string; idempotencyKey?: string } = {}) {
+    const amount = inputKopecks(amountRub);
+    const repeated = await paymentByKey(this.prisma, orgId, actor.idempotencyKey);
+    if (repeated) return repeated;
+    return this.prisma.$transaction(async (tx) => {
+      // Lock the original payment so two refunds of it cannot both pass the limit check.
+      const locked = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM payments WHERE id = ${paymentId} AND "organizationId" = ${orgId} FOR UPDATE`;
+      const payment = locked.length ? await tx.payment.findUnique({ where: { id: paymentId } }) : null;
+      if (!payment || kopecks(payment.amount) <= 0) throw new BadRequestException('Оплата для возврата не найдена');
+      const already = await tx.payment.aggregate({ where: { refundOfId: paymentId }, _sum: { amount: true } });
+      const left = kopecks(payment.amount) - Math.abs(kopecks(already._sum.amount));
+      if (amount <= 0 || amount > left) throw new BadRequestException(`К возврату доступно ${formatRub(left)}`);
+      return recordPayment(tx, {
+        organizationId: orgId,
+        patientId: payment.patientId,
+        invoiceId: payment.invoiceId,
+        amountKopecks: -amount,
+        method: payment.method,
+        refundOfId: payment.id,
+        createdById: actor.userId,
+        idempotencyKey: actor.idempotencyKey,
       });
-      const returned = Math.abs(Number(already._sum.amount ?? 0));
-      const left = Number(payment.amount) - returned;
-      if (amount <= 0 || amount > left + 0.001) {
-        throw new BadRequestException(`К возврату доступно ${left.toLocaleString('ru-RU')} ₽`);
-      }
-      const refund = await tx.payment.create({
-        data: {
-          organizationId: orgId,
-          patientId: payment.patientId,
-          invoiceId: payment.invoiceId,
-          amount: -amount,
-          method: payment.method,
-          refundOfId: payment.id,
-        },
-      });
-      if (payment.invoiceId) {
-        const inv = await tx.invoice.findUnique({ where: { id: payment.invoiceId } });
-        if (inv) {
-          const paid = Math.max(0, Number(inv.paidAmount) - amount);
-          const due = Number(inv.totalAmount) - Number(inv.discountAmount);
-          await tx.invoice.update({
-            where: { id: inv.id },
-            data: {
-              paidAmount: paid,
-              status: paid <= 0 ? 'ISSUED' : paid >= due ? 'PAID' : 'PARTIAL',
-            },
-          });
-        }
-      }
-      return refund;
     });
   }
 
@@ -357,30 +506,34 @@ export class FinanceService {
     const shift = await this.prisma.cashShift.findFirst({ where: { id: shiftId, organizationId: orgId } });
     if (!shift || shift.status !== 'OPEN') throw new BadRequestException('Смена не найдена');
 
-    const since = shift.openedAt;
+    const closingCash = inputKopecks(data.closingCash);
+    if (closingCash < 0) throw new BadRequestException('Укажите, сколько наличных в кассе');
     const payments = await this.prisma.payment.findMany({
-      where: { organizationId: orgId, paidAt: { gte: since } },
+      where: { organizationId: orgId, paidAt: { gte: shift.openedAt } },
     });
-    let cashTotal = 0;
-    let cardTotal = 0;
-    for (const p of payments) {
-      const amt = Number(p.amount);
-      if (p.method === 'CASH') cashTotal += amt;
-      else if (p.method === 'CARD') cardTotal += amt;
+    let cash = 0;
+    let card = 0;
+    for (const payment of payments) {
+      if (payment.method === 'CASH') cash += kopecks(payment.amount);
+      else if (payment.method === 'CARD') card += kopecks(payment.amount);
     }
-
-    return this.prisma.cashShift.update({
-      where: { id: shiftId },
+    const expected = kopecks(shift.openingCash) + cash;
+    const closed = await this.prisma.cashShift.updateMany({
+      where: { id: shiftId, organizationId: orgId, status: 'OPEN' },
       data: {
         status: 'CLOSED',
-        closingCash: data.closingCash,
-        cashTotal,
-        cardTotal,
+        closingCash: fromKopecks(closingCash),
+        cashTotal: fromKopecks(cash),
+        cardTotal: fromKopecks(card),
         closedAt: new Date(),
         closedById: data.userId,
         notes: data.notes,
       },
     });
+    if (!closed.count) throw new BadRequestException('Смену уже закрыли');
+    const row = await this.prisma.cashShift.findUniqueOrThrow({ where: { id: shiftId } });
+    // What the drawer should hold and how far the count is from it; the cashier sees it before leaving.
+    return { ...row, expectedCash: fromKopecks(expected), difference: fromKopecks(closingCash - expected) };
   }
 
   listShifts(orgId: string) {
@@ -398,22 +551,40 @@ export class FinanceService {
     });
   }
 
-  async topUpDeposit(orgId: string, patientId: string, amount: number) {
+  async topUpDeposit(orgId: string, patientId: string, amountRub: number | string) {
+    const amount = inputKopecks(amountRub);
+    if (amount <= 0) throw new BadRequestException('Укажите сумму больше нуля');
+    const patient = await this.prisma.patient.findFirst({ where: { id: patientId, organizationId: orgId }, select: { id: true } });
+    if (!patient) throw new NotFoundException('Пациент не найден');
     return this.prisma.patientDeposit.upsert({
       where: { patientId },
-      create: { organizationId: orgId, patientId, balance: amount },
-      update: { balance: { increment: amount } },
+      create: { organizationId: orgId, patientId, balance: fromKopecks(amount) },
+      update: { balance: { increment: fromKopecks(amount) } },
     });
   }
 
-  async payFromDeposit(orgId: string, patientId: string, amount: number, invoiceId?: string) {
-    const dep = await this.prisma.patientDeposit.findUnique({ where: { patientId } });
-    if (!dep || Number(dep.balance) < amount) throw new BadRequestException('Недостаточно на депозите');
-    await this.prisma.patientDeposit.update({
-      where: { patientId },
-      data: { balance: { decrement: amount } },
+  async payFromDeposit(orgId: string, patientId: string, amountRub: number | string, invoiceId?: string, actor: { userId?: string; idempotencyKey?: string } = {}) {
+    const amount = inputKopecks(amountRub);
+    if (amount <= 0) throw new BadRequestException('Укажите сумму больше нуля');
+    const repeated = await paymentByKey(this.prisma, orgId, actor.idempotencyKey);
+    if (repeated) return repeated;
+    return this.prisma.$transaction(async (tx) => {
+      // The balance check and the decrement are one statement, so the deposit cannot go below zero.
+      const taken = await tx.patientDeposit.updateMany({
+        where: { patientId, organizationId: orgId, balance: { gte: fromKopecks(amount) } },
+        data: { balance: { decrement: fromKopecks(amount) } },
+      });
+      if (!taken.count) throw new BadRequestException('Недостаточно на депозите');
+      return recordPayment(tx, {
+        organizationId: orgId,
+        patientId,
+        invoiceId,
+        amountKopecks: amount,
+        method: 'ONLINE',
+        createdById: actor.userId,
+        idempotencyKey: actor.idempotencyKey,
+      });
     });
-    return this.createPayment(orgId, { patientId, amount, method: 'ONLINE', invoiceId });
   }
 
   listInstallments(orgId: string) {
@@ -427,7 +598,8 @@ export class FinanceService {
     orgId: string,
     data: { patientId: string; invoiceId?: string; totalAmount: number; months: number },
   ) {
-    const monthly = data.totalAmount / data.months;
+    if (!Number.isInteger(data.months) || data.months < 1 || data.months > 36) throw new BadRequestException('Рассрочка от 1 до 36 месяцев');
+    const parts = splitKopecks(inputKopecks(data.totalAmount), data.months);
     const plan = await this.prisma.installmentPlan.create({
       data: {
         organizationId: orgId,
@@ -442,7 +614,7 @@ export class FinanceService {
       const due = new Date(now);
       due.setMonth(due.getMonth() + i + 1);
       await this.prisma.installmentSchedule.create({
-        data: { planId: plan.id, dueDate: due, amount: monthly },
+        data: { planId: plan.id, dueDate: due, amount: fromKopecks(parts[i]) },
       });
     }
     return this.prisma.installmentPlan.findUnique({
@@ -451,26 +623,33 @@ export class FinanceService {
     });
   }
 
-  async payInstallmentLine(orgId: string, lineId: string, patientId: string) {
-    const line = await this.prisma.installmentSchedule.findUnique({
-      where: { id: lineId },
-      include: { plan: true },
+  async payInstallmentLine(orgId: string, lineId: string, _patientId?: string, actor: { userId?: string } = {}) {
+    return this.prisma.$transaction(async (tx) => {
+      const line = await tx.installmentSchedule.findUnique({ where: { id: lineId }, include: { plan: true } });
+      if (!line || line.plan.organizationId !== orgId) throw new NotFoundException('Платёж рассрочки не найден');
+      // Claim the line first: a second click finds it already paid and stops here.
+      const claimed = await tx.installmentSchedule.updateMany({
+        where: { id: lineId, status: { not: 'PAID' } },
+        data: { status: 'PAID', paidAt: new Date() },
+      });
+      if (!claimed.count) throw new BadRequestException('Этот платёж уже внесён');
+      await recordPayment(tx, {
+        organizationId: orgId,
+        patientId: line.plan.patientId,
+        invoiceId: line.plan.invoiceId,
+        amountKopecks: kopecks(line.amount),
+        method: 'INSTALLMENT',
+        createdById: actor.userId,
+      });
+      const plan = await tx.installmentPlan.update({
+        where: { id: line.planId },
+        data: { paidAmount: { increment: fromKopecks(kopecks(line.amount)) } },
+      });
+      if (kopecks(plan.paidAmount) >= kopecks(plan.totalAmount)) {
+        await tx.installmentPlan.update({ where: { id: plan.id }, data: { status: 'COMPLETED' } });
+      }
+      return { ok: true };
     });
-    if (!line || line.plan.organizationId !== orgId) throw new BadRequestException();
-    await this.createPayment(orgId, { patientId, amount: Number(line.amount), method: 'INSTALLMENT' });
-    await this.prisma.installmentSchedule.update({
-      where: { id: lineId },
-      data: { status: 'PAID', paidAt: new Date() },
-    });
-    const paid = Number(line.plan.paidAmount) + Number(line.amount);
-    await this.prisma.installmentPlan.update({
-      where: { id: line.planId },
-      data: {
-        paidAmount: paid,
-        status: paid >= Number(line.plan.totalAmount) ? 'COMPLETED' : 'ACTIVE',
-      },
-    });
-    return { ok: true };
   }
 
   listFamilyGroups(orgId: string) {

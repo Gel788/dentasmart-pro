@@ -28,7 +28,8 @@ export function FocusProvider({ children }: { children: ReactNode }) {
       focus,
       setFocus: (next) => {
         setFocusState(next);
-        if (next) setPanelOpen(true);
+        // A slot opens the booking sheet on its own; the context panel stays as it was.
+        if (next && next.type !== 'slot') setPanelOpen(true);
       },
       panelOpen,
       setPanelOpen,

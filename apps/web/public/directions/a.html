@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex">
+<title>A · Аптечная упаковка</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap">
+<style>
+/* Swiss pharmaceutical packaging: white board, strict grid, the visit read like a medicine box face,
+   and a colour code square per state the way strengths are coded on a pack. */
+:root{--white:#fff;--paper:#f4f5f6;--ink:#15191e;--ink2:#47505a;--muted:#6a737d;--line:#dfe2e6;--cobalt:#1f4ed8;--orange:#e85d10;--green:#0b8a5f;--magenta:#c2185b;--font:'Onest',system-ui,sans-serif}
+*{box-sizing:border-box}html,body{margin:0}body{background:var(--paper);color:var(--ink);font:15px/1.45 var(--font);-webkit-font-smoothing:antialiased}
+.num{font-variant-numeric:tabular-nums}
+header{position:sticky;top:0;z-index:5;background:var(--white);border-bottom:1px solid var(--line)}
+.hin{max-width:1360px;margin:0 auto;display:flex;align-items:center;gap:28px;height:64px;padding:0 max(24px,env(safe-area-inset-right)) 0 max(24px,env(safe-area-inset-left))}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.01em;white-space:nowrap}
+.brand i{display:grid;place-items:center;width:30px;height:30px;background:var(--cobalt);color:#fff;font-style:normal;font-weight:800;font-size:15px}
+nav.top{display:flex;gap:4px;height:100%}
+nav.top a{display:flex;align-items:center;padding:0 14px;color:var(--ink2);font-weight:500;text-decoration:none;border-bottom:3px solid transparent}
+nav.top a.on{color:var(--ink);font-weight:700;border-bottom-color:var(--ink)}
+.search{margin-left:auto;display:flex;align-items:center;gap:10px;width:340px;height:40px;padding:0 14px;background:var(--paper);color:var(--muted)}
+main{max-width:1360px;margin:0 auto;padding:28px max(24px,env(safe-area-inset-right)) 120px max(24px,env(safe-area-inset-left));display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:24px;align-items:start}
+.head{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 24px}
+.head h1{margin:0;font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1.05}
+.head p{margin:0;color:var(--muted)}
+.head .cta{margin-left:auto;height:46px;padding:0 22px;border:0;background:var(--ink);color:#fff;font:700 15px var(--font)}
+.week{grid-column:1/-1;display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}
+.week a{background:var(--white);padding:10px 14px;text-decoration:none;color:var(--ink);display:flex;align-items:baseline;gap:10px}
+.week small{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+.week b{font-size:22px;font-weight:700}.week em{margin-left:auto;font-style:normal;color:var(--muted);font-size:13px}
+.week a.on{box-shadow:inset 0 -4px 0 var(--cobalt)}.week a.on small{color:var(--cobalt)}
+/* The box face: one patient as a pack. */
+.box{background:var(--white);display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line)}
+.band{grid-column:1/-1;height:14px;background:var(--cobalt)}
+.face{padding:22px 24px 24px;display:flex;flex-direction:column;gap:6px;border-right:1px solid var(--line)}
+.code{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--cobalt);text-transform:uppercase;letter-spacing:.06em}
+.code i{width:14px;height:14px;background:var(--cobalt)}
+.face h2{margin:6px 0 0;font-size:44px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.dose{font-size:56px;font-weight:300;letter-spacing:-.03em;line-height:1;margin-top:10px}
+.dose small{font-size:18px;font-weight:500;color:var(--muted);letter-spacing:0;margin-left:8px}
+.acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.btn{height:48px;padding:0 20px;display:inline-flex;align-items:center;font-weight:700;border:1.5px solid var(--ink);background:var(--white);color:var(--ink)}
+.btn.main{background:var(--cobalt);border-color:var(--cobalt);color:#fff}
+.facts{margin:0;display:grid;grid-template-columns:120px 1fr;font-size:14px}
+.facts dt,.facts dd{margin:0;padding:12px 18px;border-bottom:1px solid var(--line)}
+.facts dt{color:var(--muted);font-weight:500;background:var(--paper)}
+.facts dd b{color:var(--magenta)}
+.facts dt:last-of-type,.facts dd:last-of-type{border-bottom:0}
+/* Day list: time as dosage, code square + word for state. */
+.day{margin-top:24px;background:var(--white);border:1px solid var(--line)}
+.day h3{margin:0;padding:14px 18px;font-size:15px;font-weight:700;border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
+.day h3 span{color:var(--muted);font-weight:500}
+.r{display:grid;grid-template-columns:96px minmax(0,1fr) 170px 120px;align-items:center;gap:16px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.r time{font-size:24px;font-weight:300;letter-spacing:-.02em}
+.r b{display:block;font-weight:700;font-size:16px}.r span{color:var(--muted);font-size:13.5px}
+.st{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+.st i{width:12px;height:12px;flex:none}
+.r .go{justify-self:end;height:40px;padding:0 14px;border:1.5px solid var(--ink);display:inline-flex;align-items:center;font-weight:700;font-size:14px}
+.r.past{color:var(--muted)}.r.past b{color:var(--ink2)}
+.now{display:flex;align-items:center;gap:10px;padding:0 18px;height:0;position:relative}
+.now::before{content:"11:55";position:absolute;left:18px;top:-11px;background:var(--orange);color:#fff;font-size:12px;font-weight:700;padding:2px 8px}
+.now::after{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--orange)}
+aside{display:flex;flex-direction:column;gap:16px}
+.panel{background:var(--white);border:1px solid var(--line)}
+.panel h3{margin:0;padding:14px 18px;font-size:15px;font-weight:700;border-bottom:1px solid var(--line)}
+.todo{margin:0;padding:0;list-style:none}
+.todo li{display:grid;grid-template-columns:14px 1fr;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line);font-size:14.5px}
+.todo li:last-child{border:0}.todo i{width:12px;height:12px;margin-top:5px}
+.todo small{display:block;color:var(--muted);font-size:13px}
+.money{display:grid;grid-template-columns:1fr 1fr}
+.money div{padding:16px 18px}.money div+div{border-left:1px solid var(--line)}
+.money small{display:block;color:var(--muted);font-size:13px}.money b{font-size:28px;font-weight:700;letter-spacing:-.02em}
+.legend{display:flex;flex-wrap:wrap;gap:14px;padding:14px 18px;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}.legend i{width:10px;height:10px}
+.tabbar{display:none}
+@media(max-width:980px){main{grid-template-columns:1fr}nav.top,.search{display:none}}
+@media(max-width:640px){
+ .hin{height:56px}.head h1{font-size:28px}.head .cta{width:46px;padding:0;font-size:0}.head .cta::before{content:"+";font-size:24px}
+ .week a{flex-direction:column;align-items:center;gap:0;padding:8px 0}.week em{margin:0}
+ .box{grid-template-columns:1fr}.face{border-right:0;border-bottom:1px solid var(--line);padding:18px}
+ .face h2{font-size:34px}.dose{font-size:42px}.facts{grid-template-columns:100px 1fr}
+ .r{grid-template-columns:70px minmax(0,1fr);gap:4px 12px}.r time{font-size:20px;grid-row:span 2}.r .go{grid-column:2;justify-self:start;margin-top:6px}
+ .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;background:var(--white);border-top:1px solid var(--line);padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
+ .tabbar a{flex:1;text-align:center;font-size:11px;font-weight:600;color:var(--muted);padding:6px 0;text-decoration:none}.tabbar a.on{color:var(--ink);box-shadow:inset 0 3px 0 var(--ink)}
+}
+</style></head><body>
+<header><div class="hin"><div class="brand"><i>С</i>Седракович Дент</div>
+<nav class="top"><a class="on">Сегодня</a><a>Пациенты</a><a>Расписание</a><a>Склад</a><a>Деньги</a><a>Ещё</a></nav>
+<div class="search">⌕ Пациент, телефон или запись</div></div></header>
+<main>
+<div class="head"><h1>Вторник, 20 октября</h1><p class="num">7 пациентов · 2 приняты · 1 в кресле</p><button class="cta">Записать</button></div>
+<nav class="week"><a><small>пн</small><b class="num">19</b><em>9</em></a><a class="on"><small>вт</small><b class="num">20</b><em>7</em></a><a><small>ср</small><b class="num">21</b><em>4</em></a><a><small>чт</small><b class="num">22</b><em>5</em></a><a><small>пт</small><b class="num">23</b><em>3</em></a><a><small>сб</small><b class="num">24</b><em>1</em></a><a><small>вс</small><b class="num">25</b><em>—</em></a></nav>
+<section>
+<article class="box"><div class="band"></div>
+<div class="face"><span class="code"><i></i>В кресле · кабинет 1</span><h2>Абрамян Лилит</h2><span style="color:var(--muted)">34 года · лечение кариеса 26, 27</span>
+<div class="dose num">24 мин<small>из 60 · 12:00–13:00</small></div>
+<div class="acts"><span class="btn main">Завершить приём</span><span class="btn">+ Услуга</span><span class="btn">Формула</span></div></div>
+<dl class="facts"><dt>Аллергия</dt><dd><b>Лидокаин</b></dd><dt>Анамнез</dt><dd>Подтверждён 17 октября</dd><dt>Сегодня</dt><dd class="num">2 услуги · 11 000 ₽</dd><dt>План</dt><dd>Коронка 26 — ноябрь</dd><dt>Снимки</dt><dd>ОПТГ от 2 октября</dd><dt>Долг</dt><dd class="num">0 ₽</dd></dl>
+</article>
+<div class="day"><h3>Записи на сегодня <span>кабинеты 1 и 2</span></h3>
+<div class="r past"><time class="num">09:00</time><div><b>Орлова Вера</b><span>Кариес 16 · кабинет 1</span></div><span class="st"><i style="background:var(--green)"></i>Оплачено</span><span></span></div>
+<div class="r past"><time class="num">10:30</time><div><b>Ким Артур</b><span>Консультация · кабинет 1</span></div><span class="st"><i style="background:var(--magenta)"></i>Долг 4 500 ₽</span><span class="go">К оплате</span></div>
+<div class="now"></div>
+<div class="r"><time class="num">12:00</time><div><b>Абрамян Лилит</b><span>Кариес 26, 27 · кабинет 1</span></div><span class="st"><i style="background:var(--cobalt)"></i>В кресле</span><span class="go">К приёму</span></div>
+<div class="r"><time class="num">13:30</time><div><b>Ветров Павел</b><span>Чистка · кабинет 2</span></div><span class="st"><i style="background:var(--orange)"></i>Пришёл</span><span class="go">Принять</span></div>
+<div class="r"><time class="num">15:00</time><div><b>Новикова Ирина</b><span>Эндодонтия 36 · кабинет 1</span></div><span class="st"><i style="border:2px solid var(--ink)"></i>Подтвердила</span><span></span></div>
+<div class="r"><time class="num">16:30</time><div><b>Шубин Глеб</b><span>Осмотр импланта · кабинет 1</span></div><span class="st"><i style="border:2px dashed var(--magenta)"></i>Не подтвердил</span><span class="go">Позвонить</span></div>
+<div class="legend"><span><i style="background:var(--cobalt)"></i>в кресле</span><span><i style="background:var(--orange)"></i>пришёл</span><span><i style="background:var(--green)"></i>оплачено</span><span><i style="background:var(--magenta)"></i>долг, нет ответа</span></div>
+</div></section>
+<aside><section class="panel"><h3>Требует внимания</h3><ul class="todo"><li><i style="background:var(--magenta)"></i><span>Шубин Глеб не подтвердил 16:30<small>позвонить до 14:00</small></span></li><li><i style="background:var(--magenta)"></i><span>Ким Артур ушёл с долгом 4 500 ₽<small>консультация, 10:30</small></span></li><li><i style="background:var(--orange)"></i><span>План Орловой ждёт решения 12 дней<small>3 варианта, от 96 000 ₽</small></span></li></ul></section>
+<section class="panel"><h3>Деньги дня</h3><div class="money"><div><small>Оплачено</small><b class="num">18 200 ₽</b></div><div><small>Ждём</small><b class="num">4 500 ₽</b></div></div></section></aside>
+</main>
+<nav class="tabbar"><a class="on">Сегодня</a><a>Пациенты</a><a>Запись</a><a>Деньги</a><a>Ещё</a></nav>
+</body></html>

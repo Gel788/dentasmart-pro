@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { CreatePatientDto } from './dto/create-patient.dto';
+import { MedicalDto } from './dto/medical.dto';
 import { PatientsService } from './patients.service';
 
 @ApiTags('patients')
@@ -22,13 +23,16 @@ export class PatientsController {
     @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
+    @Query('segment') segment?: string,
+    @Query('sort') sort?: string,
   ) {
-    return this.patients.findAll(
-      user.organizationId,
+    return this.patients.findAll(user.organizationId, {
       search,
-      page ? +page : 1,
-      pageSize ? +pageSize : 20,
-    );
+      page: Number(page) || 1,
+      pageSize: Number(pageSize) || 20,
+      segment,
+      sort,
+    });
   }
 
   @Get(':id')
@@ -41,6 +45,18 @@ export class PatientsController {
   @RequirePermissions('patient.read')
   full(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.patients.findFull(user.organizationId, id);
+  }
+
+  @Get(':id/medical')
+  @RequirePermissions('patient.read')
+  medical(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.patients.medical(user.organizationId, id);
+  }
+
+  @Patch(':id/medical')
+  @RequirePermissions('medical.write')
+  saveMedical(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: MedicalDto) {
+    return this.patients.saveMedical(user, id, dto);
   }
 
   @Patch(':id')

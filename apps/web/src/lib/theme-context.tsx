@@ -11,12 +11,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const stored = localStorage.getItem('dsp_theme');
-    const next: Theme =
-      stored === 'dark' || stored === 'light'
-        ? stored
-        : window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'dark'
-          : 'light';
+    // Light is the clinic default: chairside screens sit under bright lights. Dark is an explicit choice.
+    const next: Theme = stored === 'dark' ? 'dark' : 'light';
     setTheme(next);
     document.documentElement.classList.toggle('dark', next === 'dark');
   }, []);

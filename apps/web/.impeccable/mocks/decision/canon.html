@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<style>
+:root{--bg:#fff;--fog:#f6f7f9;--ink:#111827;--muted:#6b7280;--line:#e5e7eb;--acc:#3b5bdb;--acc-soft:#eef2ff}
+*{box-sizing:border-box}html,body{margin:0;width:1440px;height:900px;overflow:hidden;background:var(--bg);color:var(--ink);font:14px/1.4 Onest,system-ui,sans-serif}
+.app{display:grid;grid-template-columns:232px 1fr 340px;height:900px}
+.nav{border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:2px;background:var(--fog)}
+.brand{font-weight:700;padding:6px 10px 18px}
+.nav a{height:34px;display:flex;align-items:center;padding:0 10px;border-radius:8px;color:var(--muted);font-weight:500}
+.nav a.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.main{padding:24px 32px;display:flex;flex-direction:column;gap:18px}
+.top{display:flex;justify-content:space-between;align-items:center}
+.top h1{margin:0;font:600 22px Onest}.search{width:340px;height:36px;border:1px solid var(--line);border-radius:8px;display:flex;align-items:center;padding:0 12px;color:var(--muted)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.stats div{border:1px solid var(--line);border-radius:12px;padding:14px 16px}.stats small{color:var(--muted)}.stats b{display:block;font-size:22px;font-weight:600}
+table{width:100%;border-collapse:collapse;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+th{text-align:left;font-weight:500;color:var(--muted);font-size:12.5px;padding:10px 14px;background:var(--fog);border-bottom:1px solid var(--line)}
+td{padding:12px 14px;border-bottom:1px solid var(--line)}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:500;background:var(--fog)}
+.pill.b{background:var(--acc-soft);color:var(--acc)}.pill.w{background:#fef3c7;color:#92400e}.pill.r{background:#fee2e2;color:#991b1b}
+tr.on td{background:var(--acc-soft)}
+.side{border-left:1px solid var(--line);padding:24px 20px;display:flex;flex-direction:column;gap:14px}
+.side h3{margin:0;font-size:15px}.card{border:1px solid var(--line);border-radius:12px;padding:14px}
+.btn{height:36px;border-radius:8px;background:var(--acc);color:#fff;display:inline-flex;align-items:center;padding:0 14px;font-weight:500}
+</style></head><body><div class="app">
+<nav class="nav"><div class="brand">Седракович Дент</div><a class="on">Сегодня</a><a>Пациенты</a><a>Расписание</a><a>Склад</a><a>Деньги</a><a>Настройки</a></nav>
+<main class="main">
+<div class="top"><h1>Вторник, 20 октября</h1><div class="search">Поиск… ⌘K</div></div>
+<div class="stats"><div><small>Пациентов</small><b>7</b></div><div><small>Принято</small><b>2</b></div><div><small>Оплачено</small><b>18 200 ₽</b></div><div><small>Долги</small><b>4 500 ₽</b></div></div>
+<table><tr><th>Время</th><th>Пациент</th><th>Услуга</th><th>Кабинет</th><th>Статус</th></tr>
+<tr><td>09:00</td><td>Орлова Вера</td><td>Кариес 16</td><td>1</td><td><span class="pill">Оплачено</span></td></tr>
+<tr><td>10:30</td><td>Ким Артур</td><td>Консультация</td><td>1</td><td><span class="pill w">Долг</span></td></tr>
+<tr class="on"><td>12:00</td><td>Абрамян Лилит</td><td>Кариес 26, 27</td><td>1</td><td><span class="pill b">В кресле</span></td></tr>
+<tr><td>13:30</td><td>Ветров Павел</td><td>Гигиена</td><td>2</td><td><span class="pill b">Пришёл</span></td></tr>
+<tr><td>15:00</td><td>Новикова Ирина</td><td>Эндодонтия 36</td><td>1</td><td><span class="pill">Подтвердила</span></td></tr>
+<tr><td>16:30</td><td>Шубин Глеб</td><td>Осмотр импланта</td><td>1</td><td><span class="pill r">Не подтвердил</span></td></tr></table>
+</main>
+<aside class="side"><h3>Абрамян Лилит</h3><div class="card">34 года · аллергия: лидокаин<br>Кариес 26, 27 · 11 000 ₽</div><span class="btn">Завершить приём</span><h3>Требует внимания</h3><div class="card">Шубин Глеб не подтвердил 16:30</div></aside>
+</div></body></html>

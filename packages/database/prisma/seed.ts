@@ -640,13 +640,13 @@ async function main() {
   }[] = [
     { patientId: 'seed-patient-petr', hour: 9, status: 'CONFIRMED', serviceId: consult?.id, notes: 'seed:today' },
     { patientId: 'seed-patient-maria', hour: 9, minute: 30, status: 'SCHEDULED', serviceId: hygiene?.id, notes: 'seed:today' },
-    { patientId: 'seed-patient-oleg', hour: 10, status: 'CONFIRMED', serviceId: consult?.id, doctorId: doctor2.id, cabinetId: 'seed-cabinet-2', notes: 'seed:today' },
+    { patientId: 'seed-patient-oleg', hour: 13, status: 'CONFIRMED', serviceId: consult?.id, doctorId: doctor2.id, cabinetId: 'seed-cabinet-2', notes: 'seed:today' },
     { patientId: 'seed-patient-elena', hour: 10, minute: 30, status: 'CONFIRMED', serviceId: caries?.id, notes: 'seed:today' },
     { patientId: 'seed-patient-dmitry', hour: 11, status: 'IN_PROGRESS', serviceId: caries?.id, notes: 'seed:today' },
     { patientId: 'seed-patient-igor', hour: 8, minute: 30, status: 'CONFIRMED', serviceId: consult?.id, notes: 'seed:today-late' },
     { patientId: 'seed-patient-sofia', hour: 14, status: 'CONFIRMED', serviceId: hygiene?.id, notes: 'seed:today' },
     { patientId: 'seed-patient-viktor', hour: 11, minute: 30, status: 'WAITING', serviceId: consult?.id, notes: 'seed:today-queue' },
-    { patientId: 'seed-patient-tatiana', hour: 11, minute: 45, status: 'IN_PROGRESS', serviceId: caries?.id, notes: 'seed:today-chair' },
+    { patientId: 'seed-patient-tatiana', hour: 12, minute: 30, status: 'IN_PROGRESS', serviceId: caries?.id, notes: 'seed:today-chair' },
     { id: 'seed-appt-anna', patientId: 'seed-patient-anna', hour: 15, status: 'CONFIRMED', serviceId: consult?.id, notes: 'seed:today-anna' },
     { id: 'seed-appt-roman', patientId: 'seed-patient-roman', hour: 12, status: 'COMPLETED', serviceId: consult?.id, notes: 'seed:today' },
   ];

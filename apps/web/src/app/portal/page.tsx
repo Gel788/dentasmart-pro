@@ -117,7 +117,7 @@ function Phone() {
             <section>
               {data?.appointments.map((row) => (
                 <article key={row.id}>
-                  <b>{new Date(row.startsAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</b>
+                  <b>{new Date(row.startsAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</b>
                   <p>{row.service}{row.doctor ? ` · ${row.doctor}` : ''} · {row.status}</p>
                 </article>
               ))}

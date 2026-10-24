@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<style>
+:root{--bg:#fff;--fog:#f4f5f7;--ink:#1b1d22;--muted:#6a6f78;--l1:#d6083b;--l2:#0078bf;--l3:#00a650;--line:#e3e5e9}
+*{box-sizing:border-box}html,body{margin:0;width:1440px;height:900px;overflow:hidden;background:var(--bg);color:var(--ink);font:15px/1.4 Onest,system-ui,sans-serif}
+.app{display:grid;grid-template-columns:240px 1fr;height:900px}
+.nav{background:var(--fog);padding:22px 16px;display:flex;flex-direction:column;gap:4px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;margin-bottom:22px}
+.brand i{width:30px;height:30px;border-radius:50%;background:var(--l1);color:#fff;display:grid;place-items:center;font-style:normal}
+.nav a{height:40px;display:flex;align-items:center;gap:12px;padding:0 12px;border-radius:10px;color:var(--muted);font-weight:500}
+.nav a i{width:12px;height:12px;border-radius:50%;border:3px solid currentColor}
+.nav a.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}.nav a.on i{border-color:var(--l1)}
+.main{padding:26px 36px;display:flex;flex-direction:column;gap:22px}
+.top{display:flex;justify-content:space-between;align-items:center}
+.top h1{margin:0;font:700 30px Onest;letter-spacing:-.02em}.top h1 span{color:var(--muted);font-weight:500}
+.search{width:380px;height:44px;border-radius:22px;background:var(--fog);display:flex;align-items:center;padding:0 18px;color:var(--muted)}
+.plan{border:1px solid var(--line);border-radius:18px;padding:20px 24px}
+.plan h2{margin:0 0 4px;font:700 22px Onest}.plan p{margin:0 0 22px;color:var(--muted)}
+.track{position:relative;display:flex;justify-content:space-between;padding:0 10px}
+.track::before{content:"";position:absolute;left:10px;right:10px;top:11px;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--l1) 0 46%,#f2b8c6 46%)}
+.st{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;width:120px;text-align:center;font-size:13.5px}
+.st i{width:30px;height:30px;border-radius:50%;background:#fff;border:6px solid var(--l1)}
+.st.done i{background:var(--l1)}.st.now i{box-shadow:0 0 0 6px rgba(214,8,59,.18)}.st.next i{border-color:#f2b8c6}
+.st b{font-weight:600}.st small{color:var(--muted)}
+.day{display:grid;grid-template-columns:120px 1fr;gap:14px 0;border-top:1px solid var(--line);padding-top:18px}
+.day h3{grid-column:1/-1;margin:0;font:700 18px Onest}
+.chair{color:var(--muted);font-weight:600;display:flex;align-items:center;gap:8px}.chair i{width:14px;height:14px;border-radius:50%}
+.lane{position:relative;height:56px}
+.lane::before{content:"";position:absolute;left:0;right:0;top:26px;height:5px;border-radius:3px;background:var(--c)}
+.stop{position:absolute;top:8px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center}
+.stop i{width:20px;height:20px;border-radius:50%;background:#fff;border:5px solid var(--c);margin-top:8px}
+.stop b{position:absolute;top:36px;white-space:nowrap;font-size:13px}
+.stop span{position:absolute;top:-6px;font-size:12px;color:var(--muted)}
+.nowline{position:absolute;top:120px;bottom:20px;width:2px;background:var(--ink)}
+.side{position:absolute;right:36px;top:110px;width:300px}
+</style></head><body><div class="app">
+<nav class="nav"><div class="brand"><i>С</i>Седракович Дент</div><a class="on"><i></i>Сегодня</a><a><i></i>Пациенты</a><a><i></i>Расписание</a><a><i></i>Склад</a><a><i></i>Деньги</a></nav>
+<main class="main">
+<div class="top"><h1>Вторник, 20 октября <span>· 7 пациентов</span></h1><div class="search">Пациент, телефон или запись</div></div>
+<section class="plan"><h2>Абрамян Лилит — в кресле, кабинет 1</h2><p>План «Санация и коронка 26» · 4 визита · 62 400 ₽ · аллергия: лидокаин</p>
+<div class="track"><div class="st done"><i></i><b>Осмотр</b><small>2 октября</small></div><div class="st done"><i></i><b>Гигиена</b><small>9 октября</small></div><div class="st now"><i></i><b>Кариес 26, 27</b><small>сейчас</small></div><div class="st next"><i></i><b>Коронка 26</b><small>ноябрь</small></div><div class="st next"><i></i><b>Контроль</b><small>декабрь</small></div></div></section>
+<section class="day"><h3>Линии дня</h3>
+<div class="chair"><i style="background:var(--l1)"></i>Кабинет 1</div>
+<div class="lane" style="--c:var(--l1)"><div class="stop" style="left:6%"><span>09:00</span><i></i><b>Орлова</b></div><div class="stop" style="left:24%"><span>10:30</span><i></i><b>Ким</b></div><div class="stop" style="left:42%"><span>12:00</span><i></i><b>Абрамян</b></div><div class="stop" style="left:66%"><span>15:00</span><i></i><b>Новикова</b></div><div class="stop" style="left:84%"><span>16:30</span><i></i><b>Шубин</b></div></div>
+<div class="chair"><i style="background:var(--l2)"></i>Кабинет 2</div>
+<div class="lane" style="--c:var(--l2)"><div class="stop" style="left:54%"><span>13:30</span><i></i><b>Ветров</b></div></div>
+<div class="chair"><i style="background:var(--l3)"></i>Кабинет 3</div>
+<div class="lane" style="--c:var(--l3)"><div class="stop" style="left:30%"><span>11:00</span><i></i><b>Гусева</b></div><div class="stop" style="left:72%"><span>16:00</span><i></i><b>Лаптев</b></div></div>
+</section></main></div></body></html>

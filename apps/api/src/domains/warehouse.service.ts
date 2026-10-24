@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveBranchId } from '../common/resolve-branch';
 import { consumeStock } from './stock-consume';
@@ -28,6 +28,27 @@ export class WarehouseService {
     return this.prisma.purchaseOrder.findMany({
       where: { organizationId: orgId },
       orderBy: { orderedAt: 'desc' },
+      include: { lines: { include: { item: { select: { name: true, unit: true } } } } },
+      take: 50,
+    });
+  }
+
+  /** «Заказать»: one order to the supplier for the chosen items, quantities as asked. */
+  async createPurchaseOrder(orgId: string, data: { supplierName?: string; expectedAt?: string; lines?: { itemId: string; quantity: number }[] }) {
+    const lines = (Array.isArray(data.lines) ? data.lines : []).filter((line) => line?.itemId && Number(line.quantity) > 0).slice(0, 100);
+    if (!lines.length) throw new BadRequestException('Выберите, что заказать');
+    const items = await this.prisma.inventoryItem.findMany({ where: { organizationId: orgId, id: { in: lines.map((line) => line.itemId) } }, select: { id: true } });
+    if (items.length !== new Set(lines.map((line) => line.itemId)).size) throw new NotFoundException('Позиция склада не найдена');
+    const expectedAt = data.expectedAt && !Number.isNaN(Date.parse(data.expectedAt)) ? new Date(data.expectedAt) : null;
+    return this.prisma.purchaseOrder.create({
+      data: {
+        organizationId: orgId,
+        supplierName: String(data.supplierName ?? '').trim().slice(0, 120) || 'Поставщик',
+        status: 'SENT',
+        expectedAt,
+        lines: { create: lines.map((line) => ({ itemId: line.itemId, quantity: Math.round(Number(line.quantity) * 1000) / 1000, reason: 'SHORTAGE' })) },
+      },
+      include: { lines: true },
     });
   }
 
@@ -156,9 +177,10 @@ export class WarehouseService {
     });
   }
 
-  updateCountLine(lineId: string, actualQty: number) {
-    return this.prisma.inventoryCountLine.findUnique({ where: { id: lineId } }).then(async (line) => {
-      if (!line) return null;
+  updateCountLine(orgId: string, lineId: string, actualQty: number) {
+    if (!Number.isFinite(Number(actualQty)) || Number(actualQty) < 0) throw new BadRequestException('Количество не может быть отрицательным');
+    return this.prisma.inventoryCountLine.findFirst({ where: { id: lineId, session: { organizationId: orgId } } }).then(async (line) => {
+      if (!line) throw new NotFoundException('Строка инвентаризации не найдена');
       const diff = actualQty - Number(line.expectedQty);
       return this.prisma.inventoryCountLine.update({
         where: { id: lineId },

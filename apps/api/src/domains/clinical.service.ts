@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@dentasmart/database';
 import { PrismaService } from '../prisma/prisma.service';
 import { consumeStock } from './stock-consume';
 import { resolveBranchId } from '../common/resolve-branch';
@@ -16,7 +17,9 @@ export class ClinicalService {
     });
   }
 
-  createPlan(orgId: string, data: { patientId: string; title: string; doctorId?: string; appointmentId?: string }) {
+  async createPlan(orgId: string, data: { patientId: string; title: string; doctorId?: string; appointmentId?: string }) {
+    const owned = await this.prisma.patient.count({ where: { id: data.patientId, organizationId: orgId } });
+    if (!owned) throw new NotFoundException('Пациент не найден');
     return this.prisma.treatmentPlan.create({
       data: { organizationId: orgId, ...data },
       include: { items: true },
@@ -165,8 +168,10 @@ export class ClinicalService {
   }
 
   async addPlanItem(
+    orgId: string,
     planId: string,
     data: {
+      phaseId?: string;
       title?: string;
       toothNum?: number;
       price?: number;
@@ -177,8 +182,9 @@ export class ClinicalService {
       durationMin?: number;
     },
   ) {
-    const plan = await this.prisma.treatmentPlan.findUnique({ where: { id: planId } });
+    const plan = await this.prisma.treatmentPlan.findFirst({ where: { id: planId, organizationId: orgId } });
     if (!plan) throw new NotFoundException('План не найден');
+    const phaseRef = data.phaseId ? await this.prisma.planPhase.findFirst({ where: { id: data.phaseId, planId } }) : null;
     if (plan.status === 'REJECTED' || plan.status === 'CANCELLED') {
       throw new BadRequestException('В отклонённый план нельзя добавлять строки');
     }
@@ -210,7 +216,8 @@ export class ClinicalService {
         title,
         toothNum: data.toothNum,
         surfaces,
-        phase: data.phase && data.phase > 0 ? Math.round(data.phase) : (maxPhase._max.phase ?? 1),
+        phase: phaseRef ? phaseRef.sortOrder + 1 : data.phase && data.phase > 0 ? Math.round(data.phase) : (maxPhase._max.phase ?? 1),
+        phaseId: phaseRef?.id ?? null,
         price,
         listPrice,
         discountPercent: roundMoney(impliedDiscount),
@@ -224,16 +231,17 @@ export class ClinicalService {
   }
 
   async updatePlanItem(
+    orgId: string,
     itemId: string,
-    data: { price?: number; serviceId?: string; discountPercent?: number; phase?: number; surfaces?: string[]; toothNum?: number | null },
+    data: { price?: number; serviceId?: string; discountPercent?: number; phase?: number; surfaces?: string[]; toothNum?: number | null; listPrice?: number; qty?: number },
   ) {
     const item = await this.prisma.treatmentPlanItem.findUnique({
       where: { id: itemId },
       include: { plan: true },
     });
-    if (!item) throw new NotFoundException('Строка плана не найдена');
+    if (!item || item.plan.organizationId !== orgId) throw new NotFoundException('Строка плана не найдена');
     if (item.status === 'DONE') throw new BadRequestException('Выполненную строку нельзя пересчитывать — она уже в истории');
-    let listPrice: number | null = item.listPrice == null ? null : Number(item.listPrice);
+    let listPrice: number | null = data.listPrice != null && Number.isFinite(data.listPrice) ? roundMoney(data.listPrice) : item.listPrice == null ? null : Number(item.listPrice);
     let serviceId = item.serviceId;
     let title = item.title;
     if (data.serviceId) {
@@ -261,7 +269,8 @@ export class ClinicalService {
         listPrice,
         serviceId,
         title,
-        discountPercent: roundMoney(data.price != null ? implied : discount),
+        discountPercent: roundMoney(data.price != null && data.discountPercent == null ? implied : discount),
+        ...(data.qty != null ? { qty: Math.max(1, Math.min(99, Math.round(data.qty))) } : {}),
         ...(data.phase != null ? { phase: Math.max(1, Math.round(data.phase)) } : {}),
         ...(data.surfaces ? { surfaces: normalizeSurfaces(data.surfaces) } : {}),
         ...(data.toothNum !== undefined ? { toothNum: data.toothNum } : {}),
@@ -432,6 +441,24 @@ export class ClinicalService {
     });
     await this.recalcPlanTotal(item.planId);
     return item;
+  }
+
+  /** Removes a line the doctor added by mistake; done or billed lines stay, they are history. */
+  async removePlanItem(orgId: string, planId: string, itemId: string, userId?: string) {
+    const item = await this.prisma.treatmentPlanItem.findFirst({
+      where: { id: itemId, planId, plan: { organizationId: orgId } },
+      include: { invoiceItem: { select: { id: true } } },
+    });
+    if (!item) throw new NotFoundException('Строка плана не найдена');
+    if (item.status === 'DONE' || item.isCompleted) throw new BadRequestException('Выполненную услугу удалить нельзя — она уже в истории лечения');
+    if (item.invoiceItem) throw new BadRequestException('По этой услуге выставлен счёт. Сначала отмените счёт');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.materialReservation.deleteMany({ where: { planItemId: itemId } });
+      await tx.treatmentPlanItem.delete({ where: { id: itemId } });
+    });
+    await this.recalcPlanTotal(planId);
+    await this.prisma.auditLog.create({ data: { organizationId: orgId, userId, entityType: 'TreatmentPlanItem', entityId: itemId, action: 'DELETE', changes: { title: item.title, toothNum: item.toothNum, price: Number(item.price) } } }).catch(() => undefined);
+    return { id: itemId, removed: true };
   }
 
   async recalcPlanTotal(planId: string) {
@@ -870,7 +897,74 @@ export class ClinicalService {
     return record;
   }
 
-  private async ownPatient(orgId: string, patientId: string) {
+  /**
+   * Adds a saved template's phases to a plan: each phase joins the plan's phase of the same title or
+   * becomes a new one; each line is matched to the clinic's price list by code or exact name and priced
+   * from it, so a template never carries an old price into a new plan.
+   */
+  async applyTemplate(orgId: string, planId: string, templateId: string, toothNum?: number | null) {
+    await this.ownPlan(orgId, planId);
+    const template = await this.prisma.planTemplate.findFirst({ where: { id: templateId, organizationId: orgId, isArchived: false } });
+    if (!template) throw new NotFoundException('Шаблон не найден');
+    const phases = (Array.isArray(template.phasesJson) ? template.phasesJson : []) as {
+      title?: string; specialty?: string; healingDays?: number; items?: (string | { title?: string; code?: string; toothNum?: number | null })[];
+    }[];
+    if (!phases.length) throw new BadRequestException('В шаблоне нет этапов');
+    const services = await this.prisma.service.findMany({ where: { organizationId: orgId, isActive: true } });
+    const byCode = new Map(services.filter((row) => row.code).map((row) => [String(row.code).toUpperCase(), row]));
+    const byName = new Map(services.map((row) => [row.name.trim().toLowerCase(), row]));
+    const existing = await this.prisma.planPhase.findMany({ where: { planId }, orderBy: { sortOrder: 'asc' } });
+    let added = 0;
+    const missing: string[] = [];
+    for (const phase of phases) {
+      const title = String(phase.title ?? 'Этап').slice(0, 80);
+      let host = existing.find((row) => row.title === title);
+      if (!host) {
+        host = await this.prisma.planPhase.create({
+          data: { planId, title, sortOrder: existing.length, specialty: phase.specialty ?? null, healingDays: Math.max(0, Math.round(Number(phase.healingDays) || 0)) },
+        });
+        existing.push(host);
+      }
+      for (const raw of phase.items ?? []) {
+        const line = typeof raw === 'string' ? { title: raw } : raw;
+        const service = (line.code && byCode.get(String(line.code).toUpperCase())) || byName.get(String(line.title ?? '').trim().toLowerCase());
+        if (!service) { missing.push(String(line.title ?? line.code ?? '')); continue; }
+        await this.addPlanItem(orgId, planId, { serviceId: service.id, phaseId: host.id, toothNum: line.toothNum ?? toothNum ?? undefined });
+        added += 1;
+      }
+    }
+    if (!added) throw new BadRequestException(missing.length ? `В прайсе нет услуг из шаблона: ${missing.join(', ')}` : 'В шаблоне нет услуг');
+    return { added, missing };
+  }
+
+  /** Saves a plan's phases and lines as a template for the next similar case. */
+  async saveAsTemplate(orgId: string, planId: string, name: string) {
+    const title = name?.trim();
+    if (!title) throw new BadRequestException('Назовите шаблон');
+    await this.ownPlan(orgId, planId);
+    const plan = await this.prisma.treatmentPlan.findUniqueOrThrow({
+      where: { id: planId },
+      include: { phases: { orderBy: { sortOrder: 'asc' } }, items: { include: { service: true }, orderBy: { sortOrder: 'asc' } } },
+    });
+    const line = (item: (typeof plan.items)[number]) => ({ title: item.title, code: item.service?.code ?? null, toothNum: item.toothNum });
+    const phases = plan.phases.length
+      ? plan.phases.map((phase) => ({ title: phase.title, specialty: phase.specialty, healingDays: phase.healingDays, items: plan.items.filter((item) => item.phaseId === phase.id).map(line) }))
+      : [{ title: 'Позиции', items: plan.items.map(line) }];
+    const loose = plan.phases.length ? plan.items.filter((item) => !item.phaseId).map(line) : [];
+    if (loose.length) phases.push({ title: 'Позиции', specialty: null, healingDays: 0, items: loose });
+    if (!phases.some((phase) => phase.items.length)) throw new BadRequestException('В плане нет услуг — сохранять нечего');
+    const row = await this.prisma.planTemplate.create({ data: { organizationId: orgId, name: title.slice(0, 120), note: 'Свой шаблон', phasesJson: phases as unknown as Prisma.InputJsonValue } });
+    return { id: row.id, name: row.name };
+  }
+
+  /** The plan, if it is this clinic's; every plan route goes through it first. */
+  async ownPlan(orgId: string, planId: string) {
+    const plan = await this.prisma.treatmentPlan.findFirst({ where: { id: planId, organizationId: orgId } });
+    if (!plan) throw new NotFoundException('План не найден');
+    return plan;
+  }
+
+  async ownPatient(orgId: string, patientId: string) {
     const patient = await this.prisma.patient.findFirst({ where: { id: patientId, organizationId: orgId } });
     if (!patient) throw new NotFoundException('Пациент не найден');
     return patient;

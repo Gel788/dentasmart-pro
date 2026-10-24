@@ -3,39 +3,56 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Activity, Calendar, CalendarRange, ClipboardCheck, FlaskConical, Moon, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users } from 'lucide-react';
+import { Activity, BarChart3, Bell, Calendar, Plug, FileText, ListChecks, Globe, LayoutGrid, LogOut, PanelLeftClose, PanelLeftOpen, PanelRight, CalendarRange, ClipboardCheck, FlaskConical, Moon, Package, PhoneIncoming, QrCode, Radar, Repeat, RotateCcw, Search, Settings, Shield, Smartphone, Sparkles, Sun, Sunrise, Tags, Trophy, Upload, Users, Wallet } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme } from '@/lib/theme-context';
 import { useFocus } from '@/lib/focus';
 import { api } from '@/lib/api';
+import { BookingSheet } from './booking/booking-sheet';
 import { ContextPanel } from './studio/panels';
+import { Assistant, AssistantTrigger } from './assistant/assistant';
+import { NotificationsPanel, useNotifications } from './notifications/notifications';
+import { useVoiceWake } from './assistant/voice-wake';
+import { isDemo } from '@/lib/demo/mode';
 
 const PRIMARY = [
   { href: '/', label: 'Сегодня', icon: Calendar, perm: 'patient.read' },
   { href: '/patients', label: 'Пациенты', icon: Users, perm: 'patient.read' },
-  { href: '/schedule', label: 'Расписание', icon: CalendarRange, perm: 'schedule.read' },
-  { href: '/price', label: 'Прайс', icon: Tags, perm: 'patient.read' },
-  { href: '/leads', label: 'Лиды', icon: PhoneIncoming, perm: 'patient.read' },
-  { href: '/settings', label: 'Настройки', icon: Settings, perm: 'org.manage' },
+  { href: '/schedule', label: 'Расписание', short: 'Запись', icon: CalendarRange, perm: 'schedule.read' },
+  { href: '/supply', label: 'Снабжение', short: 'Склад', icon: Package, perm: 'warehouse.read' },
+  { href: '/money', label: 'Деньги', icon: Wallet, perm: 'finance.read' },
 ];
 
 const MORE = [
+  { href: '/tasks', label: 'Задачи', icon: ListChecks, perm: 'patient.read' },
+  { href: '/documents', label: 'Документы', icon: FileText, perm: 'patient.read' },
+  { href: '/price', label: 'Прайс', icon: Tags, perm: 'patient.read' },
+  { href: '/requests', label: 'Запись с сайта', icon: Globe, perm: 'schedule.read' },
+  { href: '/leads', label: 'Заявки', icon: PhoneIncoming, perm: 'patient.read' },
+  { href: '/reports', label: 'Отчёты', icon: BarChart3, perm: 'schedule.read' },
+  { href: '/kpis', label: 'Врачи', icon: Trophy, perm: 'patient.read' },
+  { href: '/radar', label: 'Радар денег', icon: Radar, perm: 'finance.read' },
+  { href: '/return', label: 'Возврат пациентов', icon: RotateCcw, perm: 'medical.read' },
+  { href: '/check-in', label: 'QR стойки', icon: QrCode, perm: 'schedule.read' },
+  { href: '/import', label: 'Переезд', icon: Upload, perm: 'patient.write' },
+  { href: '/integrations', label: 'Интеграции', icon: Plug, perm: 'org.manage' },
+];
+
+const SETTINGS = { href: '/settings', label: 'Настройки', icon: Settings, perm: 'org.manage' };
+
+/** Still reachable by address and through ⌘K, but kept out of the menu. */
+const HIDDEN = [
   { href: '/briefing', label: 'Утро', icon: Sunrise, perm: 'patient.read' },
   { href: '/pulse', label: 'Пульс', icon: Activity, perm: 'patient.read' },
   { href: '/lab', label: 'Лаборатория', icon: FlaskConical, perm: 'medical.read' },
   { href: '/quality', label: 'Карты', icon: ClipboardCheck, perm: 'medical.read' },
   { href: '/insurance', label: 'ДМС', icon: Shield, perm: 'finance.read' },
-  { href: '/kpis', label: 'Врачи', icon: Trophy, perm: 'patient.read' },
   { href: '/autopilot', label: 'Автопилот', icon: Repeat, perm: 'patient.read' },
-  { href: '/radar', label: 'Радар', icon: Radar, perm: 'finance.read' },
-  { href: '/return', label: 'Возврат', icon: RotateCcw, perm: 'medical.read' },
   { href: '/portal', label: 'Кабинет пациента', icon: Smartphone, perm: 'patient.read' },
-  { href: '/check-in', label: 'QR стойки', icon: QrCode, perm: 'schedule.read' },
-  { href: '/import', label: 'Переезд', icon: Upload, perm: 'patient.write' },
   { href: '/onboarding', label: 'Запуск', icon: Sparkles, perm: 'patient.read' },
 ];
 
-const NAV = [...PRIMARY, ...MORE];
+const NAV = [...PRIMARY, ...MORE, SETTINGS, ...HIDDEN];
 
 type Hit = { id: string; firstName: string; lastName: string; phone: string | null };
 
@@ -50,22 +67,43 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [hits, setHits] = useState<Hit[]>([]);
   const [cursor, setCursor] = useState(0);
   const [density, setDensity] = useState<'compact' | 'comfort'>('compact');
-  const [moreOpen, setMoreOpen] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const [assistant, setAssistant] = useState(false);
+  const [notes, setNotes] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [wake, setWake] = useState(0);
+  // «Привет, ЗаЗа» is on by default on every device; each person can switch it off for themselves.
+  const [voiceOn, setVoiceOn] = useState(false);
+  useEffect(() => { try { setVoiceOn(localStorage.getItem('sd_zaza') !== 'off'); } catch { setVoiceOn(true); } }, []);
+  // The sidebar can fold to icons on any wide screen; the choice is remembered on this device.
+  const [navFolded, setNavFolded] = useState(false);
+  useEffect(() => { try { setNavFolded(localStorage.getItem('sd_nav') === 'folded'); } catch { /* unfolded */ } }, []);
+  const toggleNav = () => setNavFolded((folded) => { try { localStorage.setItem('sd_nav', folded ? 'open' : 'folded'); } catch { /* lasts this visit */ } return !folded; });
+  const toggleVoice = () => setVoiceOn((on) => { try { localStorage.setItem('sd_zaza', on ? 'off' : 'on'); } catch { /* the choice lasts this visit */ } return !on; });
+  const { state: voice, reason: voiceReason } = useVoiceWake({ enabled: voiceOn && !isDemo(), paused: assistant, onWake: () => { setAssistant(true); setWake((n) => n + 1); } });
+  useEffect(() => { setMenu(false); }, [pathname]);
+  const { feed, reload: reloadNotes } = useNotifications();
+  const unread = feed?.unread ?? 0;
+  // Set after mount so the server render and the browser agree on the date.
+  const [today, setToday] = useState('');
+  useEffect(() => { setToday(new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date())); }, []);
 
   const allowed = (item: (typeof NAV)[number]) => user?.permissions.includes(item.perm);
   const primary = PRIMARY.filter(allowed);
   const more = MORE.filter(allowed);
-  const links = [...primary, ...more];
+  const settings = allowed(SETTINGS) ? SETTINGS : null;
+  const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
+  const sheetActive = [...more, ...(settings ? [settings] : [])].some((link) => isActive(link.href));
+  const fullName = user?.employee ? `${user.employee.lastName} ${user.employee.firstName}` : user?.email ?? '';
+  const initials = user?.employee ? `${user.employee.firstName[0] ?? ''}${user.employee.lastName[0] ?? ''}` : (user?.email[0] ?? '').toUpperCase();
+  const links = [...primary, ...more, ...(settings ? [settings] : []), ...HIDDEN.filter(allowed)];
 
   useEffect(() => {
     const stored = localStorage.getItem('sd_density');
     if (stored === 'comfort' || stored === 'compact') setDensity(stored);
   }, []);
 
-  useEffect(() => {
-    const here = MORE.some((item) => user?.permissions.includes(item.perm) && pathname.startsWith(item.href));
-    if (here) setMoreOpen(true);
-  }, [pathname, user]);
+  useEffect(() => { setSheet(false); }, [pathname]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -73,7 +111,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
         event.preventDefault();
         setPalette((open) => !open);
       }
-      if (event.key === 'Escape') setPalette(false);
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'j') {
+        event.preventDefault();
+        setAssistant((open) => !open);
+      }
+      if (event.key === 'Escape') { setPalette(false); setSheet(false); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -100,10 +142,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
     const tools = [
       { id: 'theme', label: theme === 'dark' ? 'Светлая тема' : 'Тёмная тема', run: toggle },
       { id: 'density', label: density === 'compact' ? 'Плотность: комфорт' : 'Плотность: компакт', run: () => switchDensity(density === 'compact' ? 'comfort' : 'compact') },
+      { id: 'logout', label: 'Выйти из аккаунта', run: logout },
     ];
     const pool = query.trim().length < 2 ? [...pages, ...tools] : [...people, ...pages];
     return pool;
-  }, [links, hits, query, router, setFocus, theme, toggle, density]);
+  }, [links, hits, query, router, setFocus, theme, toggle, density, logout]);
 
   useEffect(() => { setCursor(0); }, [query, palette]);
 
@@ -122,55 +165,107 @@ export function Shell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className={`sd-app${panelOpen ? ' with-panel' : ''}`}>
-      <aside className="sd-nav">
-        <div className="sd-brand">
-          <div className="sd-mark">С</div>
-          <div className="sd-brand-text">
-            <strong>Седракович Дент</strong>
-            <span>Sedrakovich Dent</span>
-          </div>
-        </div>
-        {[primary, moreOpen ? more : []].flat().map((link) => {
-          const Icon = link.icon;
-          const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href);
-          return (
-            <Link key={link.href} href={link.href} className={`sd-link ${active ? 'active' : ''}`}>
-              <Icon />
-              <span className="sd-nav-label">{link.label}</span>
-            </Link>
-          );
-        })}
-        {more.length > 0 && (
-          <button className="sd-more" type="button" onClick={() => setMoreOpen((open) => !open)}>
-            {moreOpen ? 'Меньше' : `Ещё ${more.length}`}
-          </button>
-        )}
+    <div className={`sd-app${panelOpen ? ' with-panel' : ''}${navFolded ? ' nav-folded' : ''}`}>
+      <aside className="sd-nav" aria-label="Разделы">
+        <Link href="/" className="sd-brand" aria-label="Седракович Дент — сегодня">
+          <span className="sd-mark" aria-hidden>С</span>
+          <span className="sd-brand-text"><strong>Седракович Дент</strong><span>{today}</span></span>
+        </Link>
+        <nav className="sd-nav-list">
+          {primary.map((link) => <NavLink key={link.href} link={link} active={isActive(link.href)} />)}
+          {more.length > 0 && <span className="sd-nav-group">Ещё</span>}
+          {more.map((link) => <NavLink key={link.href} link={link} active={isActive(link.href)} extra />)}
+        </nav>
+        <button className={`sd-link sd-link-more${sheet ? ' open' : ''}`} type="button" onClick={() => setSheet((open) => !open)} aria-expanded={sheet} aria-current={sheetActive ? 'page' : undefined}>
+          <span className="sd-link-ico"><LayoutGrid />{unread > 0 && <i className="sd-dot" aria-hidden="true" />}</span>
+          <span className="sd-nav-label">Ещё</span>
+        </button>
         <div className="sd-nav-foot">
-          <button className="sd-icon-btn" type="button" onClick={toggle} aria-label="Тема">
-            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          {settings && <NavLink link={settings} active={isActive(settings.href)} extra />}
+          <button className="sd-link is-extra sd-fold" type="button" onClick={toggleNav} aria-pressed={navFolded} aria-label={navFolded ? 'Развернуть меню' : 'Свернуть меню'} title={navFolded ? 'Развернуть меню' : 'Свернуть меню'}>
+            <span className="sd-link-ico">{navFolded ? <PanelLeftOpen /> : <PanelLeftClose />}</span>
+            <span className="sd-nav-label">Свернуть меню</span>
           </button>
-          <div className="sd-user">
-            <b>{user?.employee ? `${user.employee.lastName} ${user.employee.firstName}` : user?.email}</b>
-            <span>{user?.organization.name}</span>
-          </div>
-          <button className="sd-btn-ghost" type="button" onClick={logout}>Выйти</button>
+          <button className={`sd-link is-extra${panelOpen ? ' active' : ''}`} type="button" onClick={() => setPanelOpen(!panelOpen)} aria-pressed={panelOpen} title="Панель контекста">
+            <span className="sd-link-ico"><PanelRight /></span>
+            <span className="sd-nav-label">{panelOpen ? 'Скрыть контекст' : 'Контекст'}</span>
+          </button>
         </div>
       </aside>
       <div className="sd-main">
         <header className="sd-top">
-          <button className="sd-search" type="button" onClick={() => setPalette(true)}>
-            <Search size={15} />
-            Поиск пациента и команды
+          <div className="sd-top-where">
+            <b>{links.find((link) => isActive(link.href))?.label ?? (pathname.startsWith('/visits') ? 'Приём' : pathname.startsWith('/patients') ? 'Пациенты' : pathname.startsWith('/finance') ? 'Касса' : pathname.startsWith('/warehouse') ? 'Склад' : 'Седракович Дент')}</b>
+            <span>{today}</span>
+          </div>
+          <button className="sd-top-search" type="button" onClick={() => setPalette(true)}>
+            <Search aria-hidden="true" />
+            <span>Пациент, запись или раздел</span>
             <kbd>⌘K</kbd>
           </button>
-          <button className="sd-btn-ghost sd-panel-toggle" type="button" onClick={() => setPanelOpen(!panelOpen)}>{panelOpen ? 'Скрыть' : 'Контекст'}</button>
+          <div className="sd-top-acts">
+            {user?.permissions.includes('schedule.write') && <Link className="sd-top-book" href="/schedule"><CalendarRange aria-hidden="true" />Записать</Link>}
+            <AssistantTrigger variant="top" onOpen={() => setAssistant(true)} />
+            <button type="button" className="sd-top-zaza" data-state={voice} onClick={() => { if (voice === 'error' || voice === 'denied') { setVoiceOn(false); window.setTimeout(() => setVoiceOn(true), 50); } else toggleVoice(); }} aria-pressed={voiceOn}
+              title={voice === 'listening' ? 'ЗаЗа ждёт «Привет, ЗаЗа». Нажмите, чтобы выключить' : voice === 'denied' ? 'Нет доступа к микрофону — разрешите его в браузере' : voice === 'loading' ? 'Загружаю распознавание…' : voice === 'error' ? `Голосовой режим не запустился${voiceReason ? `: ${voiceReason}` : ''}. Нажмите, чтобы попробовать снова` : 'Включить «Привет, ЗаЗа»'}>
+              <i aria-hidden="true" /><span>{voice === 'listening' || voice === 'paused' ? 'ЗаЗа слушает' : voice === 'loading' ? 'ЗаЗа…' : voice === 'denied' ? 'Нет микрофона' : voice === 'error' ? 'ЗаЗа: ошибка' : 'ЗаЗа выкл'}</span>
+            </button>
+            <button className="sd-top-icon" type="button" onClick={() => setNotes(true)} aria-label={unread ? `Уведомления, новых: ${unread}` : 'Уведомления'} title="Уведомления">
+              <Bell aria-hidden="true" />
+              {unread > 0 && <span className="sd-top-badge" aria-hidden="true">{unread > 99 ? '99+' : unread}</span>}
+            </button>
+            <div className="sd-top-me">
+              <button type="button" className="sd-top-avatar" onClick={() => setMenu((open) => !open)} aria-expanded={menu} aria-haspopup="menu" aria-label="Профиль">{initials}</button>
+              {menu && (
+                <div className="sd-top-menu" role="menu" onMouseLeave={() => setMenu(false)}>
+                  <div className="sd-top-menu-who"><b>{fullName}</b><span>{user?.email}</span></div>
+                  <button type="button" role="menuitem" onClick={() => { toggle(); setMenu(false); }}>{theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}{theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</button>
+                  {settings && <Link role="menuitem" href="/settings" onClick={() => setMenu(false)}><Settings aria-hidden="true" />Настройки клиники</Link>}
+                  <button type="button" role="menuitem" onClick={logout}><LogOut aria-hidden="true" />Выйти</button>
+                </div>
+              )}
+            </div>
+          </div>
         </header>
         <div className="sd-workspace">{children}</div>
       </div>
+      <BookingSheet />
+      <AssistantTrigger variant="fab" onOpen={() => setAssistant(true)} />
+      <Assistant open={assistant} onClose={() => setAssistant(false)} wakeSignal={wake} />
+      <NotificationsPanel open={notes} feed={feed} onClose={() => setNotes(false)} onSeen={() => void reloadNotes()} />
       <aside className={`sd-panel ${panelOpen ? 'open' : ''}`}>
         <ContextPanel />
       </aside>
+      {sheet && (
+        <div className="sd-more-sheet-back" onClick={() => setSheet(false)}>
+          <div className="sd-more-sheet" role="dialog" aria-label="Все разделы" onClick={(event) => event.stopPropagation()}>
+            <div className="sd-more-sheet-user">
+              <span className="sd-avatar" aria-hidden>{initials}</span>
+              <span className="sd-user-text"><b>{fullName}</b><span>{user?.organization.name}</span></span>
+            </div>
+            <button className="sd-sheet-search" type="button" onClick={() => { setSheet(false); setPalette(true); }}><Search size={18} />Поиск пациента и команды</button>
+            <AssistantTrigger variant="inline" onOpen={() => { setSheet(false); setAssistant(true); }} />
+            <button className="sd-sheet-search" type="button" onClick={() => { setSheet(false); setNotes(true); }}><Bell size={18} />Уведомления{unread > 0 && <span className="sd-count">{unread}</span>}</button>
+            <button className="sd-sheet-search" type="button" onClick={toggleVoice} aria-pressed={voiceOn}><span className="sd-zaza-dot" data-state={voice} aria-hidden="true" />{voiceOn ? (voice === 'denied' ? '«Привет, ЗаЗа»: нет доступа к микрофону' : '«Привет, ЗаЗа» включено — выключить') : 'Включить «Привет, ЗаЗа»'}</button>
+            <div className="sd-more-sheet-grid">
+              {[...more, ...(settings ? [settings] : [])].map((link) => {
+                const Icon = link.icon;
+                return (
+                  <Link key={link.href} href={link.href} className={`sd-tile${isActive(link.href) ? ' active' : ''}`} onClick={() => setSheet(false)}>
+                    <Icon />
+                    <span>{link.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+            <div className="sd-more-sheet-actions">
+              <button className="sd-btn-ghost" type="button" onClick={() => setPanelOpen(!panelOpen)}><PanelRight size={16} />{panelOpen ? 'Скрыть контекст' : 'Контекст'}</button>
+              <button className="sd-btn-ghost" type="button" onClick={toggle}>{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}{theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</button>
+              <button className="sd-btn-ghost" type="button" onClick={logout}><LogOut size={16} />Выйти</button>
+            </div>
+          </div>
+        </div>
+      )}
       {palette && (
         <div className="sd-palette" onMouseDown={() => setPalette(false)}>
           <div className="sd-palette-box" onMouseDown={(event) => event.stopPropagation()}>
@@ -195,5 +290,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
       )}
     </div>
+  );
+}
+
+type NavItem = { href: string; label: string; short?: string; icon: React.ComponentType; perm: string };
+
+function NavLink({ link, active, extra }: { link: NavItem; active: boolean; extra?: boolean }) {
+  const Icon = link.icon;
+  return (
+    <Link href={link.href} className={`sd-link${active ? ' active' : ''}${extra ? ' is-extra' : ''}`} aria-current={active ? 'page' : undefined} title={link.label}>
+      <span className="sd-link-ico"><Icon /></span>
+      <span className="sd-nav-label" data-short={link.short}>{link.label}</span>
+    </Link>
   );
 }

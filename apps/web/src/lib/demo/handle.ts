@@ -1,7 +1,10 @@
 import { phoneDigits } from '../phone';
 import { PLAN_TEMPLATES, composeFamily, lineTotal, type Mark } from '../plan-engine';
 import { resultFor, serviceKit, surfacesFor } from '../service-kit';
+import { canMoveVisit, dayLoad, fromKopecks, invoiceStatus, isVisitClosed, isVisitStatus, kopecks, labDueAt, MEDICAL_KEYS, medicalDiff, medicalReviewDue, normalizeMedical, effectiveHours, employeeWeek, normalizeException, normalizeWeekHours, patientSegments, scheduleRows, visibleHours, weekHoursOf, weekHoursText, phoneMatches, searchTerms, SEGMENTS, visitMoveError, wallDate, type MedicalFields, type PatientSegment, type VisitStatus } from '@dentasmart/shared';
+import { ApiError } from '../api';
 import snapshot from './snapshot.json';
+import { demoLabWork, demoRoute, reserveDemoLines, type DemoReservation } from './route';
 
 const KEY = 'sd.demo.v1';
 const ANCHOR = snapshot.anchor;
@@ -185,7 +188,10 @@ function read(path: string, token: string): unknown {
   if (pathname === '/patients') return patientPage(bag, query);
   if (pathname === '/workspace/search') return searchPeople(bag, query.q ?? '');
   if (pathname === '/flow/caller') return searchPeople(bag, query.phone ?? '');
+  if (pathname === '/workspace/schedule/range') return scheduleRange(bag, query.from ?? ANCHOR, query.to ?? ANCHOR);
   if (pathname === '/workspace/schedule') return scheduleFor(bag, query.date || ANCHOR);
+  if (pathname === '/booking-requests') return [];
+  if (pathname === '/config/exceptions') return [...demoExceptions(bag)].sort((a, b) => String(a.dateFrom).localeCompare(String(b.dateFrom)));
   if (pathname === '/showcase/copilot') {
     return bag.gets['/showcase/copilot'] ?? bag.gets[`/showcase/copilot?patientId=${query.patientId}&note=кариес`];
   }
@@ -196,6 +202,8 @@ function read(path: string, token: string): unknown {
   }
   if (pathname === '/market/export-1c') return bag.gets[pathname] ?? { filename: '1c.json', json: { demo: true } };
 
+  const route = pathname.match(/^\/route\/patients\/([^/]+)$/);
+  if (route) return demoRoute(acceptedPlanOf(bag, route[1]), bag.appointments, (bag.gets['/lab/orders'] ?? []) as AnyRec[]);
   const sheetPath = pathname.match(/^\/workspace\/plans\/([^/]+)\/sheet$/);
   if (sheetPath) return buildSheet(bag, sheetPath[1]);
   if (pathname === '/config') {
@@ -203,6 +211,13 @@ function read(path: string, token: string): unknown {
     return config(bag);
   }
   if (pathname === '/workspace/recall') return recallList(bag);
+
+  const visitPath = pathname.match(/^\/flow\/visits\/([^/]+)$/);
+  if (visitPath && pathname in bag.gets) return visitView(bag, visitPath[1]);
+  const cardPath = pathname.match(/^\/workspace\/patients\/([^/]+)\/card$/);
+  if (cardPath && pathname in bag.gets) return cardView(bag, cardPath[1]);
+  const medicalPath = pathname.match(/^\/patients\/([^/]+)\/medical$/);
+  if (medicalPath) return medicalOf(findPatient(bag, medicalPath[1]));
 
   const anchored = anchorPath(pathname, query);
   if (anchored in bag.gets) return bag.gets[anchored];
@@ -215,6 +230,8 @@ function read(path: string, token: string): unknown {
   const prefixed = Object.keys(bag.gets).find((key) => key.startsWith(`${pathname}?`));
   if (prefixed) return bag.gets[prefixed];
 
+  if (pathname === '/finance/desk') return demoDesk(bag);
+  if (pathname === '/workspace/today') return demoToday(bag, token);
   if (pathname === '/finance/cash-shift/current') {
     const key = Object.keys(bag.gets).find((item) => item.startsWith('/finance/cash-shift/current'));
     return key ? bag.gets[key] : null;
@@ -237,19 +254,63 @@ function anchorPath(pathname: string, query: Record<string, string>) {
   return pathname + (search ? `?${search}` : '');
 }
 
+/** Mirrors PatientsService.findAll: same search, segments, counters, sorting and paging. */
 function patientPage(bag: Bag, query: Record<string, string>) {
-  const needle = (query.search || '').trim().toLowerCase();
-  const digits = needle.replace(/\D/g, '');
-  let items = patients(bag).filter((row) => row.isActive !== false);
-  if (needle) {
-    items = items.filter((row) => {
-      const text = `${row.lastName} ${row.firstName} ${row.middleName ?? ''} ${row.phone ?? ''}`.toLowerCase();
-      return text.includes(needle) || (digits.length >= 4 && phoneDigits(row.phone).includes(digits));
+  const { words, digits } = searchTerms(query.search ?? '');
+  const now = anchorNow();
+  const fold = (text: string) => text.toLowerCase().replace(/ё/g, 'е');
+  const invoices = (bag.gets['/finance/invoices'] ?? []) as AnyRec[];
+  const found = patients(bag)
+    .filter((row) => row.isActive !== false)
+    .filter((row) => {
+      const name = fold(`${row.lastName} ${row.firstName} ${row.middleName ?? ''}`);
+      return words.every((word) => name.includes(word)) && phoneMatches(row.phone, digits);
+    })
+    .map((row) => {
+      const own = bag.appointments.filter((visit) => visit.patientId === row.id);
+      const lastVisit = own.filter((visit) => visit.status === 'COMPLETED').map((visit) => visit.startsAt).sort().at(-1) ?? null;
+      const nextVisit = own
+        .filter((visit) => visit.startsAt >= now && !['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(visit.status))
+        .map((visit) => visit.startsAt)
+        .sort()[0] ?? null;
+      const debtKopecks = invoices
+        .filter((invoice) => invoice.patientId === row.id && ['ISSUED', 'PARTIAL'].includes(invoice.status))
+        .reduce((sum, invoice) => sum + Math.max(0, kopecks(invoice.totalAmount) - kopecks(invoice.discountAmount) - kopecks(invoice.paidAmount)), 0);
+      const clientType = (row.clientType as string | null | undefined) ?? null;
+      return {
+        ...row,
+        clientType,
+        lastVisit,
+        nextVisit,
+        debt: fromKopecks(debtKopecks),
+        deposit: String(row.deposit ?? '0.00'),
+        segments: patientSegments({ phone: row.phone ?? null, lastVisit, nextVisit, debtKopecks, clientType }, new Date(now)),
+      };
     });
+
+  const segments = Object.fromEntries(SEGMENTS.map((item) => [item.id, 0])) as Record<string, number>;
+  for (const row of found) {
+    segments.all += 1;
+    for (const id of row.segments) segments[id] += 1;
   }
-  const pageSize = Number(query.pageSize || 40);
-  const page = Number(query.page || 1);
-  return { items: items.slice((page - 1) * pageSize, page * pageSize), total: items.length, page, pageSize };
+  const segment = SEGMENTS.some((item) => item.id === query.segment) ? query.segment : 'all';
+  const sort = ['name', 'lastVisit', 'nextVisit', 'debt', 'recent'].includes(query.sort) ? query.sort : 'name';
+  const latin = (row: AnyRec) => (/^[A-Za-z]/.test(String(row.lastName)) ? 1 : 0);
+  const byName = (a: AnyRec, b: AnyRec) => latin(a) - latin(b) || fold(`${a.lastName} ${a.firstName}`).localeCompare(fold(`${b.lastName} ${b.firstName}`), 'ru');
+  const late = (value: string | null, empty: string) => value ?? empty;
+  const order: Record<string, (a: AnyRec, b: AnyRec) => number> = {
+    name: byName,
+    lastVisit: (a, b) => late(b.lastVisit, '').localeCompare(late(a.lastVisit, '')),
+    nextVisit: (a, b) => late(a.nextVisit, '9999').localeCompare(late(b.nextVisit, '9999')),
+    debt: (a, b) => kopecks(b.debt) - kopecks(a.debt),
+    recent: (a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')),
+  };
+  const items = found
+    .filter((row) => segment === 'all' || row.segments.includes(segment as PatientSegment))
+    .sort((a, b) => order[sort](a, b) || byName(a, b));
+  const pageSize = Math.min(500, Math.max(1, Number(query.pageSize) || 20));
+  const page = Math.max(1, Number(query.page) || 1);
+  return { items: items.slice((page - 1) * pageSize, page * pageSize), total: items.length, page, pageSize, segment, sort, segments };
 }
 
 function searchPeople(bag: Bag, raw: string) {
@@ -268,7 +329,39 @@ function scheduleFor(bag: Bag, date: string) {
   const shell = bag.gets[`/workspace/schedule?date=${ANCHOR}`] as AnyRec;
   const day = shiftString(date.slice(0, 10), -1);
   const appointments = bag.appointments.filter((row) => row.startsAt.slice(0, 10) === day && row.status !== 'CANCELLED');
-  return { ...shell, date: `${day}T00:00:00.000Z`, appointments };
+  return { ...shell, date: `${day}T00:00:00.000Z`, exceptions: demoExceptions(bag).filter((row) => row.dateFrom <= day && day <= row.dateTo), appointments };
+}
+
+function demoExceptions(bag: Bag) {
+  const cfg = config(bag);
+  if (!Array.isArray(cfg.exceptions)) cfg.exceptions = [];
+  return cfg.exceptions as AnyRec[];
+}
+
+/** Same shape as the API's GET /workspace/schedule/range, worked out from the demo's stored visits. */
+function scheduleRange(bag: Bag, fromRaw: string, toRaw: string) {
+  const from = shiftString(fromRaw.slice(0, 10), -1);
+  const to = shiftString(toRaw.slice(0, 10), -1);
+  const fromDay = Date.parse(`${from}T00:00:00Z`);
+  const days = Math.max(1, Math.min(62, Math.round((Date.parse(`${to}T00:00:00Z`) - fromDay) / 86400000) + 1));
+  const shell = bag.gets[`/workspace/schedule?date=${ANCHOR}`] as AnyRec;
+  const chairs = ((shell.branches ?? []) as AnyRec[]).reduce((sum, branch) => sum + (branch.cabinets?.length ?? 0), 0);
+  const offset = 180;
+  const brand = config(bag).brand as AnyRec | undefined;
+  const week = weekHoursOf(brand?.weekHours, brand?.workHours);
+  const exceptions = demoExceptions(bag).filter((row) => row.dateFrom <= to && row.dateTo >= from) as Parameters<typeof effectiveHours>[2] & AnyRec[];
+  const clinicExceptions = exceptions.filter((row) => row.employeeId === null);
+  const visits = bag.appointments.filter((row) => row.status !== 'CANCELLED');
+  const dates = Array.from({ length: days }, (_, index) => new Date(fromDay + index * 86400000).toISOString().slice(0, 10));
+  const inRange = visits.filter((row) => dates.includes(wallDate(row.startsAt, offset)));
+  return {
+    from, to, timezone: 'Europe/Moscow', offsetMinutes: offset, hours: visibleHours(dates.map((date) => effectiveHours(week, date, clinicExceptions))), week, exceptions, chairs,
+    days: dates.map((date) => {
+      const open = effectiveHours(week, date, clinicExceptions);
+      return { date, hours: open, ...dayLoad(inRange.filter((row) => wallDate(row.startsAt, offset) === date), { chairs, opensAt: open?.opensAt ?? 0, closesAt: open?.closesAt ?? 0, tzOffsetMinutes: offset }) };
+    }),
+    appointments: inRange.sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
+  };
 }
 
 function priceCsv(bag: Bag) {
@@ -298,6 +391,23 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
 
   const patientCreate = pathname === '/patients' && method === 'POST';
   if (patientCreate) return addPatient(bag, data);
+
+  const newPlan = pathname.match(/^\/workspace\/patients\/([^/]+)\/plans$/);
+  if (newPlan && method === 'POST') {
+    const card = bag.gets[`/workspace/patients/${newPlan[1]}/card`] as AnyRec | undefined;
+    if (!card) throw new Error('Пациент не найден');
+    const id = uid();
+    const plan = {
+      id, tier: null, tierLabel: 'План', title: 'План лечения', status: 'DRAFT', total: 0, discountPercent: 0,
+      guaranteeMonths: 12, durationWeeks: 4, installmentMonths: 0, signedAt: null, explanation: '', showBreakdown: true,
+      phases: [], looseItems: [],
+    };
+    card.families = [...(card.families ?? []), { key: id, title: 'План лечения', plans: [plan] }];
+    return plan;
+  }
+
+  const medicalSave = pathname.match(/^\/patients\/([^/]+)\/medical$/);
+  if (medicalSave && method === 'PATCH') return saveMedical(bag, medicalSave[1], data, token);
 
   const patientPatch = pathname.match(/^\/patients\/([^/]+)$/);
   if (patientPatch && method === 'PATCH') return patchPatient(bag, patientPatch[1], data);
@@ -342,8 +452,26 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
   if (pathname === '/config/visit-templates') return saveTemplate(bag, data);
   if (pathname === '/config/plan-templates') return pushConfig(bag, 'planTemplates', { id: uid(), ...data });
   if (pathname === '/config/documents') return pushConfig(bag, 'documents', { id: uid(), ...data });
+  if (pathname === '/config/exceptions' && method === 'POST') {
+    let row;
+    try { row = normalizeException(data); } catch (err) { throw new Error((err as Error).message); }
+    const employee = row.employeeId ? ((config(bag).employees ?? []) as AnyRec[]).find((item) => item.id === row.employeeId) : null;
+    const saved = { id: uid(), ...row, employee: employee ? `${employee.lastName} ${employee.firstName}` : null };
+    demoExceptions(bag).push(saved);
+    return saved;
+  }
+  if (pathname.startsWith('/config/exceptions/') && method === 'DELETE') {
+    const id = pathname.split('/').pop();
+    config(bag).exceptions = demoExceptions(bag).filter((row) => row.id !== id);
+    return { ok: true };
+  }
   if (pathname === '/config/brand') {
-    config(bag).brand = { ...(config(bag).brand ?? {}), ...data };
+    const next: AnyRec = { ...data };
+    if (data.weekHours !== undefined) {
+      try { next.weekHours = normalizeWeekHours(data.weekHours); } catch (err) { throw new Error((err as Error).message); }
+      next.workHours = weekHoursText(next.weekHours as ReturnType<typeof normalizeWeekHours>);
+    }
+    config(bag).brand = { ...(config(bag).brand ?? {}), ...next };
     return config(bag).brand;
   }
   if (pathname === '/config/cabinets') return pushConfig(bag, 'cabinets', { id: uid(), name: data.name });
@@ -358,7 +486,14 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
   if (pathname === '/config/promos') return pushConfig(bag, 'promos', { id: uid(), code: data.code, discountPct: data.discountPct ?? 10, isActive: true });
   if (pathname === '/config/rules') return pushConfig(bag, 'rules', { id: uid(), ...data, isActive: true });
 
-  if (pathname === '/workspace/appointments') return book(bag, data);
+  if (pathname === '/workspace/appointments') {
+    const startsAt = new Date(data.startsAt).toISOString();
+    const endsAt = new Date(Date.parse(startsAt) + (Number(data.durationMin) || 30) * 60000).toISOString();
+    assertFree(bag, { id: '' } as Appointment, startsAt, endsAt, data.cabinetId ?? null, data.doctorId ?? null);
+    return book(bag, data);
+  }
+  const moveStatus = pathname.match(/^\/appointments\/([^/]+)\/status$/);
+  if (moveStatus && method === 'PATCH') return setVisitStatus(bag, moveStatus[1], String(data.status ?? ''));
   const move = pathname.match(/^\/appointments\/([^/]+)$/);
   if (move && method === 'PATCH') return moveAppointment(bag, move[1], data);
   const visit = pathname.match(/^\/flow\/visits\/([^/]+)(?:\/([^/]+))?$/);
@@ -432,12 +567,21 @@ function write(path: string, method: string, body: AnyRec, token: string): unkno
   if (stockDone) return finishInventory(bag);
   const closeShift = pathname.match(/^\/finance\/cash-shift\/([^/]+)\/close$/);
   if (closeShift) {
+    let result: AnyRec | null = null;
     for (const key of Object.keys(bag.gets)) {
       if (!key.startsWith('/finance/cash-shift/current')) continue;
       const shift = bag.gets[key] as AnyRec | null;
-      if (shift?.id === closeShift[1]) bag.gets[key] = { ...shift, status: 'CLOSED', closingCash: String(data.closingCash ?? 0) };
+      if (shift?.id !== closeShift[1] || shift.status !== 'OPEN') continue;
+      const cash = ((bag.gets['/finance/payments'] ?? []) as AnyRec[])
+        .filter((row) => row.method === 'CASH' && String(row.paidAt) >= String(shift.openedAt))
+        .reduce((acc, row) => acc + kopecks(row.amount), 0);
+      const expected = kopecks(shift.openingCash) + cash;
+      const counted = kopecks(data.closingCash ?? 0);
+      result = { ...shift, status: 'CLOSED', closingCash: fromKopecks(counted), expectedCash: fromKopecks(expected), difference: fromKopecks(counted - expected) };
+      bag.gets[key] = result;
     }
-    return { ok: true };
+    if (!result) throw new ApiError('Смену уже закрыли', 400, {});
+    return result;
   }
   if (pathname === '/finance/cash-shift/open') {
     const opened = { id: uid(), status: 'OPEN', openingCash: String(data.openingCash ?? data.amount ?? 0), openedAt: anchorNow() };
@@ -465,13 +609,92 @@ function addPatient(bag: Bag, data: AnyRec) {
   return row;
 }
 
+/** Mirrors PatientsService.medicalView. */
+function medicalOf(row: AnyRec | undefined) {
+  if (!row) throw new Error('Пациент не найден');
+  return {
+    version: Number(row.medicalVersion ?? 0),
+    fields: Object.fromEntries(MEDICAL_KEYS.map((key) => [key, row[key] ?? (key === 'allergies' ? [] : key === 'anxiety' ? 'NONE' : typeof row[key] === 'boolean' ? false : null)])),
+    confirmedAt: row.medicalConfirmedAt ?? null,
+    confirmedBy: row.medicalConfirmedBy ?? null,
+    reviewDue: medicalReviewDue(row.medicalConfirmedAt ?? null, new Date(anchorNow())),
+  };
+}
+
+/** Mirrors PatientsService.saveMedical: version check, normalized fields, an entry in the card's feed. */
+function saveMedical(bag: Bag, id: string, data: AnyRec, token: string) {
+  const row = findPatient(bag, id);
+  if (!row) throw new Error('Пациент не найден');
+  const current = medicalOf(row);
+  if (Number(data.version) !== current.version) {
+    throw new ApiError('Медкарту уже изменили. Посмотрите новую версию и внесите правку ещё раз', 409, { current });
+  }
+  const { version: _version, confirm, ...input } = data;
+  const next = normalizeMedical(input as Partial<MedicalFields>);
+  const changes = medicalDiff(current.fields as MedicalFields, next);
+  if (!changes.length && !confirm) return current;
+  const employee = Object.values(snapshot.users).find((item) => item.accessToken === token)?.user.employee;
+  const who = employee ? `${employee.lastName} ${employee.firstName}` : 'Сотрудник';
+  Object.assign(row, next, { medicalVersion: current.version + 1 });
+  if (confirm) Object.assign(row, { medicalConfirmedAt: anchorNow(), medicalConfirmedBy: who });
+  publishPatient(bag, row, false);
+  const card = bag.gets[`/workspace/patients/${id}/card`] as AnyRec | undefined;
+  if (card) {
+    const labels = changes.map((change) => change.label);
+    card.timeline = [
+      {
+        id: uid(),
+        at: anchorNow(),
+        kind: 'medical',
+        title: labels.length ? 'Медкарта изменена' : 'Медкарта подтверждена',
+        detail: [labels.join(', ') || 'без изменений', labels.length && confirm ? 'подтверждена с пациентом' : null, who].filter(Boolean).join(' · '),
+        changes,
+      },
+      ...(card.timeline ?? []),
+    ];
+  }
+  return medicalOf(row);
+}
+
+/** The stored card plus what the API computes on read: medical state, next visit, deposit. */
+function cardView(bag: Bag, id: string) {
+  const card = bag.gets[`/workspace/patients/${id}/card`] as AnyRec;
+  const row = findPatient(bag, id) ?? card.patient;
+  const now = anchorNow();
+  const next = bag.appointments
+    .filter((visit) => visit.patientId === id && visit.startsAt >= now && ['SCHEDULED', 'CONFIRMED', 'WAITING'].includes(visit.status))
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
+  const methods: Record<string, string> = { CASH: 'наличные', CARD: 'карта', ONLINE: 'онлайн', DMS: 'ДМС', INSTALLMENT: 'рассрочка', BONUS: 'бонусы' };
+  const consents: Record<string, string> = { PD_PROCESSING: 'Согласие на обработку персональных данных', MEDICAL_TREATMENT: 'Информированное согласие на лечение', MARKETING: 'Согласие на рассылки', TELEMEDICINE: 'Согласие на телемедицину' };
+  const signed: Record<string, string> = { PENDING: 'ждёт подписи', SIGNED: 'подписано', REVOKED: 'отозвано' };
+  const timeline = ((card.timeline ?? []) as AnyRec[]).map((item) => {
+    if (item.kind === 'payment') return { ...item, detail: methods[item.detail] ?? item.detail };
+    if (item.kind === 'consent' && /^[A-Z_]+ · [A-Z]+$/.test(item.detail ?? '')) {
+      const [type, status] = String(item.detail).split(' · ');
+      return { ...item, title: consents[type] ?? item.title, detail: signed[status] ?? status };
+    }
+    return item;
+  });
+  return {
+    ...card,
+    timeline,
+    patient: { ...card.patient, ...row },
+    medical: medicalOf(row),
+    deposit: Number(row.deposit ?? card.deposit ?? 0),
+    nextVisit: next
+      ? { id: next.id, startsAt: next.startsAt, status: next.status, service: next.service, doctor: next.doctor, cabinet: next.cabinet }
+      : null,
+  };
+}
+
 function patchPatient(bag: Bag, id: string, data: AnyRec) {
   const row = findPatient(bag, id);
   if (!row) throw new Error('Пациент не найден');
   if (data.phone) assertUniquePhone(bag, data.phone, id);
   const next = patientRecord({ ...row, ...data, allergies: data.allergies ?? row.allergies }, id);
   if (data.isActive === false) next.isActive = false;
-  Object.assign(row, next);
+  const touchesMedical = MEDICAL_KEYS.some((key) => key in data);
+  Object.assign(row, next, touchesMedical ? { medicalVersion: Number(row.medicalVersion ?? 0) + 1 } : {});
   publishPatient(bag, row, false);
   if (data.dmsInsurer && data.dmsNumber) attachPolicy(bag, row, data.dmsInsurer, data.dmsNumber);
   return row;
@@ -737,7 +960,14 @@ function saveEmployee(bag: Bag, data: AnyRec) {
     commission: data.commission ?? row.commission ?? 0,
     status: data.status ?? row.status ?? 'ACTIVE',
   });
+  if (data.weekHours !== undefined) {
+    if (data.weekHours === null) row.schedule = [];
+    else {
+      try { row.schedule = scheduleRows(normalizeWeekHours(data.weekHours)); } catch (err) { throw new Error((err as Error).message); }
+    }
+  }
   if (!Array.isArray(row.schedule)) row.schedule = [];
+  row.weekHours = employeeWeek(row.schedule);
   syncStaff(bag, row);
   return row;
 }
@@ -762,8 +992,8 @@ function syncStaff(bag: Bag, row: AnyRec) {
   const name = personName(row);
   const existing = doctors.find((item) => item.id === row.id);
   if (row.status === 'INACTIVE') schedule.doctors = doctors.filter((item) => item.id !== row.id);
-  else if (existing) existing.name = name;
-  else doctors.push({ id: row.id, name });
+  else if (existing) Object.assign(existing, { name, weekHours: row.weekHours ?? null });
+  else doctors.push({ id: row.id, name, weekHours: row.weekHours ?? null });
 }
 
 function addShift(bag: Bag, data: AnyRec) {
@@ -883,9 +1113,51 @@ function book(bag: Bag, data: AnyRec) {
   return row;
 }
 
+/** The API's rules, in the browser: allowed status moves only. */
+function setVisitStatus(bag: Bag, id: string, status: string) {
+  const row = bag.appointments.find((item) => item.id === id);
+  if (!row) throw new Error('Запись не найдена');
+  const from = (row.status === 'ARRIVED' ? 'WAITING' : row.status) as VisitStatus;
+  if (!isVisitStatus(status)) throw new Error('Неизвестный статус визита');
+  if (!canMoveVisit(from, status)) throw new Error(visitMoveError(from, status));
+  const patient = findPatient(bag, row.patientId);
+  if (status === 'IN_PROGRESS' && medicalReviewDue(patient?.medicalConfirmedAt ?? null, new Date(anchorNow()))) {
+    throw new ApiError('Перед приёмом уточните анамнез у пациента и подтвердите медкарту', 400, {});
+  }
+  const stored = bag.gets[`/flow/visits/${id}`] as AnyRec | undefined;
+  if (status === 'COMPLETED' && (!String(stored?.note?.diagnosis ?? '').trim() || !String(stored?.note?.treatment ?? '').trim())) {
+    throw new ApiError('Закройте визит на экране приёма: нужны диагноз и что сделали', 400, {});
+  }
+  row.status = status;
+  const visit = bag.gets[`/flow/visits/${id}`] as AnyRec | undefined;
+  if (visit) visit.status = status;
+  return row;
+}
+
+/** Mirrors the database's no-overlap constraints for one chair and one doctor. */
+function assertFree(bag: Bag, row: Appointment, startsAt: string, endsAt: string, cabinetId: string | null, doctorId: string | null) {
+  const live = (item: Appointment) => item.id !== row.id && item.status !== 'CANCELLED' && item.status !== 'NO_SHOW';
+  const overlaps = (item: Appointment) => item.startsAt < endsAt && startsAt < item.endsAt;
+  if (cabinetId && bag.appointments.some((item) => live(item) && item.cabinetId === cabinetId && overlaps(item))) {
+    throw new Error('Кресло на это время уже занято. Выберите другое время или кресло');
+  }
+  if (doctorId && bag.appointments.some((item) => live(item) && item.doctorId === doctorId && overlaps(item))) {
+    throw new Error('У врача на это время уже есть приём. Выберите другое время');
+  }
+}
+
 function moveAppointment(bag: Bag, id: string, data: AnyRec) {
   const row = bag.appointments.find((item) => item.id === id);
   if (!row) throw new Error('Запись не найдена');
+  if (isVisitClosed((row.status === 'ARRIVED' ? 'WAITING' : row.status) as VisitStatus) && (data.startsAt || data.cabinetId || data.doctorId)) {
+    throw new Error('Закрытый визит не переносят. Создайте новую запись');
+  }
+  if (data.startsAt || data.endsAt || data.cabinetId || data.doctorId) {
+    const startsAt = data.startsAt ?? row.startsAt;
+    const endsAt = data.endsAt ?? (data.startsAt && data.durationMin ? new Date(Date.parse(data.startsAt) + Number(data.durationMin) * 60000).toISOString() : row.endsAt);
+    if (!(endsAt > startsAt)) throw new Error('Конец приёма должен быть позже начала');
+    assertFree(bag, row, startsAt, endsAt, data.cabinetId ?? row.cabinetId, data.doctorId ?? row.doctorId);
+  }
   if (data.patientId) {
     const patient = findPatient(bag, data.patientId);
     row.patientId = data.patientId;
@@ -935,29 +1207,75 @@ function visitFrom(row: Appointment, patient: AnyRec | undefined) {
   };
 }
 
+/** Mirrors FlowService: same statuses, anamnesis before the chair, done lines and their invoice on close. */
 function visitAction(bag: Bag, id: string, action: string, data: AnyRec) {
   const visit = (bag.gets[`/flow/visits/${id}`] ?? {}) as AnyRec;
   bag.gets[`/flow/visits/${id}`] = visit;
+  const patient = findPatient(bag, visit.patient?.id ?? '');
   if (action === 'note') visit.note = { ...(visit.note ?? {}), ...data };
   if (action === 'check-in') {
-    visit.status = 'ARRIVED';
-    visit.actions = ['start'];
+    visit.status = 'WAITING';
+    visit.actions = ['start', 'no-show'];
   }
   if (action === 'start') {
+    if (medicalReviewDue(patient?.medicalConfirmedAt ?? null, new Date(anchorNow()))) {
+      throw new ApiError('Перед приёмом уточните анамнез у пациента и подтвердите медкарту', 400, {});
+    }
     visit.status = 'IN_PROGRESS';
     visit.actions = ['complete'];
   }
   if (action === 'complete') {
+    if (!String(visit.note?.diagnosis ?? '').trim()) throw new ApiError('Сначала запишите диагноз — без него визит не закрывается', 400, {});
+    if (!String(visit.note?.treatment ?? '').trim()) throw new ApiError('Опишите, что сделали на приёме', 400, {});
+    const ids = new Set<string>((data.doneItemIds ?? []) as string[]);
+    let total = 0;
+    const seen = new Set<AnyRec>();
+    eachPlan(bag, (plan, _family, card) => {
+      if (seen.has(plan) || card?.patient?.id !== patient?.id) return;
+      seen.add(plan);
+      for (const item of planItems(plan)) {
+        if (!ids.has(item.id) || item.status === 'DONE') continue;
+        item.status = 'DONE';
+        item.appointmentId = id;
+        total += Number(item.price) || 0;
+      }
+    });
+    if (total > 0 && patient) pushList(bag, '/finance/invoices', invoiceRow(bag, { patientId: patient.id, totalAmount: total }));
     visit.status = 'COMPLETED';
-    visit.actions = [];
+    visit.actions = ['pay'];
+    consumeDemoVisit(bag, id);
   }
   if (action === 'no-show') {
     visit.status = 'NO_SHOW';
-    visit.actions = [];
+    visit.actions = ['rebook'];
   }
   const appt = bag.appointments.find((item) => item.id === id);
   if (appt) appt.status = visit.status;
-  return visit;
+  return visitView(bag, id);
+}
+
+/** The stored visit plus what the API computes on read: medical state and the lines for today. */
+function visitView(bag: Bag, id: string) {
+  const visit = bag.gets[`/flow/visits/${id}`] as AnyRec;
+  const patientId = visit.patient?.id ?? '';
+  const row = findPatient(bag, patientId);
+  const today: AnyRec[] = [];
+  const seen = new Set<AnyRec>();
+  const card = bag.gets[`/workspace/patients/${patientId}/card`] as AnyRec | undefined;
+  const family = [...((card?.families ?? []) as AnyRec[])].sort((a, b) => (b.plans?.length ?? 0) - (a.plans?.length ?? 0))[0];
+  const accepted = ((family?.plans ?? []) as AnyRec[]).filter((plan) => ['ACCEPTED', 'IN_PROGRESS'].includes(plan.status));
+  const pool = accepted.length ? accepted : [((family?.plans ?? []) as AnyRec[]).find((plan) => plan.tier === 'OPTIMUM') ?? family?.plans?.[0]].filter(Boolean);
+  for (const plan of pool) {
+    if (seen.has(plan)) continue;
+    seen.add(plan);
+    for (const item of planItems(plan)) {
+      const doneHere = item.status === 'DONE' && item.appointmentId === id;
+      if (item.status === 'DONE' && !doneHere) continue;
+      if (item.status === 'REJECTED') continue;
+      today.push({ id: item.id, planId: plan.id, planTitle: plan.title, title: item.title, toothNum: item.toothNum ?? null, surfaces: item.surfaces ?? [], price: Number(item.price) || 0, status: item.status ?? 'PROPOSED', booked: item.appointmentId === id, doneHere });
+    }
+  }
+  return { ...visit, medical: medicalOf(row ?? visit.patient ?? {}), today };
 }
 
 function paint(bag: Bag, patientId: string, data: AnyRec) {
@@ -1148,7 +1466,8 @@ function bookPhaseVisit(bag: Bag, planId: string, phaseId: string) {
 
 function acceptPlan(bag: Bag, planId: string, action: string, data: AnyRec) {
   const appointments: { startsAt: string; title: string }[] = [];
-  const booked = new Set<string>();
+  // The same plan lives in the patient card and in its plan family: decide each stage once, then copy it to every copy.
+  const placed = new Map<string, { appointmentId: string; reservations: Map<string, DemoReservation[]> }>();
   eachPlan(bag, (plan, family, card) => {
     if (plan.id !== planId) return;
     if (action === 'abandon') {
@@ -1162,19 +1481,68 @@ function acceptPlan(bag: Bag, planId: string, action: string, data: AnyRec) {
     const chosen = new Set<string>(data.phaseIds ?? (plan.phases as AnyRec[]).map((phase) => phase.id));
     (plan.phases as AnyRec[]).forEach((phase, index) => {
       if (!chosen.has(phase.id)) return;
-      const mark = `${plan.id}:${phase.id}`;
-      if (booked.has(mark)) return;
-      booked.add(mark);
-      const starts = new Date(Date.parse(`${ANCHOR}T09:00:00.000Z`) + (index + 1) * 86400000);
-      const patientId = card?.patient?.id ?? family.patient?.id;
-      if (patientId) {
+      const items = (phase.items ?? []) as AnyRec[];
+      let stage = placed.get(phase.id);
+      if (!stage && phase.appointmentId) stage = { appointmentId: phase.appointmentId, reservations: new Map() };
+      if (!stage) {
+        const patientId = card?.patient?.id ?? family.patient?.id;
+        if (!patientId) return;
+        const starts = new Date(Date.parse(`${ANCHOR}T09:00:00.000Z`) + (index + 1) * 86400000);
         const row = book(bag, { patientId, startsAt: starts.toISOString(), durationMin: 60 });
         row.service = phase.title;
         appointments.push({ startsAt: row.startsAt, title: phase.title });
+        const reservations = reserveDemoLines(items, config(bag).services as AnyRec[], bag.gets['/warehouse/items'] as AnyRec[], heldReservations(bag));
+        const work = demoLabWork(phase);
+        if (work) {
+          const lab = addLab(bag, { patientId, title: work });
+          Object.assign(lab, { status: 'WAITING_IMPRESSION', planPhaseId: phase.id, appointmentId: row.id, dueAt: labDueAt(starts).toISOString() });
+        }
+        stage = { appointmentId: row.id, reservations };
+      }
+      placed.set(phase.id, stage);
+      phase.appointmentId = stage.appointmentId;
+      for (const item of items) {
+        item.status = 'ACCEPTED';
+        item.appointmentId = stage.appointmentId;
+        if (stage.reservations.has(item.id)) item.reservations = stage.reservations.get(item.id);
       }
     });
   });
   return { appointments };
+}
+
+/** Reservations already held by signed plans, so a second plan does not count the same shelf twice. */
+function heldReservations(bag: Bag) {
+  const seen = new Set<string>();
+  const rows: DemoReservation[] = [];
+  eachPlan(bag, (plan) => {
+    if (seen.has(plan.id)) return;
+    seen.add(plan.id);
+    for (const item of planItems(plan)) rows.push(...((item.reservations ?? []) as DemoReservation[]));
+  });
+  return rows;
+}
+
+function acceptedPlanOf(bag: Bag, patientId: string) {
+  let found: AnyRec | null = null;
+  eachPlan(bag, (plan, family, card) => {
+    const owner = card?.patient?.id ?? family.patient?.id;
+    if (owner !== patientId || !['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(plan.status)) return;
+    if (!found || String(plan.signedAt ?? '') > String(found.signedAt ?? '')) found = plan;
+  });
+  return found;
+}
+
+/** A closed visit marks the materials held for it as used, as the API does. */
+function consumeDemoVisit(bag: Bag, appointmentId: string) {
+  eachPlan(bag, (plan) => {
+    for (const item of planItems(plan)) {
+      if (item.appointmentId !== appointmentId) continue;
+      for (const row of (item.reservations ?? []) as DemoReservation[]) {
+        if (row.status === 'RESERVED' || row.status === 'SHORT') row.status = 'CONSUMED';
+      }
+    }
+  });
 }
 
 function restorePlan(bag: Bag, planId: string, versionId: string) {
@@ -1466,6 +1834,7 @@ function importMigration(bag: Bag, data: AnyRec) {
         ...row,
         phone: digits.length >= 10 ? row.phone : null,
         source: data.source || 'IMPORT',
+        clientType: row.segment?.trim() || null,
         notes: [row.comment, row.cardNumber ? `Медкарта ${row.cardNumber}` : '', row.balance ? `Баланс при переезде ${row.balance}` : ''].filter(Boolean).join(' · ') || null,
         consentPd: true,
       });
@@ -1724,6 +2093,104 @@ function addPayment(bag: Bag, data: AnyRec) {
   return row;
 }
 
+/** Mirrors WorkspaceService.today on the demo's anchored dates. */
+function demoToday(bag: Bag, token: string) {
+  const now = anchorNow();
+  const day = now.slice(0, 10);
+  const tomorrow = new Date(Date.parse(`${day}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  const role = roleOf(token);
+  const seeMoney = role !== 'doctor';
+  const invoices = (bag.gets['/finance/invoices'] ?? []) as AnyRec[];
+  const debtOf = (patientId: string) => invoices
+    .filter((row) => row.patientId === patientId && ['ISSUED', 'PARTIAL'].includes(row.status))
+    .reduce((acc, row) => acc + Math.max(0, kopecks(row.totalAmount) - kopecks(row.discountAmount) - kopecks(row.paidAmount)), 0) / 100;
+  const visits = bag.appointments
+    .filter((row) => wallDate(row.startsAt, 180) === day && row.status !== 'CANCELLED')
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+    .map((row) => {
+      const status = row.status === 'ARRIVED' ? 'WAITING' : row.status;
+      const patient = findPatient(bag, row.patientId);
+      const debt = debtOf(row.patientId);
+      const reviewDue = medicalReviewDue(patient?.medicalConfirmedAt ?? null, new Date(now));
+      const next = ['SCHEDULED', 'CONFIRMED'].includes(status) ? 'check-in' : status === 'WAITING' ? 'start' : status === 'IN_PROGRESS' ? 'continue' : status === 'COMPLETED' && debt > 0 ? 'pay' : null;
+      const alerts = [
+        ...((patient?.allergies ?? []) as string[]).map((item) => `Аллергия: ${item}`),
+        ...(patient?.anticoagulant ? ['Антикоагулянты'] : []),
+        ...(patient?.contraindications ? [String(patient.contraindications)] : []),
+      ];
+      return { id: row.id, startsAt: row.startsAt, endsAt: row.endsAt, status, patientId: row.patientId, patient: row.patient, phone: patient?.phone ?? null, service: row.service, doctor: row.doctor, cabinet: row.cabinet, alerts, reviewDue, debt: seeMoney ? debt : null, next };
+    });
+  const live = visits.filter((row) => !['COMPLETED', 'NO_SHOW'].includes(row.status));
+  const attention = [
+    ...bag.appointments
+      .filter((row) => wallDate(row.startsAt, 180) === tomorrow && row.status === 'SCHEDULED')
+      .map((row) => ({ kind: 'confirm', title: `Подтвердить завтрашний визит: ${row.patient}`, detail: new Date(row.startsAt).toISOString().slice(11, 16), href: `/visits/${row.id}`, patientId: row.patientId })),
+    ...live.filter((row) => row.reviewDue).map((row) => ({ kind: 'review', title: `Уточнить анамнез: ${row.patient}`, detail: 'перед приёмом сегодня', href: `/visits/${row.id}`, patientId: row.patientId })),
+    ...(seeMoney ? visits.filter((row) => row.status === 'COMPLETED' && (row.debt ?? 0) > 0).map((row) => ({ kind: 'pay', title: `Принять оплату: ${row.patient}`, detail: `осталось ${Math.round(row.debt ?? 0).toLocaleString('ru-RU')} ₽`, href: `/finance?patient=${encodeURIComponent(String(row.patient).split(' ')[0])}`, patientId: row.patientId })) : []),
+  ];
+  const payments = ((bag.gets['/finance/payments'] ?? []) as AnyRec[]).filter((row) => wallDate(row.paidAt, 180) === day);
+  return {
+    day,
+    now,
+    visits,
+    counts: {
+      total: visits.filter((row) => row.status !== 'NO_SHOW').length,
+      done: visits.filter((row) => row.status === 'COMPLETED').length,
+      waiting: visits.filter((row) => row.status === 'WAITING').length,
+      inChair: visits.filter((row) => row.status === 'IN_PROGRESS').length,
+      noShow: visits.filter((row) => row.status === 'NO_SHOW').length,
+    },
+    attention,
+    money: seeMoney ? { revenueToday: payments.reduce((acc, row) => acc + kopecks(row.amount), 0) / 100, dueToday: visits.reduce((acc, row) => acc + (row.debt ?? 0), 0) } : null,
+    tomorrow: attention.filter((item) => item.kind === 'confirm').length,
+  };
+}
+
+/** Mirrors FinanceService.desk on the demo's anchored dates. */
+function demoDesk(bag: Bag) {
+  const now = anchorNow();
+  const day = now.slice(0, 10);
+  const invoices = (bag.gets['/finance/invoices'] ?? []) as AnyRec[];
+  const payments = (bag.gets['/finance/payments'] ?? []) as AnyRec[];
+  const visitToday = new Map(bag.appointments.filter((row) => wallDate(row.startsAt, 180) === day && !['CANCELLED', 'NO_SHOW'].includes(row.status)).map((row) => [row.patientId, row]));
+  const due = invoices
+    .filter((row) => ['ISSUED', 'PARTIAL'].includes(row.status))
+    .map((row) => {
+      const left = Math.max(0, kopecks(row.totalAmount) - kopecks(row.discountAmount) - kopecks(row.paidAmount));
+      const patient = findPatient(bag, row.patientId);
+      const today = visitToday.get(row.patientId);
+      return {
+        invoiceId: row.id, number: row.number, createdAt: row.createdAt ?? now, dueDate: row.dueDate ?? null, promiseNote: row.promiseNote ?? null,
+        patient: { id: row.patientId, name: personName(patient ?? row.patient), phone: patient?.phone ?? null },
+        total: fromKopecks(kopecks(row.totalAmount)), discount: fromKopecks(kopecks(row.discountAmount)), paid: fromKopecks(kopecks(row.paidAmount)), due: fromKopecks(left), left,
+        visitToday: today ? { startsAt: today.startsAt, status: today.status } : null,
+      };
+    })
+    .filter((row) => row.left > 0)
+    .sort((a, b) => Number(!!b.visitToday) - Number(!!a.visitToday) || String(b.createdAt).localeCompare(String(a.createdAt)));
+  const todays = payments.filter((row) => wallDate(row.paidAt, 180) === day);
+  const sum = (rows: AnyRec[]) => rows.reduce((acc, row) => acc + kopecks(row.amount), 0);
+  return {
+    day, timezone: 'Europe/Moscow', branchId: null,
+    totals: {
+      revenueToday: fromKopecks(sum(todays)),
+      cashToday: fromKopecks(sum(todays.filter((row) => row.method === 'CASH'))),
+      otherToday: fromKopecks(sum(todays.filter((row) => row.method !== 'CASH'))),
+      receivable: fromKopecks(due.reduce((acc, row) => acc + row.left, 0)),
+      openInvoices: due.length,
+      dueToday: fromKopecks(due.filter((row) => row.visitToday).reduce((acc, row) => acc + row.left, 0)),
+    },
+    due: due.map(({ left: _left, ...row }) => row),
+    payments: todays.map((row) => {
+      const amount = kopecks(row.amount);
+      const refunded = Math.abs(sum(payments.filter((other) => other.refundOfId === row.id)));
+      const patient = findPatient(bag, row.patientId);
+      const invoice = invoices.find((item) => item.id === row.invoiceId);
+      return { id: row.id, paidAt: row.paidAt, amount: fromKopecks(amount), method: row.method, isRefund: amount < 0, refundable: amount > 0 ? fromKopecks(Math.max(0, amount - refunded)) : '0.00', patient: { id: row.patientId, name: personName(patient) }, invoiceNumber: invoice?.number ?? null };
+    }),
+  };
+}
+
 function discountInvoice(bag: Bag, id: string, discountAmount: number) {
   const invoice = (bag.gets['/finance/invoices'] as AnyRec[]).find((item) => item.id === id);
   if (!invoice) throw new Error('Счёт не найден');
@@ -1750,10 +2217,9 @@ function applyPaid(bag: Bag, invoiceId: string | undefined, delta: number) {
   if (!invoiceId) return;
   const invoice = (bag.gets['/finance/invoices'] as AnyRec[]).find((item) => item.id === invoiceId);
   if (!invoice) return;
-  const paid = Math.max(0, Number(invoice.paidAmount ?? 0) + delta);
-  const due = Number(invoice.totalAmount) - Number(invoice.discountAmount ?? 0);
-  invoice.paidAmount = String(paid);
-  invoice.status = paid <= 0 ? 'ISSUED' : paid >= due ? 'PAID' : 'PARTIAL';
+  const paid = Math.max(0, kopecks(invoice.paidAmount) + kopecks(delta));
+  invoice.paidAmount = fromKopecks(paid);
+  invoice.status = invoiceStatus({ total: kopecks(invoice.totalAmount), discount: kopecks(invoice.discountAmount), paid, current: invoice.status });
 }
 
 function remember(bag: Bag, pathname: string, method: string, data: AnyRec, _token: string) {

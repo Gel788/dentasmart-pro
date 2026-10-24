@@ -1,7 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { AuthUser } from '@dentasmart/shared';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { AuthUser, canMoveVisit, isVisitClosed, isVisitStatus, medicalReviewDue, visitMoveError, type VisitStatus } from '@dentasmart/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertPlace } from '../common/clinic-place';
 import { consumeStock } from '../domains/stock-consume';
+import { consumeForVisit, moveLabDeadlines } from '../route/route-chain';
 import { AuditService } from '../common/audit.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -57,6 +59,7 @@ export class AppointmentsService {
       where: { id: dto.branchId, organizationId: user.organizationId },
     });
     if (!branch) throw new NotFoundException('Филиал не найден');
+    await assertPlace(this.prisma, user.organizationId, { branchId: dto.branchId, doctorId: dto.doctorId, cabinetId: dto.cabinetId, serviceId: dto.serviceId });
 
     await this.assertSlot({
       branchId: dto.branchId,
@@ -100,6 +103,7 @@ export class AppointmentsService {
   async update(orgId: string, id: string, dto: UpdateAppointmentDto, userId: string) {
     const appt = await this.prisma.appointment.findFirst({ where: { id, organizationId: orgId } });
     if (!appt) throw new NotFoundException();
+    if (isVisitClosed(appt.status as VisitStatus)) throw new BadRequestException('Закрытый визит не переносят. Создайте новую запись');
 
     const startsAt = dto.startsAt ? new Date(dto.startsAt) : appt.startsAt;
     const endsAt = dto.endsAt ? new Date(dto.endsAt) : appt.endsAt;
@@ -111,6 +115,7 @@ export class AppointmentsService {
     const doctorId =
       dto.doctorId !== undefined ? (dto.doctorId ? dto.doctorId : null) : appt.doctorId;
     const cabinetId = dto.cabinetId !== undefined ? dto.cabinetId : appt.cabinetId;
+    await assertPlace(this.prisma, orgId, { branchId, doctorId, cabinetId, serviceId: dto.serviceId });
 
     await this.assertSlot({
       branchId,
@@ -141,6 +146,8 @@ export class AppointmentsService {
         branch: { select: { id: true, name: true } },
       },
     });
+
+    if (startsAt.getTime() !== appt.startsAt.getTime()) await moveLabDeadlines(this.prisma, orgId, id, startsAt);
 
     await this.audit.log({
       organizationId: orgId,
@@ -236,6 +243,25 @@ export class AppointmentsService {
   async updateStatus(orgId: string, id: string, status: string, userId: string, noShowReason?: string) {
     const appt = await this.prisma.appointment.findFirst({ where: { id, organizationId: orgId } });
     if (!appt) throw new NotFoundException();
+    if (!isVisitStatus(status)) throw new BadRequestException('Неизвестный статус визита');
+    if (!canMoveVisit(appt.status as VisitStatus, status)) throw new BadRequestException(visitMoveError(appt.status as VisitStatus, status));
+    // The calendar follows the same rules as the visit screen: history confirmed before the chair,
+    // a diagnosis and what was done before the visit closes.
+    if (status === 'IN_PROGRESS') {
+      const patient = await this.prisma.patient.findFirst({ where: { id: appt.patientId, organizationId: orgId } });
+      if (patient && medicalReviewDue(patient.medicalConfirmedAt)) {
+        throw new BadRequestException('Перед приёмом уточните анамнез у пациента и подтвердите медкарту');
+      }
+    }
+    if (status === 'COMPLETED') {
+      const note = await this.prisma.visitNote.findUnique({ where: { appointmentId: id } });
+      if (!note?.diagnosis?.trim() || !note.treatment?.trim()) {
+        throw new BadRequestException('Закройте визит на экране приёма: нужны диагноз и что сделали');
+      }
+    }
+    // Only move if nobody changed the status in between; otherwise the second click reports the real state.
+    const moved = await this.prisma.appointment.updateMany({ where: { id, status: appt.status }, data: { status } });
+    if (!moved.count) throw new ConflictException('Статус визита только что изменили. Обновите страницу');
     const updated = await this.prisma.appointment.update({
       where: { id },
       data: {
@@ -249,6 +275,7 @@ export class AppointmentsService {
       },
     });
 
+    if (status === 'COMPLETED') await consumeForVisit(this.prisma, orgId, id);
     if (status === 'COMPLETED' && appt.serviceId) {
       await this.deductServiceMaterials(
         orgId,

@@ -1,0 +1,38 @@
+/* Dictation sits above the protocol as one ruled block: record or type, then a draft to accept. */
+.box { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--border); background: var(--surface-2); }
+.head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.head h3 { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 14px !important; font-weight: 700; }
+.note { color: var(--muted); font-size: 12.5px; }
+.rec { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.start, .stop { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 18px; border: 0; font: inherit; font-weight: 700; cursor: pointer; }
+.start { background: var(--accent); color: #fff; }
+.start:hover { background: var(--accent-hover); }
+.stop { background: var(--danger); color: #fff; font-variant-numeric: tabular-nums; }
+.start:disabled { opacity: 0.6; cursor: default; }
+.hint { margin: 0; color: var(--text-secondary); font-size: 13px; max-width: 62ch; }
+.typed { display: flex; gap: 8px; align-items: flex-end; }
+.typed label { flex: 1; min-width: 0; }
+.typed textarea { width: 100%; min-height: 72px; padding: 10px 12px; border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 14.5px; resize: vertical; border-radius: var(--r-sm); }
+.typed textarea:focus { outline: 0; box-shadow: inset 0 0 0 1px var(--border-strong); }
+.typed :global(.sd-btn-ghost) { min-height: 46px; gap: 6px; }
+.error { margin: 0; padding: 8px 10px; border: 1px solid var(--danger); background: var(--danger-soft); color: var(--danger); font-size: 13.5px; font-weight: 600; }
+.ok { display: flex; gap: 8px; align-items: center; margin: 0; color: var(--ok); font-size: 13.5px; font-weight: 600; }
+.draft { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--border-strong); background: var(--surface-solid); border-radius: var(--r-sm); }
+.draft h4 { margin: 6px 0 0; font-size: 13px; font-weight: 700; color: var(--text-secondary); }
+.transcript summary { cursor: pointer; color: var(--accent-ink); font-size: 13px; min-height: 32px; display: inline-flex; align-items: center; border-radius: var(--r-sm); }
+.transcript p { margin: 4px 0 0; color: var(--text-secondary); font-size: 13.5px; white-space: pre-wrap; }
+.fields { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.fields li { border-top: 1px solid var(--border); }
+.fields li:first-child { border-top: 0; }
+.fields label { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; padding: 8px 0; cursor: pointer; }
+.fields input { width: 20px; height: 20px; margin-top: 1px; accent-color: var(--accent); }
+.fields span { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.fields b { font-size: 12.5px; font-weight: 700; color: var(--text-secondary); }
+.fields em { font-style: normal; color: var(--muted); font-size: 12px; }
+.acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.acts :global(.sd-btn-ghost) { min-height: 46px; }
+:global(html.dark) .start, :global(html.dark) .stop { color: #0f1215; }
+@media (max-width: 720px) {
+  .typed { flex-direction: column; align-items: stretch; }
+  .acts > * { flex: 1 1 auto; }
+}

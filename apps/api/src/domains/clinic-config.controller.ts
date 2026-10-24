@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser } from '@dentasmart/shared';
 import { Prisma } from '@dentasmart/database';
@@ -36,7 +36,7 @@ export class ClinicConfigController {
 
   @Post('brand')
   @RequirePermissions('org.manage')
-  brand(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Body() body: Record<string, string>) {
+  brand(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Body() body: Record<string, unknown>) {
     return this.config.saveBrand(orgId, user.id, body);
   }
 
@@ -44,6 +44,24 @@ export class ClinicConfigController {
   @RequirePermissions('org.manage')
   service(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Body() body: Parameters<ClinicConfigService['saveService']>[2]) {
     return this.config.saveService(orgId, user.id, body, body && 'id' in body ? (body as { id?: string }).id : undefined);
+  }
+
+  @Post('categories')
+  @RequirePermissions('org.manage')
+  createCategory(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Body() body: { name?: string }) {
+    return this.config.saveCategory(orgId, user.id, body);
+  }
+
+  @Post('categories/:id')
+  @RequirePermissions('org.manage')
+  renameCategory(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { name?: string }) {
+    return this.config.saveCategory(orgId, user.id, body, id);
+  }
+
+  @Post('categories/:id/delete')
+  @RequirePermissions('org.manage')
+  deleteCategory(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { moveTo?: string | null }) {
+    return this.config.deleteCategory(orgId, user.id, id, body?.moveTo ?? null);
   }
 
   @Post('services/:id/archive')
@@ -104,6 +122,30 @@ export class ClinicConfigController {
   @RequirePermissions('org.manage')
   employee(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Body() body: Parameters<ClinicConfigService['saveEmployee']>[2]) {
     return this.config.saveEmployee(orgId, user.id, body);
+  }
+
+  @Post('ai')
+  @RequirePermissions('org.manage')
+  ai(@OrgId() orgId: string, @Body() body: { enabled?: boolean }) {
+    return this.config.setAiPlans(orgId, body.enabled !== false);
+  }
+
+  @Get('exceptions')
+  @RequirePermissions('schedule.read')
+  exceptions(@OrgId() orgId: string) {
+    return this.config.exceptions(orgId);
+  }
+
+  @Post('exceptions')
+  @RequirePermissions('org.manage')
+  saveException(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Body() body: Record<string, unknown>) {
+    return this.config.saveException(orgId, user.id, body as Parameters<ClinicConfigService['saveException']>[2]);
+  }
+
+  @Delete('exceptions/:id')
+  @RequirePermissions('org.manage')
+  deleteException(@OrgId() orgId: string, @CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.config.deleteException(orgId, user.id, id);
   }
 
   @Post('cabinets')

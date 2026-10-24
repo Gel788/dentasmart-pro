@@ -1,0 +1,28 @@
+/* The owner's month: clean white cards, one figure each with its trend, then a card per doctor. */
+.board { display: flex; flex-direction: column; gap: 12px; }
+.head { display: flex; align-items: baseline; gap: 12px; }
+.head h2 { margin: 0; font-size: 18px !important; font-weight: 700; }
+.head nav { display: flex; gap: 14px; margin-left: auto; }
+.head a { color: var(--accent-ink); font-size: 13.5px; font-weight: 600; text-decoration: none; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-solid); }
+.tile > span:first-child { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.tile b { font-size: clamp(22px, 0.8vw + 16px, 28px); font-weight: 650; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tile small { display: inline-flex; align-items: center; gap: 3px; color: var(--text-secondary); font-size: 12.5px; }
+.tile small[data-trend='up'] { color: var(--teal, #0f8f84); font-weight: 600; }
+.tile small[data-trend='down'] { color: var(--danger); font-weight: 600; }
+.tile[data-tone='owe'] b { color: var(--code-owe, var(--danger)); }
+.tile[data-tone='warn'] b { color: var(--warning); }
+.meter { display: block; height: 6px; margin-top: auto; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.meter i { display: block; height: 100%; border-radius: inherit; background: var(--warning); }
+.doctors { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.doctor { padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-solid); }
+.doctor header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.doctor header b { font-size: 15px; font-weight: 700; }
+.avatar { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); font-size: 12.5px; font-weight: 700; }
+.doctor dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 8px; margin: 0; }
+.doctor dt { color: var(--muted); font-size: 11.5px; font-weight: 600; }
+.doctor dd { margin: 2px 0 0; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.doctor dd[data-warn] { color: var(--warning); }
+.wide { grid-column: 1 / -1; padding-top: 10px; border-top: 1px solid var(--border); }
+.wide dd { font-size: 20px; }

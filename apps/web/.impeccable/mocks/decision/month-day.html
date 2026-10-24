@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Месяц и день</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+*{box-sizing:border-box;margin:0}
+body{width:1440px;height:900px;overflow:hidden;background:#EEF2F1;color:#10201F;font:14px/1.4 'Golos Text',sans-serif;display:grid;grid-template-columns:216px 1fr}
+nav{background:#fff;border-right:1px solid #DCE3E1;padding:18px 12px;display:flex;flex-direction:column;gap:4px}
+nav b{display:flex;gap:10px;align-items:center;padding:4px 10px 16px;font-weight:700}nav b i{width:30px;height:30px;border-radius:9px;background:#0B6E66;display:block}
+nav a{padding:9px 12px;border-radius:10px;color:#3B4A48;text-decoration:none}nav a.on{background:#E1EFEC;color:#08534D;font-weight:600}
+main{display:grid;grid-template-rows:auto auto 1fr;min-width:0}
+.top{display:flex;align-items:center;gap:12px;padding:16px 24px;border-bottom:1px solid #DCE3E1}
+h1{font:600 22px Unbounded,sans-serif;margin-right:auto}
+.seg{display:flex;background:#F6F9F8;border:1px solid #DCE3E1;border-radius:11px;padding:3px}.seg span{padding:6px 14px;border-radius:8px;color:#3B4A48}.seg .on{background:#fff;border:1px solid #DCE3E1;color:#10201F;font-weight:600}
+.btn{background:#0B6E66;color:#fff;border-radius:10px;padding:9px 16px;font-weight:600}
+.month{display:grid;grid-template-columns:repeat(31,1fr);gap:3px;padding:12px 24px;border-bottom:1px solid #DCE3E1;background:#fff}
+.d{height:52px;border-radius:7px;display:flex;flex-direction:column;justify-content:space-between;padding:5px 6px;font:500 11px 'IBM Plex Mono',monospace;color:#3B4A48}
+.d em{font-style:normal;font-size:10px}.d.w{color:#52625F}.d.sel{outline:2px solid #10201F;outline-offset:1px}
+.l0{background:#F3F6F5}.l1{background:#DCEDE9}.l2{background:#A9D3CC}.l3{background:#5FA79E;color:#fff}.l4{background:#0B6E66;color:#fff}
+.day{display:grid;grid-template-columns:1fr 320px;min-height:0}
+.grid{display:grid;grid-template-columns:56px repeat(3,1fr);position:relative;overflow:hidden;background:#fff;margin:14px 0 14px 24px;border:1px solid #DCE3E1;border-radius:14px}
+.hh{grid-column:1/-1;display:grid;grid-template-columns:56px repeat(3,1fr);border-bottom:1px solid #DCE3E1;font-weight:600}.hh div{padding:10px 12px}.hh small{display:block;font-weight:400;color:#52625F}
+.col{position:relative;border-left:1px solid #E6ECEA;height:560px;background:repeating-linear-gradient(#fff 0 55px,#EEF2F1 55px 56px)}
+.times{height:560px;font:500 11px 'IBM Plex Mono',monospace;color:#52625F;display:grid;grid-template-rows:repeat(10,56px);padding:2px 8px}
+.v{position:absolute;left:6px;right:6px;border-radius:9px;padding:6px 9px;font-size:12.5px;border-left:3px solid #0B6E66;background:#E1EFEC;overflow:hidden}
+.v b{display:block;font-size:13px}.v span{color:#3B4A48}.v.w{background:#FBE7CF;border-color:#B45309}.v.r{background:#FDE8E6;border-color:#9B1C12}.v.g{background:#EEF2F1;border-color:#C5D0CD;color:#52625F}
+.now{position:absolute;left:56px;right:0;top:196px;height:2px;background:#9B1C12}.now:before{content:'11:30';position:absolute;left:-52px;top:-8px;font:600 11px 'IBM Plex Mono',monospace;color:#9B1C12}
+aside{margin:14px 24px 14px 14px;background:#fff;border:1px solid #DCE3E1;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px}
+aside h2{font-size:17px}.chip{display:inline-block;border-radius:7px;padding:3px 8px;font-size:12.5px;margin:2px 4px 2px 0}.ok{background:#E3F3EA;color:#1B6B3E}.wa{background:#FBE7CF;color:#8A3F06}.bad{background:#FDE8E6;color:#9B1C12}
+.row{display:flex;justify-content:space-between;color:#3B4A48}
+</style></head><body>
+<nav><b><i></i>DentaSmart</b><a>Сегодня</a><a>Пациенты</a><a class="on">Расписание</a><a>Снабжение</a><a>Деньги</a></nav>
+<main>
+<div class="top"><h1>Октябрь 2026</h1><div class="seg"><span>День</span><span class="on">Месяц</span><span>Неделя</span><span>Повестка</span></div><span>Все врачи ▾</span><span class="btn">Записать</span></div>
+<div class="month">
+<div class="d l2">1<em>72%</em></div><div class="d l3">2<em>81%</em></div><div class="d w l0">3<em>—</em></div><div class="d w l0">4<em>—</em></div><div class="d l2">5<em>64%</em></div><div class="d l3">6<em>88%</em></div><div class="d l2">7<em>70%</em></div><div class="d l1">8<em>41%</em></div><div class="d l3">9<em>85%</em></div><div class="d w l0">10<em>—</em></div><div class="d w l1">11<em>22%</em></div><div class="d l4">12<em>96%</em></div><div class="d l3">13<em>83%</em></div><div class="d l2">14<em>67%</em></div><div class="d l3">15<em>79%</em></div><div class="d l2">16<em>61%</em></div><div class="d w l0">17<em>—</em></div><div class="d w l0">18<em>—</em></div><div class="d l3">19<em>86%</em></div><div class="d l4 sel">20<em>92%</em></div><div class="d l2">21<em>58%</em></div><div class="d l2">22<em>63%</em></div><div class="d l1">23<em>38%</em></div><div class="d w l0">24<em>—</em></div><div class="d w l0">25<em>—</em></div><div class="d l1">26<em>34%</em></div><div class="d l1">27<em>29%</em></div><div class="d l1">28<em>18%</em></div><div class="d l0">29<em>9%</em></div><div class="d l0">30<em>5%</em></div><div class="d w l0">31<em>—</em></div>
+</div>
+<div class="day">
+<div class="grid">
+<div class="hh"><div></div><div>Кресло 1<small>Козлова О. · хирург</small></div><div>Кресло 2<small>Петров А. · терапевт</small></div><div>Кресло 3<small>Сафарян К. · ортопед</small></div></div>
+<div class="times"><span>9:00</span><span>10:00</span><span>11:00</span><span>12:00</span><span>13:00</span><span>14:00</span><span>15:00</span><span>16:00</span><span>17:00</span><span>18:00</span></div>
+<div class="col"><div class="v g" style="top:4px;height:80px"><b>Иванов М.</b><span>Каналы 26 · проведён</span></div><div class="v" style="top:116px;height:108px"><b>Смирнова А.</b><span>Имплантация 36 · идёт</span></div><div class="v w" style="top:286px;height:52px"><b>Новикова В.</b><span>Консультация · не подтв.</span></div></div>
+<div class="col"><div class="v g" style="top:30px;height:52px"><b>Попов О.</b><span>Гигиена · проведён</span></div><div class="v" style="top:172px;height:80px"><b>Морозова Е.</b><span>Кариес 16 · в клинике</span></div><div class="v r" style="top:340px;height:52px"><b>Кузнецов Д.</b><span>Коронка 46 · лаб. не готова</span></div></div>
+<div class="col"><div class="v" style="top:60px;height:108px"><b>Фёдоров А.</b><span>Мост 34–36 · примерка</span></div><div class="v" style="top:396px;height:80px"><b>Лебедева С.</b><span>Ретейнер · долг 15 000 ₽</span></div></div>
+<div class="now"></div>
+</div>
+<aside><h2>Смирнова Анна · 11:00–12:30</h2><div class="row"><span>Имплантация 36</span><span>Кресло 1</span></div>
+<div><span class="chip ok">Визит · идёт</span><span class="chip ok">Материалы · в резерве</span><span class="chip ok">Лаборатория · шаблон готов</span><span class="chip wa">Оплата · 58 000 ₽</span></div>
+<div class="row"><span>Аллергия</span><b style="color:#9B1C12">лидокаин, латекс</b></div><span class="btn" style="text-align:center">Открыть карту</span><span style="text-align:center;color:#3B4A48">Перенести · Отменить</span></aside>
+</div></main></body></html>

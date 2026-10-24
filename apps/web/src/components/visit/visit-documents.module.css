@@ -1,0 +1,27 @@
+/* The visit's papers: one ruled list, a code square per paper, the visit's start waits on it. */
+.box { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--border); border-top: 4px solid var(--code-owe); background: var(--surface-solid); border-radius: var(--r); }
+.box[data-ready] { border-top-color: var(--code-paid); }
+.head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.head h3 { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 14px !important; font-weight: 700; }
+.summary { flex: 1; min-width: 200px; color: var(--text-secondary); font-size: 13px; }
+.box:not([data-ready]) .summary { color: var(--code-owe); font-weight: 600; }
+.printAll { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 0; background: var(--accent-soft); color: var(--accent-ink); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.printAll:hover { background: color-mix(in srgb, var(--accent) 16%, var(--surface-solid)); }
+.warn { margin: 0; padding: 8px 10px; background: var(--warning-soft); color: var(--warning); font-size: 13px; font-weight: 600; }
+.warn a { color: inherit; }
+.list { margin: 0; padding: 0; list-style: none; }
+.list li { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 56px; padding: 6px 0; border-top: 1px solid var(--border); }
+.mark { display: grid; place-items: center; width: 16px; height: 16px; border: 2px dashed var(--code-owe); color: #fff; }
+.list li[data-status='PRINTED'] .mark { border-style: solid; }
+.list li[data-status='SIGNED'] .mark { border: 0; background: var(--code-paid); }
+.text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.text b { font-size: 14px; font-weight: 600; }
+.text small { color: var(--muted); font-size: 12.5px; }
+.acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.acts :global(.sd-btn), .acts :global(.sd-btn-ghost) { min-height: 44px; }
+.error { margin: 0; color: var(--danger); font-size: 13.5px; font-weight: 600; }
+:global(html.dark) .printAll { color: #0f1215; }
+@media (max-width: 720px) {
+  .list li { grid-template-columns: 18px minmax(0, 1fr); }
+  .acts { grid-column: 2; justify-content: flex-start; }
+}

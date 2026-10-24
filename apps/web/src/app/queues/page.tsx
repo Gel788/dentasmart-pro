@@ -119,7 +119,7 @@ export default function QueuesPage() {
                       {a.patient.lastName} {a.patient.firstName}
                     </Link>
                     <p className="text-sm text-[var(--muted)]">
-                      {new Date(a.startsAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      {new Date(a.startsAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       {' · '}
                       {a.service}
                       {' · '}
@@ -330,7 +330,7 @@ export default function QueuesPage() {
 function Stat({ label: name, value, tone }: { label: string; value: string; tone: 'danger' | 'warning' | 'accent' }) {
   const color = tone === 'danger' ? 'var(--danger)' : tone === 'warning' ? 'var(--warning)' : 'var(--accent)';
   return (
-    <div className="ds-card p-5">
+    <div className="ds-card ds-stat p-5">
       <p className="ds-display text-2xl" style={{ color }}>{value}</p>
       <p className="mt-1 text-sm text-[var(--muted)]">{name}</p>
     </div>

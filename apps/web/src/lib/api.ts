@@ -3,6 +3,13 @@ import { isDemo } from './demo/mode';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 const API_ORIGIN = API_URL.replace(/\/api\/v1\/?$/, '');
 
+/** A server refusal: the message is safe to show, `body` carries extra fields such as `requires2fa`. */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number, readonly body: Record<string, unknown>) {
+    super(message);
+  }
+}
+
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('dsp_token');
@@ -113,10 +120,25 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }));
     const message = Array.isArray(err.message) ? err.message.join(', ') : err.message;
-    throw new Error(message ?? 'Ошибка API');
+    throw new ApiError(message ?? 'Сервер не ответил. Попробуйте ещё раз', res.status, err);
   }
 
-  return res.json();
+  // A route that answers null (no open shift, nothing found) sends an empty body: that is «no data».
+  const text = await res.text();
+  return (text ? JSON.parse(text) : null) as T;
+}
+
+/** A POST that answers with sound (ZaZa's voice); null when the server has no voice to give. */
+export async function apiAudio(path: string, body: unknown): Promise<Blob | null> {
+  if (isDemo()) return null;
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) return null;
+  return res.blob();
 }
 
 export async function uploadFile(file: File): Promise<string> {

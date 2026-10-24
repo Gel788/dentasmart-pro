@@ -1,0 +1,65 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @dentasmart/shared build
+      - run: pnpm --filter @dentasmart/database db:generate
+      - run: pnpm --filter @dentasmart/shared test
+      - run: pnpm --filter @dentasmart/web test:import
+      - run: pnpm --filter @dentasmart/api exec tsc --noEmit -p .
+      - run: pnpm --filter @dentasmart/web exec tsc --noEmit -p .
+      - run: pnpm --filter @dentasmart/api build
+      - run: pnpm --filter @dentasmart/web build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+      - run: pnpm --filter @dentasmart/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @dentasmart/web test:e2e
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dentasmart
+          POSTGRES_PASSWORD: dentasmart
+          POSTGRES_DB: dentasmart
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U dentasmart"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://dentasmart:dentasmart@localhost:5432/dentasmart?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @dentasmart/shared build
+      - run: pnpm --filter @dentasmart/database db:push
+      - run: pnpm db:seed
+      - run: pnpm --filter @dentasmart/api test:int

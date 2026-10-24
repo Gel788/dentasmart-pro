@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { clinicianWhere } from './clinicians';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkspaceService } from './workspace.service';
 
@@ -243,7 +244,7 @@ export class ShowcaseService {
   async kpis(orgId: string) {
     const month = monthWindow();
     const doctors = await this.prisma.employee.findMany({
-      where: { user: { organizationId: orgId }, status: 'ACTIVE' },
+      where: clinicianWhere(orgId),
       select: { id: true, firstName: true, lastName: true, specialization: true },
     });
     const [appointments, plans] = await Promise.all([
@@ -421,13 +422,12 @@ export class ShowcaseService {
           channel: row.channel,
           message: `[автопилот] ${row.message}`,
           scheduledAt: new Date(),
-          sentAt: new Date(),
-          status: 'SENT',
+          status: 'PENDING',
         },
       });
       created.push({ id: reminder.id, channel: row.channel, name: row.name, demo: true });
     }
-    return { demo: true, sent: created.length, items: created };
+    return { demo: true, sent: 0, queued: created.length, items: created };
   }
 
   async copilot(orgId: string, patientId: string, note = '') {
@@ -563,7 +563,7 @@ export class ShowcaseService {
 
   async bookPortal(orgId: string, patientId: string, startsAt: string, serviceId?: string) {
     const cabinet = await this.prisma.cabinet.findFirst({ where: { branch: { organizationId: orgId }, isActive: true } });
-    const doctor = await this.prisma.employee.findFirst({ where: { user: { organizationId: orgId }, status: 'ACTIVE' }, orderBy: { createdAt: 'asc' } });
+    const doctor = await this.prisma.employee.findFirst({ where: clinicianWhere(orgId), orderBy: { createdAt: 'asc' } });
     const appointment = await this.workspace.book(orgId, {
       patientId,
       startsAt,
@@ -765,7 +765,7 @@ export class ShowcaseService {
         if (!clash) {
           slots.push({
             startsAt: at.toISOString(),
-            label: at.toLocaleString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
+            label: at.toLocaleString('ru-RU', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
           });
         }
         if (slots.length >= 6) break;

@@ -1,6 +1,15 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { clinicianWhere } from './clinicians';
 import { PrismaService } from '../prisma/prisma.service';
+import { DocumentsService } from './documents';
+import { formatRub, fromKopecks, kopecks } from '@dentasmart/shared';
+import { inputKopecks, isUniqueViolation, paymentByKey, recordPayment } from './invoice-ledger';
+import { consumeForVisit } from '../route/route-chain';
 import { ClinicConfigService } from './clinic-config.service';
+import { ClinicalService } from './clinical.service';
+import { FinanceService } from './finance.service';
+import { medicalView } from '../patients/patients.service';
+import { medicalReviewDue } from '@dentasmart/shared';
 
 export const PHOTO_SLOTS = [
   { code: 'FACE_SMILE', label: 'Лицо, улыбка' },
@@ -29,6 +38,9 @@ export class FlowService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ClinicConfigService,
+    private readonly clinical: ClinicalService,
+    private readonly finance: FinanceService,
+    private readonly documents: DocumentsService,
   ) {}
 
   async visit(orgId: string, id: string) {
@@ -53,8 +65,13 @@ export class FlowService {
       }),
       this.imaging(orgId, appointment.patientId),
     ]);
-    const debt = debtInvoices.reduce((sum, invoice) => sum + Math.max(0, Number(invoice.totalAmount) - Number(invoice.paidAmount)), 0);
+    const debt =
+      debtInvoices.reduce(
+        (sum, invoice) => sum + Math.max(0, kopecks(invoice.totalAmount) - kopecks(invoice.discountAmount) - kopecks(invoice.paidAmount)),
+        0,
+      ) / 100;
     const patient = appointment.patient;
+    const [medical, today] = await Promise.all([medicalView(this.prisma, patient), this.todayLines(orgId, appointment.patientId, id)]);
     return {
       id: appointment.id,
       status: appointment.status,
@@ -79,6 +96,8 @@ export class FlowService {
         contraindications: patient.contraindications,
       },
       debt,
+      medical,
+      today,
       note: appointment.visitNote,
       reminders: appointment.reminders.map((reminder) => ({
         id: reminder.id,
@@ -113,10 +132,10 @@ export class FlowService {
         patientId: appointment.patientId,
         appointmentId: id,
         channel: 'TELEGRAM',
-        message: `Седракович Дент: ждём вас ${appointment.startsAt.toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}. Ответьте «да», чтобы подтвердить.`,
+        message: `Седракович Дент: ждём вас ${appointment.startsAt.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}. Ответьте «да», чтобы подтвердить.`,
         scheduledAt: when,
-        sentAt: new Date(),
-        status: 'SENT',
+        // No messenger is connected yet: the reminder waits in the queue, it is not «sent».
+        status: 'PENDING',
       },
     });
     return this.visit(orgId, id);
@@ -148,9 +167,78 @@ export class FlowService {
     return this.visit(orgId, id);
   }
 
-  async start(orgId: string, id: string) {
+  /**
+   * What can be done in this visit: lines booked onto it first, then the open lines of the patient's
+   * accepted plans, or of the recommended variant of the latest proposal when nothing is accepted yet.
+   */
+  private async todayLines(orgId: string, patientId: string, appointmentId: string) {
+    const plans = await this.prisma.treatmentPlan.findMany({
+      where: { organizationId: orgId, patientId, status: { notIn: ['REJECTED', 'CANCELLED', 'COMPLETED'] } },
+      include: { items: { orderBy: [{ phase: 'asc' }, { sortOrder: 'asc' }] } },
+      orderBy: { createdAt: 'desc' },
+    });
+    const accepted = plans.filter((plan) => ['ACCEPTED', 'IN_PROGRESS'].includes(plan.status));
+    const latest = plans[0]?.familyKey ? plans.filter((plan) => plan.familyKey === plans[0].familyKey) : plans.slice(0, 1);
+    const pool = accepted.length ? accepted : [latest.find((plan) => plan.tier === 'OPTIMUM') ?? latest[0]].filter(Boolean);
+    const lines = pool.flatMap((plan) =>
+      plan.items
+        .filter((item) => item.appointmentId === appointmentId || item.status === 'PROPOSED' || item.status === 'ACCEPTED' || item.status === 'DONE')
+        .map((item) => ({
+          id: item.id,
+          planId: plan.id,
+          planTitle: plan.title,
+          title: item.title,
+          toothNum: item.toothNum,
+          surfaces: item.surfaces,
+          price: Number(item.price),
+          qty: item.qty && item.qty > 0 ? item.qty : 1,
+          unitPrice: Math.round(((item.listPrice == null ? Number(item.price) : Number(item.listPrice)) / (item.qty && item.qty > 0 ? item.qty : 1)) * 100) / 100,
+          discountPercent: Number(item.discountPercent),
+          status: item.status,
+          booked: item.appointmentId === appointmentId,
+          doneHere: item.status === 'DONE' && item.appointmentId === appointmentId,
+        })),
+    );
+    return lines
+      .filter((line) => line.status !== 'DONE' || line.doneHere)
+      .sort((a, b) => Number(b.booked) - Number(a.booked));
+  }
+
+  /**
+   * A service done in the chair that the plan didn't have: it joins the patient's current plan (the
+   * accepted one, else the recommended variant of the latest proposal, else a new draft), priced from
+   * the list, agreed and tied to this visit so closing the visit bills it.
+   */
+  async addVisitItem(orgId: string, id: string, body: { serviceId: string; toothNum?: number | null }, doctorId?: string) {
+    const appointment = await this.must(orgId, id);
+    if (appointment.status !== 'IN_PROGRESS') throw new BadRequestException('Добавить услугу можно во время приёма');
+    const plans = await this.prisma.treatmentPlan.findMany({
+      where: { organizationId: orgId, patientId: appointment.patientId, status: { notIn: ['REJECTED', 'CANCELLED', 'COMPLETED'] } },
+      orderBy: { createdAt: 'desc' },
+    });
+    const accepted = plans.find((plan) => plan.status === 'ACCEPTED' || plan.status === 'IN_PROGRESS');
+    const latest = plans[0]?.familyKey ? plans.filter((plan) => plan.familyKey === plans[0].familyKey) : plans.slice(0, 1);
+    let plan = accepted ?? latest.find((row) => row.tier === 'OPTIMUM') ?? latest[0];
+    if (!plan) plan = await this.clinical.createPlan(orgId, { patientId: appointment.patientId, title: 'План лечения', doctorId: doctorId ?? appointment.doctorId ?? undefined });
+    const item = await this.clinical.addPlanItem(orgId, plan.id, { serviceId: body.serviceId, toothNum: body.toothNum ?? undefined });
+    await this.prisma.treatmentPlanItem.update({ where: { id: item.id }, data: { appointmentId: id, status: 'ACCEPTED' } });
+    return this.visit(orgId, id);
+  }
+
+  async start(orgId: string, id: string, options: { userId?: string; skipDocumentsReason?: string } = {}) {
     const appointment = await this.must(orgId, id);
     this.assert(appointment.status, 'start');
+    const patient = await this.prisma.patient.findFirst({ where: { id: appointment.patientId, organizationId: orgId } });
+    if (patient && medicalReviewDue(patient.medicalConfirmedAt)) {
+      throw new BadRequestException('Перед приёмом уточните анамнез у пациента и подтвердите медкарту');
+    }
+    // No treatment before the patient has signed the contract and the consents for this visit.
+    const unsigned = await this.documents.blockers(orgId, id);
+    if (unsigned.length) {
+      const reason = (options.skipDocumentsReason ?? '').trim();
+      if (reason.length < 10) throw new BadRequestException(`Пациент не подписал: ${unsigned.map((doc) => doc.title).join('; ')}`);
+      await this.prisma.auditLog.create({ data: { organizationId: orgId, userId: options.userId, entityType: 'Appointment', entityId: id, action: 'UPDATE', changes: { startedWithoutDocuments: unsigned.map((doc) => doc.number), reason: reason.slice(0, 500) } } });
+    }
     await this.prisma.appointment.update({ where: { id }, data: { status: 'IN_PROGRESS' } });
     await this.prisma.receptionQueueItem.updateMany({
       where: { appointmentId: id, status: { in: ['WAITING', 'CALLED'] } },
@@ -188,8 +276,8 @@ export class FlowService {
         channel: 'WHATSAPP',
         message: 'Седракович Дент: напоминаем о визите сегодня. Если планы изменились, ответьте на это сообщение.',
         scheduledAt: new Date(),
-        sentAt: new Date(),
-        status: 'SENT',
+        // No messenger is connected yet: the reminder waits in the queue, it is not «sent».
+        status: 'PENDING',
       },
     });
     return this.visit(orgId, id);
@@ -226,20 +314,40 @@ export class FlowService {
     return this.visit(orgId, id);
   }
 
-  async complete(orgId: string, id: string, body: { followUpDate?: string; followUpReason?: string }) {
+  async complete(orgId: string, id: string, body: { followUpDate?: string; followUpReason?: string; doneItemIds?: string[] }) {
     const appointment = await this.must(orgId, id);
     this.assert(appointment.status, 'complete');
     const note = await this.prisma.visitNote.findUnique({ where: { appointmentId: id } });
     if (!note?.diagnosis?.trim()) throw new BadRequestException('Сначала запишите диагноз — без него визит не закрывается');
     if (!note.treatment?.trim()) throw new BadRequestException('Опишите, что сделали на приёме');
-    await this.prisma.appointment.update({ where: { id }, data: { status: 'COMPLETED' } });
+    if (body.followUpDate && Number.isNaN(+new Date(body.followUpDate))) throw new BadRequestException('Некорректная дата контроля');
+    // Only this patient's open plan lines in this clinic can be marked done by this visit.
+    const ids = [...new Set((body.doneItemIds ?? []).filter((value) => typeof value === 'string'))].slice(0, 100);
+    const done = ids.length
+      ? await this.prisma.treatmentPlanItem.findMany({
+          where: { id: { in: ids }, status: { in: ['PROPOSED', 'ACCEPTED'] }, plan: { organizationId: orgId, patientId: appointment.patientId } },
+        })
+      : [];
+    if (done.length !== ids.length) throw new BadRequestException('Часть услуг уже выполнена или не из плана этого пациента. Обновите страницу');
+    const closed = await this.prisma.appointment.updateMany({ where: { id, organizationId: orgId, status: 'IN_PROGRESS' }, data: { status: 'COMPLETED' } });
+    if (!closed.count) throw new BadRequestException('Визит уже закрыт или ещё не начат. Обновите страницу');
+    await consumeForVisit(this.prisma, orgId, id);
+    for (const item of done) {
+      await this.prisma.treatmentPlanItem.update({ where: { id: item.id }, data: { appointmentId: item.appointmentId ?? id } });
+      await this.clinical.completePlanItemWithMaterials(orgId, item.id, appointment.branchId, true);
+    }
+    const byPlan = new Map<string, string[]>();
+    for (const item of done) byPlan.set(item.planId, [...(byPlan.get(item.planId) ?? []), item.id]);
+    for (const [planId, itemIds] of byPlan) {
+      await this.finance.createInvoiceFromPlan(orgId, planId, { itemIds, appointmentId: id });
+    }
     await this.prisma.receptionQueueItem.updateMany({
       where: { appointmentId: id },
       data: { status: 'DONE' },
     });
+    await this.documents.afterVisit(orgId, id).catch(() => undefined);
     if (body.followUpDate) {
       const dueAt = new Date(body.followUpDate);
-      if (Number.isNaN(+dueAt)) throw new BadRequestException('Некорректная дата контроля');
       await this.prisma.followUp.create({
         data: {
           organizationId: orgId,
@@ -273,40 +381,47 @@ export class FlowService {
     return this.visit(orgId, id);
   }
 
-  async pay(orgId: string, id: string, body: { amount: number; method: string }) {
+  async pay(orgId: string, id: string, body: { amount: number | string; method: string }, actor: { userId?: string; idempotencyKey?: string } = {}) {
     const appointment = await this.must(orgId, id);
-    const amount = Number(body.amount);
-    if (!amount || amount <= 0) throw new BadRequestException('Укажите сумму');
+    const amount = inputKopecks(body.amount);
+    if (amount <= 0) throw new BadRequestException('Укажите сумму');
     const method = body.method === 'CASH' ? 'CASH' : 'CARD';
-    let invoice = await this.prisma.invoice.findFirst({
-      where: { organizationId: orgId, patientId: appointment.patientId, status: { in: ['ISSUED', 'PARTIAL', 'DRAFT'] } },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!invoice) {
-      invoice = await this.prisma.invoice.create({
-        data: {
-          organizationId: orgId,
-          patientId: appointment.patientId,
-          appointmentId: id,
-          number: `SD-${Date.now().toString().slice(-8)}`,
-          status: 'ISSUED',
-          totalAmount: amount,
-          items: { create: [{ title: appointment.serviceId ? 'Приём' : 'Оплата на стойке', price: amount }] },
-        },
-      });
+    if (!(await paymentByKey(this.prisma, orgId, actor.idempotencyKey))) {
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          let invoice = await tx.invoice.findFirst({
+            where: { organizationId: orgId, patientId: appointment.patientId, status: { in: ['ISSUED', 'PARTIAL', 'DRAFT'] } },
+            orderBy: { createdAt: 'desc' },
+          });
+          if (!invoice) {
+            invoice = await tx.invoice.create({
+              data: {
+                organizationId: orgId,
+                patientId: appointment.patientId,
+                appointmentId: id,
+                number: `SD-${Date.now().toString().slice(-8)}`,
+                status: 'ISSUED',
+                totalAmount: fromKopecks(amount),
+                items: { create: [{ title: appointment.serviceId ? 'Приём' : 'Оплата на стойке', price: fromKopecks(amount) }] },
+              },
+            });
+          }
+          const due = kopecks(invoice.totalAmount) - kopecks(invoice.discountAmount) - kopecks(invoice.paidAmount);
+          if (amount > Math.max(0, due)) throw new BadRequestException(`К оплате ${formatRub(Math.max(0, due))}`);
+          await recordPayment(tx, {
+            organizationId: orgId,
+            patientId: appointment.patientId,
+            invoiceId: invoice.id,
+            amountKopecks: amount,
+            method,
+            createdById: actor.userId,
+            idempotencyKey: actor.idempotencyKey,
+          });
+        });
+      } catch (error) {
+        if (!isUniqueViolation(error)) throw error;
+      }
     }
-    const due = Math.max(0, Number(invoice.totalAmount) - Number(invoice.paidAmount));
-    if (amount > due + 0.001) throw new BadRequestException(`К оплате ${Math.round(due)} ₽`);
-    await this.prisma.$transaction(async (tx) => {
-      await tx.payment.create({
-        data: { organizationId: orgId, patientId: appointment.patientId, invoiceId: invoice!.id, amount, method },
-      });
-      const paid = Number(invoice!.paidAmount) + amount;
-      await tx.invoice.update({
-        where: { id: invoice!.id },
-        data: { paidAmount: paid, status: paid >= Number(invoice!.totalAmount) ? 'PAID' : 'PARTIAL' },
-      });
-    });
     return this.visit(orgId, id);
   }
 
@@ -430,12 +545,20 @@ export class FlowService {
     return { ok: true };
   }
 
-  async acceptMark(id: string) {
+  private async markOf(orgId: string, id: string) {
+    const mark = await this.prisma.imagingAnnotation.findFirst({ where: { id, study: { patient: { organizationId: orgId } } } });
+    if (!mark) throw new NotFoundException('Отметка не найдена');
+    return mark;
+  }
+
+  async acceptMark(orgId: string, id: string) {
+    await this.markOf(orgId, id);
     await this.prisma.imagingAnnotation.update({ where: { id }, data: { source: 'CLINICIAN' } });
     return { ok: true };
   }
 
-  async hideMark(id: string) {
+  async hideMark(orgId: string, id: string) {
+    await this.markOf(orgId, id);
     await this.prisma.imagingAnnotation.delete({ where: { id } });
     return { ok: true };
   }
@@ -490,7 +613,7 @@ export class FlowService {
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
     const doctors = await this.prisma.employee.findMany({
-      where: { user: { organizationId: orgId }, status: 'ACTIVE' },
+      where: clinicianWhere(orgId),
       include: {
         appointments: { where: { startsAt: { gte: monthStart } }, select: { status: true } },
       },

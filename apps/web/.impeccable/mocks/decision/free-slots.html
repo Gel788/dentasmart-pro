@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Окна прежде всего</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+*{box-sizing:border-box;margin:0}
+body{width:1440px;height:900px;overflow:hidden;background:#EEF2F1;color:#10201F;font:14px/1.4 'Golos Text',sans-serif;display:grid;grid-template-columns:216px 400px 1fr}
+nav{background:#fff;border-right:1px solid #DCE3E1;padding:18px 12px;display:flex;flex-direction:column;gap:4px}
+nav b{display:flex;gap:10px;align-items:center;padding:4px 10px 16px;font-weight:700}nav b i{width:30px;height:30px;border-radius:9px;background:#0B6E66;display:block}
+nav a{padding:9px 12px;border-radius:10px;color:#3B4A48}nav a.on{background:#E1EFEC;color:#08534D;font-weight:600}
+.finder{background:#10201F;color:#F2F6F5;padding:22px;display:flex;flex-direction:column;gap:14px}
+.finder h1{font:600 20px Unbounded,sans-serif}.lab{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#9FD8CF}
+.f{background:#1C302E;border:1px solid #3E5653;border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between}.f span{color:#C3D2CF}
+.slot{display:grid;grid-template-columns:86px 1fr auto;align-items:center;gap:10px;background:#fff;color:#10201F;border-radius:12px;padding:12px 14px}
+.slot b{font:600 15px 'IBM Plex Mono',monospace}.slot small{color:#52625F;display:block}.slot i{font-style:normal;background:#0B6E66;color:#fff;border-radius:8px;padding:6px 10px;font-weight:600;font-size:13px}
+.slot.best{outline:2px solid #9FD8CF}
+main{display:grid;grid-template-rows:auto 1fr;min-width:0}
+.top{display:flex;align-items:center;gap:12px;padding:16px 24px;border-bottom:1px solid #DCE3E1}
+h2{font:600 18px Unbounded,sans-serif;margin-right:auto}.seg{display:flex;background:#F6F9F8;border:1px solid #DCE3E1;border-radius:11px;padding:3px}.seg span{padding:6px 14px;border-radius:8px;color:#3B4A48}.seg .on{background:#fff;border:1px solid #DCE3E1;color:#10201F;font-weight:600}
+.grid{display:grid;grid-template-columns:56px repeat(3,1fr);position:relative;background:#fff;margin:14px 24px;border:1px solid #DCE3E1;border-radius:14px;overflow:hidden}
+.hh{grid-column:1/-1;display:grid;grid-template-columns:56px repeat(3,1fr);border-bottom:1px solid #DCE3E1;font-weight:600}.hh div{padding:10px 12px}.hh small{display:block;font-weight:400;color:#52625F}
+.times{height:700px;font:500 11px 'IBM Plex Mono',monospace;color:#52625F;display:grid;grid-template-rows:repeat(10,70px);padding:2px 8px}
+.col{position:relative;border-left:1px solid #E6ECEA;height:700px;background:repeating-linear-gradient(#fff 0 69px,#EEF2F1 69px 70px)}
+.v{position:absolute;left:6px;right:6px;border-radius:9px;padding:6px 9px;font-size:12.5px;border-left:3px solid #0B6E66;background:#E1EFEC}.v b{display:block}.v span{color:#3B4A48}.v.g{background:#EEF2F1;border-color:#C5D0CD;color:#52625F}
+.free{position:absolute;left:6px;right:6px;border-radius:9px;border:2px dashed #0B6E66;background:#F2FAF8;padding:6px 9px;color:#08534D;font-weight:600;font-size:12.5px}
+.now{position:absolute;left:56px;right:0;top:245px;height:2px;background:#9B1C12}
+</style></head><body>
+<nav><b><i></i>DentaSmart</b><a>Сегодня</a><a>Пациенты</a><a class="on">Расписание</a><a>Снабжение</a><a>Деньги</a></nav>
+<section class="finder"><h1>Подобрать время</h1>
+<span class="lab">Пациент</span><div class="f">Ершова Дарья<span>+7 916 ···· 42</span></div>
+<span class="lab">Услуга и врач</span><div class="f">Консультация ортодонта<span>45 мин</span></div><div class="f">Любой ортодонт<span>▾</span></div>
+<span class="lab">Ближайшие окна · 6</span>
+<div class="slot best"><b>15:00</b><div>Сегодня, вт<small>Сафарян К. · кресло 3</small></div><i>Записать</i></div>
+<div class="slot"><b>17:15</b><div>Сегодня, вт<small>Сафарян К. · кресло 3</small></div><i>Записать</i></div>
+<div class="slot"><b>10:30</b><div>Завтра, ср<small>Сафарян К. · кресло 2</small></div><i>Записать</i></div>
+<div class="slot"><b>12:00</b><div>Чт, 22 окт<small>Сафарян К. · кресло 3</small></div><i>Записать</i></div>
+</section>
+<main><div class="top"><h2>Вторник, 20 октября</h2><div class="seg"><span class="on">День</span><span>Неделя</span><span>Месяц</span><span>Повестка</span></div></div>
+<div class="grid">
+<div class="hh"><div></div><div>Кресло 1<small>Козлова О.</small></div><div>Кресло 2<small>Петров А.</small></div><div>Кресло 3<small>Сафарян К.</small></div></div>
+<div class="times"><span>9:00</span><span>10:00</span><span>11:00</span><span>12:00</span><span>13:00</span><span>14:00</span><span>15:00</span><span>16:00</span><span>17:00</span><span>18:00</span></div>
+<div class="col"><div class="v g" style="top:4px;height:100px"><b>Иванов М.</b><span>Каналы 26</span></div><div class="v" style="top:144px;height:136px"><b>Смирнова А.</b><span>Имплантация 36</span></div></div>
+<div class="col"><div class="v g" style="top:36px;height:66px"><b>Попов О.</b><span>Гигиена</span></div><div class="v" style="top:214px;height:100px"><b>Морозова Е.</b><span>Кариес 16</span></div></div>
+<div class="col"><div class="v" style="top:74px;height:136px"><b>Фёдоров А.</b><span>Мост 34–36</span></div><div class="free" style="top:424px;height:50px">15:00–15:45 · Ершова Д.?</div><div class="v" style="top:494px;height:100px"><b>Лебедева С.</b><span>Ретейнер</span></div></div>
+<div class="now"></div></div></main></body></html>

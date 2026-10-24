@@ -49,6 +49,12 @@ export class WarehouseController {
     return this.svc.materialCost(orgId);
   }
 
+  @Post('purchase-orders')
+  @RequirePermissions('warehouse.write')
+  createPurchaseOrder(@OrgId() orgId: string, @Body() body: { supplierName?: string; expectedAt?: string; lines?: { itemId: string; quantity: number }[] }) {
+    return this.svc.createPurchaseOrder(orgId, body);
+  }
+
   @Post('items')
   @RequirePermissions('warehouse.write')
   createItem(@OrgId() orgId: string, @Body() body: { name: string; sku?: string; category?: string; minStock?: number }) {
@@ -85,8 +91,8 @@ export class WarehouseController {
 
   @Patch('inventory/lines/:lineId')
   @RequirePermissions('warehouse.write')
-  updateLine(@Param('lineId') lineId: string, @Body() body: { actualQty: number }) {
-    return this.svc.updateCountLine(lineId, body.actualQty);
+  updateLine(@OrgId() orgId: string, @Param('lineId') lineId: string, @Body() body: { actualQty: number }) {
+    return this.svc.updateCountLine(orgId, lineId, body.actualQty);
   }
 
   @Post('inventory/:sessionId/complete')

@@ -44,6 +44,24 @@ export class IntegrationsService {
     });
   }
 
+  async status(orgId: string) {
+    const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: orgId }, select: { slug: true } });
+    const [requests, documents] = await Promise.all([
+      this.prisma.bookingRequest.count({ where: { organizationId: orgId } }),
+      this.prisma.clinicDocument.count({ where: { organizationId: orgId } }),
+    ]);
+    const polza = Boolean(process.env.POLZA_API_KEY);
+    return {
+      polza: { connected: polza, assistantModel: process.env.CRM_ASSISTANT_MODEL || process.env.DICTATION_MODEL || 'sber/gigachat-2', widgetModel: process.env.AI_MODEL || 'anthropic/claude-haiku-5.5' },
+      widget: { slug: org.slug, requests },
+      documents: { issued: documents },
+      egisz: { connected: false },
+      kassa: { connected: false },
+      messages: { connected: false },
+      https: { connected: (process.env.PUBLIC_URL ?? process.env.CORS_ORIGIN ?? '').startsWith('https') },
+    };
+  }
+
   async dispatch(orgId: string, data: { provider: string; action: string }) {
     const config = await this.prisma.integrationConfig.findUnique({
       where: { organizationId_provider: { organizationId: orgId, provider: data.provider as never } },

@@ -1,21 +1,36 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { WidgetBookDto, WidgetLookupDto, WidgetRescheduleDto } from './dto/widget.dto';
+import { WidgetBookDto, WidgetChatDto, WidgetLookupDto, WidgetRescheduleDto } from './dto/widget.dto';
+import { BookingAssistantService } from './booking-assistant.service';
 import { WidgetService } from './widget.service';
 
 /** Anonymous endpoints: reads stay generous for the booking form, writes and lookups are tight. */
 const WRITE_LIMIT = { default: { limit: 10, ttl: 10 * 60_000 } };
 const LOOKUP_LIMIT = { default: { limit: 10, ttl: 10 * 60_000 } };
+/** Each chat message costs a model call: a patient gets a conversation, not a firehose. */
+const CHAT_LIMIT = { default: { limit: 30, ttl: 10 * 60_000 } };
 
 @ApiTags('widget')
 @Controller('public/widget')
 export class WidgetController {
-  constructor(private readonly svc: WidgetService) {}
+  constructor(private readonly svc: WidgetService, private readonly assistant: BookingAssistantService) {}
 
   @Get(':orgSlug/config')
   config(@Param('orgSlug') orgSlug: string) {
     return this.svc.getConfig(orgSlug);
+  }
+
+  /** Whether the assistant is switched on for this server; the widget falls back to the form if not. */
+  @Get(':orgSlug/assistant')
+  assistantStatus() {
+    return { enabled: this.assistant.enabled, model: this.assistant.enabled ? this.assistant.model : null };
+  }
+
+  @Post(':orgSlug/assistant')
+  @Throttle(CHAT_LIMIT)
+  chat(@Param('orgSlug') orgSlug: string, @Body() body: WidgetChatDto) {
+    return this.assistant.chat(orgSlug, body);
   }
 
   @Get(':orgSlug/services')

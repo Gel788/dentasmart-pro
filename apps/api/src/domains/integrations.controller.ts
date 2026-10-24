@@ -13,6 +13,13 @@ import { IntegrationsService } from './integrations.service';
 export class IntegrationsController {
   constructor(private readonly svc: IntegrationsService) {}
 
+  /** What is really connected, read from the server's own configuration — nothing simulated. */
+  @Get('status')
+  @RequirePermissions('org.manage')
+  status(@OrgId() orgId: string) {
+    return this.svc.status(orgId);
+  }
+
   @Get()
   @RequirePermissions('org.manage')
   list(@OrgId() orgId: string) {

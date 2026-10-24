@@ -1,0 +1,26 @@
+/* Fixing a plan line at the chair: tooth as a button, price as a small draft, remove with a confirm. */
+.tooth { display: grid; place-items: center; min-width: 52px; height: 30px; padding: 0 8px; border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent-ink); font-weight: 650; font-variant-numeric: tabular-nums; }
+.toothWrap { position: relative; display: inline-flex; }
+.toothBtn { border: 1px dashed transparent; font: inherit; font-weight: 650; cursor: pointer; }
+.toothBtn:hover { border-color: var(--accent); }
+.pop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: max-content; max-width: 280px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-solid); box-shadow: var(--shadow-overlay); }
+.pop input { width: 64px; height: 36px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 15px; font-variant-numeric: tabular-nums; }
+.pop :global(.sd-btn), .pop :global(.sd-btn-ghost) { min-height: 36px; padding: 0 12px; }
+.pop em { flex-basis: 100%; color: var(--danger); font-size: 12.5px; font-style: normal; font-weight: 600; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 0 12px 10px 112px; }
+.link { min-height: 30px; padding: 0; border: 0; background: none; color: var(--accent-ink); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.danger { color: var(--muted); }
+.danger:hover { color: var(--danger); }
+.edit { display: grid; grid-template-columns: 70px minmax(100px, 1fr) 80px; gap: 8px 10px; width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-solid); }
+.edit label { display: flex; flex-direction: column; gap: 4px; color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.edit input { width: 100%; height: 36px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 14px; font-variant-numeric: tabular-nums; }
+.sum { grid-column: 1 / -1; color: var(--text-secondary); font-size: 13.5px; }
+.sum b { color: var(--text); font-variant-numeric: tabular-nums; }
+.sum em { color: var(--warning); font-style: normal; font-weight: 600; }
+.buttons { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
+.buttons :global(.sd-btn), .buttons :global(.sd-btn-ghost) { min-height: 36px; padding: 0 14px; }
+.ask { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--danger); font-size: 13px; font-weight: 600; }
+.yes { min-height: 30px; padding: 0 10px; border: 0; border-radius: var(--r-sm); background: var(--danger); color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.error { flex-basis: 100%; margin: 0; color: var(--danger); font-size: 13px; font-weight: 600; }
+@media (max-width: 720px) { .actions { padding-left: 12px; } .edit { grid-template-columns: 60px 1fr 70px; } }

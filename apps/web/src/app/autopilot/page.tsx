@@ -43,8 +43,8 @@ function Autopilot() {
     const ids = Object.entries(picked).filter(([, on]) => on).map(([id]) => id);
     setNotice('');
     try {
-      const result = await api<{ sent: number }>('/showcase/retention/send', { method: 'POST', body: JSON.stringify({ ids }) });
-      setNotice(`Демо-отправка: ${result.sent} сообщений отмечены как отправленные в Telegram или WhatsApp.`);
+      const result = await api<{ queued: number }>('/showcase/retention/send', { method: 'POST', body: JSON.stringify({ ids }) });
+      setNotice(`В очереди: ${result.queued}. Мессенджер ещё не подключён — пациенты сообщений не получили; позвоните им или отправьте вручную.`);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не отправилось');
@@ -59,7 +59,7 @@ function Autopilot() {
         <div>
           <span className="wow-demo">Демо-канал</span>
           <h1>Автопилот возврата</h1>
-          <p>Правила смотрят в живую базу. Кнопка не пишет в настоящий мессенджер: сообщение ставится в журнал как отправленное.</p>
+          <p>Правила смотрят в живую базу. Мессенджер пока не подключён: кнопка ставит сообщения в очередь, пациенту ничего не уходит.</p>
         </div>
         <button className="sd-btn" type="button" onClick={() => void send()}>Отправить выбранные</button>
       </header>

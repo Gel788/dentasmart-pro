@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ToothChart, type ToothRecord } from '@/components/tooth-chart';
+import type { ToothRecord } from '@/components/tooth-chart';
+import { ToothChart, type ChartItem, type ChartSurface } from '@/components/studio/chart';
 import { Button } from '@/components/ui/button';
 import { Input, Label, Select } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
@@ -108,6 +109,17 @@ export function PlanBoard({
     setCondition(record?.condition ?? 'HEALTHY');
     setDiagnosis(record?.diagnosis ?? '');
   }, [tooth, record?.condition, record?.diagnosis]);
+
+  // The same 3D teeth as the patient card: the tooth's state from the chart, the plan's lines on top.
+  const [brush, setBrush] = useState('CARIES');
+  const chartSurfaces: ChartSurface[] = useMemo(
+    () => teeth.flatMap((row) => (row.surfaces?.length ? row.surfaces : ['TOOTH']).map((surface) => ({ toothNum: row.toothNum, formula: row.formula || 'ADULT', surface, condition: row.condition, layer: row.layer ?? 'CURRENT' }))),
+    [teeth],
+  );
+  const chartItems: ChartItem[] = useMemo(
+    () => items.map((item) => ({ toothNum: item.toothNum ?? null, surfaces: item.surfaces ?? [], result: 'PLANNED', status: lineStatus(item), title: item.title })),
+    [items],
+  );
 
   const marked = useMemo(
     () => [...new Set(items.map((item) => item.toothNum).filter((n): n is number => typeof n === 'number'))],
@@ -286,7 +298,7 @@ export function PlanBoard({
         <header className="flex flex-wrap items-end justify-between gap-2 border-b border-[var(--border)] px-5 py-4">
           <div>
             <p className="ds-kicker">Зубная формула</p>
-            <p className="mt-1 text-sm text-[var(--muted)]">Нумерация FDI. Цвет зуба — его состояние, номер снизу — строка в плане.</p>
+            <p className="mt-1 text-sm text-[var(--muted)]">Нажмите зуб — ниже останутся только его услуги, там же меняется статус. Повторный клик снимает выбор.</p>
           </div>
           {tooth && (
             <button
@@ -300,11 +312,16 @@ export function PlanBoard({
         </header>
         <div className="px-5 py-5">
           <ToothChart
-            records={teeth}
-            selected={tooth}
-            marked={marked}
-            onSelect={setTooth}
-            onPaint={paintTooth}
+            surfaces={chartSurfaces}
+            items={chartItems}
+            view="plan"
+            formula="ADULT"
+            condition={brush}
+            selected={tooth ?? null}
+            onCondition={setBrush}
+            onPaint={(num) => paintTooth(num, brush)}
+            onSelect={(num) => setTooth((current) => (current === num ? undefined : num))}
+            pulse={marked}
           />
           {tooth && (
             <div className="mx-auto mt-5 grid max-w-md gap-2">

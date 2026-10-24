@@ -4,9 +4,9 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Protected } from '@/components/protected';
 import { api, assetUrl, uploadFile } from '@/lib/api';
 
-const LAB_STATUS = ['RECEIVED', 'IN_PROGRESS', 'READY', 'DELIVERED', 'REJECTED'] as const;
+const LAB_STATUS = ['WAITING_IMPRESSION', 'RECEIVED', 'IN_PROGRESS', 'READY', 'DELIVERED', 'REJECTED'] as const;
 const LAB_LABEL: Record<string, string> = {
-  RECEIVED: 'Принято', IN_PROGRESS: 'В работе', READY: 'Готово', DELIVERED: 'Доставлено', REJECTED: 'Отклонено',
+  WAITING_IMPRESSION: 'Ждёт слепок', RECEIVED: 'Принято', IN_PROGRESS: 'В работе', READY: 'Готово', DELIVERED: 'Доставлено', REJECTED: 'Отклонено',
 };
 
 type Order = {

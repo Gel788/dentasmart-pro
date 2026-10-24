@@ -11,12 +11,12 @@ datasource db {
 // ─── Организация (сеть клиник) ───────────────────────────────────────────────
 
 model Organization {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  inn       String?
-  phone     String?
-  email     String?
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  inn         String?
+  phone       String?
+  email       String?
   legalName   String?
   address     String?
   logoUrl     String?
@@ -27,75 +27,93 @@ model Organization {
   bankAccount String?
   bik         String?
   workHours   String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  /// Licence and signatory printed on every patient document (rules for paid medical services).
+  licenseNumber String?
+  licenseDate   DateTime?
+  licenseIssuer String?
+  licenseWorks  String?
+  directorName  String?
+  website       String?
+  /// Opening hours per weekday, Monday first: [{ opensAt, closesAt } in clinic-local minutes | null when closed].
+  weekHours   Json?
+  /// Whether the plan builder may draft plans from findings («Быстрый план»).
+  aiPlans     Boolean  @default(true)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  branches              Branch[]
-  users                 User[]
-  roles                 Role[]
-  patients              Patient[]
-  services              Service[]
-  appointments          Appointment[]
-  auditLogs             AuditLog[]
-  employeeSchedules     EmployeeSchedule[]
-  treatmentPlans        TreatmentPlan[]
-  patientConsents       PatientConsent[]
-  patientSegments       PatientSegment[]
-  waitlistEntries       WaitlistEntry[]
-  priceLists            PriceList[]
-  invoices              Invoice[]
-  payments              Payment[]
-  promoCodes            PromoCode[]
-  loyaltyPrograms       LoyaltyProgram[]
-  inventoryItems        InventoryItem[]
-  stockMovements        StockMovement[]
-  purchaseOrders        PurchaseOrder[]
-  labOrders             LabOrder[]
-  marketingCampaigns    MarketingCampaign[]
-  automationChains      AutomationChain[]
-  communicationThreads  CommunicationThread[]
-  callRecords           CallRecord[]
-  integrationConfigs    IntegrationConfig[]
-  integrationLogs       IntegrationLog[]
-  webhookEndpoints      WebhookEndpoint[]
-  widgetConfigs         WidgetConfig[]
-  medicalRecordHashes   MedicalRecordHash[]
-  aiInsights            AiInsight[]
-  receptionQueue        ReceptionQueueItem[]
-  cashShifts            CashShift[]
-  reminders             Reminder[]
-  inventorySessions     InventorySession[]
-  familyGroups          FamilyGroup[]
-  patientDeposits       PatientDeposit[]
-  installmentPlans      InstallmentPlan[]
-  serviceMaterialNorms  ServiceMaterialNorm[]
-  materialUses          MaterialUse[]
-  reminderTemplates     ReminderTemplate[]
-  payrollRules          PayrollRule[]
-  insurers              Insurer[]
-  insurancePolicies     InsurancePolicy[]
-  insurerBills          InsurerBill[]
-  leads                 Lead[]
-  warrantyCases         WarrantyCase[]
-  apiKeys               ApiKey[]
-  orthoCharts           OrthoChart[]
-  sterilizationCycles   SterilizationCycle[]
-  cabinetBlocks         CabinetBlock[]
-  appointmentsToMake    AppointmentToMake[]
-  perioExams            PerioExam[]
-  omsPolicies           OmsPolicy[]
-  omsCases              OmsCase[]
-  prescriptions         Prescription[]
-  followUps             FollowUp[]
-  photoProtocols        PhotoProtocol[]
-  planTemplates         PlanTemplate[]
-  visitTemplates        VisitTemplate[]
-  documentTemplates     DocumentTemplate[]
-  reminderRules         ReminderRule[]
-  planVersions          PlanVersion[]
+  branches             Branch[]
+  scheduleExceptions   ScheduleException[]
+  widgetChats          WidgetChat[]
+  bookingRequests      BookingRequest[]
+  users                User[]
+  roles                Role[]
+  patients             Patient[]
+  services             Service[]
+  appointments         Appointment[]
+  auditLogs            AuditLog[]
+  employeeSchedules    EmployeeSchedule[]
+  treatmentPlans       TreatmentPlan[]
+  patientConsents      PatientConsent[]
+  patientSegments      PatientSegment[]
+  waitlistEntries      WaitlistEntry[]
+  priceLists           PriceList[]
+  invoices             Invoice[]
+  payments             Payment[]
+  promoCodes           PromoCode[]
+  loyaltyPrograms      LoyaltyProgram[]
+  inventoryItems       InventoryItem[]
+  stockMovements       StockMovement[]
+  purchaseOrders       PurchaseOrder[]
+  labOrders            LabOrder[]
+  marketingCampaigns   MarketingCampaign[]
+  automationChains     AutomationChain[]
+  communicationThreads CommunicationThread[]
+  callRecords          CallRecord[]
+  integrationConfigs   IntegrationConfig[]
+  integrationLogs      IntegrationLog[]
+  webhookEndpoints     WebhookEndpoint[]
+  widgetConfigs        WidgetConfig[]
+  medicalRecordHashes  MedicalRecordHash[]
+  aiInsights           AiInsight[]
+  receptionQueue       ReceptionQueueItem[]
+  cashShifts           CashShift[]
+  reminders            Reminder[]
+  inventorySessions    InventorySession[]
+  familyGroups         FamilyGroup[]
+  patientDeposits      PatientDeposit[]
+  installmentPlans     InstallmentPlan[]
+  serviceMaterialNorms ServiceMaterialNorm[]
+  materialUses         MaterialUse[]
+  reminderTemplates    ReminderTemplate[]
+  payrollRules         PayrollRule[]
+  insurers             Insurer[]
+  insurancePolicies    InsurancePolicy[]
+  insurerBills         InsurerBill[]
+  leads                Lead[]
+  warrantyCases        WarrantyCase[]
+  apiKeys              ApiKey[]
+  orthoCharts          OrthoChart[]
+  sterilizationCycles  SterilizationCycle[]
+  cabinetBlocks        CabinetBlock[]
+  appointmentsToMake   AppointmentToMake[]
+  perioExams           PerioExam[]
+  omsPolicies          OmsPolicy[]
+  omsCases             OmsCase[]
+  prescriptions        Prescription[]
+  followUps            FollowUp[]
+  photoProtocols       PhotoProtocol[]
+  planTemplates        PlanTemplate[]
+  visitTemplates       VisitTemplate[]
+  documentTemplates    DocumentTemplate[]
+  reminderRules        ReminderRule[]
+  planVersions         PlanVersion[]
+
+  materialReservations MaterialReservation[]
 
   @@map("organizations")
+  clinicDocuments ClinicDocument[]
+  staffTasks      StaffTask[]
 }
 
 model Branch {
@@ -109,10 +127,10 @@ model Branch {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  cabinets     Cabinet[]
-  employees    EmployeeBranch[]
-  appointments Appointment[]
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cabinets            Cabinet[]
+  employees           EmployeeBranch[]
+  appointments        Appointment[]
   sterilizationCycles SterilizationCycle[]
   cabinetBlocks       CabinetBlock[]
   appointmentsToMake  AppointmentToMake[]
@@ -132,18 +150,18 @@ enum CabinetPurpose {
 }
 
 model Cabinet {
-  id             String         @id @default(cuid())
-  branchId       String
-  name           String
-  number         String?
-  purpose        CabinetPurpose @default(UNIVERSAL)
-  equipment      String[]       @default([])
-  cleaningMinutes Int           @default(15)
-  isActive       Boolean        @default(true)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id              String         @id @default(cuid())
+  branchId        String
+  name            String
+  number          String?
+  purpose         CabinetPurpose @default(UNIVERSAL)
+  equipment       String[]       @default([])
+  cleaningMinutes Int            @default(15)
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
-  branch       Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  branch       Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
   appointments Appointment[]
   blocks       CabinetBlock[]
 
@@ -169,14 +187,19 @@ model User {
   lastLoginAt    DateTime?
   totpSecret     String?
   totpEnabled    Boolean   @default(false)
+  /// Notifications up to this moment count as read.
+  notificationsSeenAt DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  employee       Employee?
-  userRoles      UserRole[]
-  auditLogs      AuditLog[]       @relation("AuditActor")
-  refreshTokens  RefreshToken[]
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employee      Employee?
+  userRoles     UserRole[]
+  auditLogs     AuditLog[]     @relation("AuditActor")
+  refreshTokens RefreshToken[]
+  paymentsTaken Payment[]      @relation("PaymentAuthor")
+  tasksAssigned StaffTask[]    @relation("TaskAssignee")
+  tasksCreated  StaffTask[]    @relation("TaskCreator")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -196,17 +219,18 @@ model Employee {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  branches          EmployeeBranch[]
-  appointments      Appointment[]      @relation("DoctorAppointments")
-  schedules         EmployeeSchedule[]
-  certificates      EmployeeCertificate[]
-  treatmentPlans    TreatmentPlan[]
-  labOrders         LabOrder[]
-  payrollEntries    PayrollEntry[]
-  payrollRules      PayrollRule[]
-  omsCases          OmsCase[]
-  curatedPatients   Patient[]          @relation("PatientCurator")
+  user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branches           EmployeeBranch[]
+  appointments       Appointment[]         @relation("DoctorAppointments")
+  schedules          EmployeeSchedule[]
+  scheduleExceptions ScheduleException[]
+  certificates       EmployeeCertificate[]
+  treatmentPlans     TreatmentPlan[]
+  labOrders          LabOrder[]
+  payrollEntries     PayrollEntry[]
+  payrollRules       PayrollRule[]
+  omsCases           OmsCase[]
+  curatedPatients    Patient[]             @relation("PatientCurator")
 
   @@map("employees")
 }
@@ -224,20 +248,20 @@ model EmployeeBranch {
 }
 
 model Role {
-  id             String   @id @default(cuid())
-  organizationId String
-  code           String
-  name           String
-  description    String?
-  isSystem       Boolean  @default(false)
-  seeCost            Boolean @default(false)
-  maxDiscountPercent Int     @default(0)
-  editClosedVisits   Boolean @default(false)
-  editPrice          Boolean @default(false)
-  seeAllFinance      Boolean @default(false)
-  canExport          Boolean @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  organizationId     String
+  code               String
+  name               String
+  description        String?
+  isSystem           Boolean  @default(false)
+  seeCost            Boolean  @default(false)
+  maxDiscountPercent Int      @default(0)
+  editClosedVisits   Boolean  @default(false)
+  editPrice          Boolean  @default(false)
+  seeAllFinance      Boolean  @default(false)
+  canExport          Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   rolePermissions RolePermission[]
@@ -248,8 +272,8 @@ model Role {
 }
 
 model Permission {
-  id          String @id @default(cuid())
-  code        String @unique
+  id          String  @id @default(cuid())
+  code        String  @unique
   module      String
   description String?
 
@@ -295,67 +319,79 @@ enum AnxietyLevel {
 }
 
 model Patient {
-  id             String         @id @default(cuid())
-  organizationId String
-  firstName      String
-  lastName       String
-  middleName     String?
-  birthDate      DateTime?
-  gender         PatientGender?
-  phone          String?
-  email          String?
-  tags               String[]       @default([])
-  notes              String?
-  source             String?
-  allergies          String[]       @default([])
-  chronicConditions  String?
-  medications        String?
-  contraindications  String?
-  anamnesis          String?
-  anxiety            AnxietyLevel   @default(NONE)
-  pregnant           Boolean        @default(false)
-  anticoagulant      Boolean        @default(false)
-  isActive           Boolean        @default(true)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id                   String         @id @default(cuid())
+  organizationId       String
+  firstName            String
+  lastName             String
+  middleName           String?
+  birthDate            DateTime?
+  gender               PatientGender?
+  phone                String?
+  email                String?
+  tags                 String[]       @default([])
+  notes                String?
+  source               String?
+  /// Client type carried over from the previous CRM, e.g. «отказавшиеся».
+  clientType           String?
+  allergies            String[]       @default([])
+  chronicConditions    String?
+  medications          String?
+  contraindications    String?
+  anamnesis            String?
+  anxiety              AnxietyLevel   @default(NONE)
+  pregnant             Boolean        @default(false)
+  anticoagulant        Boolean        @default(false)
+  /// Grows with every change of the medical fields; a save names the version it was made from.
+  medicalVersion       Int            @default(0)
+  /// When a clinician last confirmed the medical history with the patient, and who.
+  medicalConfirmedAt   DateTime?
+  medicalConfirmedById String?
+  isActive             Boolean        @default(true)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
-  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  appointments         Appointment[]
-  toothRecords         ToothRecord[]
-  treatmentPlans       TreatmentPlan[]
-  consents             PatientConsent[]
-  imagingStudies       ImagingStudy[]
-  communications       PatientCommunication[]
-  loyaltyAccounts      LoyaltyAccount[]
-  invoices             Invoice[]
-  waitlistEntries      WaitlistEntry[]
-  receptionQueue       ReceptionQueueItem[]
-  segmentMembers       PatientSegmentMember[]
-  familyMembers        FamilyMember[]
-  deposit              PatientDeposit?
-  installmentPlans     InstallmentPlan[]
-  labOrders            LabOrder[]
-  insurancePolicies    InsurancePolicy[]
-  appointmentsToMake   AppointmentToMake[]
-  perioExams           PerioExam[]
-  omsPolicies          OmsPolicy[]
-  omsCases             OmsCase[]
-  toothSurfaces        ToothSurface[]
-  toothEvents          ToothEvent[]
-  prescriptions        Prescription[]
-  followUps            FollowUp[]
-  photoProtocols       PhotoProtocol[]
-  materialUses         MaterialUse[]
-  curatorId            String?
-  curator              Employee?             @relation("PatientCurator", fields: [curatorId], references: [id], onDelete: SetNull)
-  leads                Lead[]
-  warrantyCases        WarrantyCase[]
-  orthoChart           OrthoChart?
+  organization       Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  appointments       Appointment[]
+  toothRecords       ToothRecord[]
+  treatmentPlans     TreatmentPlan[]
+  consents           PatientConsent[]
+  imagingStudies     ImagingStudy[]
+  communications     PatientCommunication[]
+  loyaltyAccounts    LoyaltyAccount[]
+  invoices           Invoice[]
+  waitlistEntries    WaitlistEntry[]
+  receptionQueue     ReceptionQueueItem[]
+  segmentMembers     PatientSegmentMember[]
+  familyMembers      FamilyMember[]
+  deposit            PatientDeposit?
+  installmentPlans   InstallmentPlan[]
+  labOrders          LabOrder[]
+  insurancePolicies  InsurancePolicy[]
+  appointmentsToMake AppointmentToMake[]
+  perioExams         PerioExam[]
+  omsPolicies        OmsPolicy[]
+  omsCases           OmsCase[]
+  toothSurfaces      ToothSurface[]
+  toothEvents        ToothEvent[]
+  prescriptions      Prescription[]
+  followUps          FollowUp[]
+  photoProtocols     PhotoProtocol[]
+  materialUses       MaterialUse[]
+  curatorId          String?
+  curator            Employee?              @relation("PatientCurator", fields: [curatorId], references: [id], onDelete: SetNull)
+  leads              Lead[]
+  warrantyCases      WarrantyCase[]
+  orthoChart         OrthoChart?
+
+  routeToken          String?   @unique
+  routeTokenExpiresAt DateTime?
 
   @@index([organizationId])
   @@index([organizationId, phone])
   @@index([organizationId, lastName, firstName])
   @@map("patients")
+  clinicDocuments    ClinicDocument[]
+  staffTasks         StaffTask[]
 }
 
 enum ToothFormulaType {
@@ -561,20 +597,22 @@ model Service {
   requiresTooth  Boolean  @default(false)
   surfaceMode    String   @default("NONE")
   doctorPercent  Decimal  @default(0) @db.Decimal(5, 2)
+  /// A price-list section that groups services; never booked or billed itself.
+  isCategory     Boolean  @default(false)
   isActive       Boolean  @default(true)
   sortOrder      Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parent       Service?     @relation("ServiceTree", fields: [parentId], references: [id])
-  children            Service[]           @relation("ServiceTree")
-  appointments        Appointment[]
-  treatmentPlanItems  TreatmentPlanItem[]
-  priceListItems      PriceListItem[]
-  materialNorms       ServiceMaterialNorm[]
-  materialUses        MaterialUse[]
-  appointmentsToMake  AppointmentToMake[]
+  organization       Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent             Service?              @relation("ServiceTree", fields: [parentId], references: [id])
+  children           Service[]             @relation("ServiceTree")
+  appointments       Appointment[]
+  treatmentPlanItems TreatmentPlanItem[]
+  priceListItems     PriceListItem[]
+  materialNorms      ServiceMaterialNorm[]
+  materialUses       MaterialUse[]
+  appointmentsToMake AppointmentToMake[]
 
   @@index([organizationId])
   @@map("services")
@@ -608,12 +646,12 @@ model Appointment {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  branch       Branch       @relation(fields: [branchId], references: [id])
-  cabinet      Cabinet?     @relation(fields: [cabinetId], references: [id])
-  doctor       Employee?    @relation("DoctorAppointments", fields: [doctorId], references: [id])
-  patient      Patient      @relation(fields: [patientId], references: [id])
-  service        Service?        @relation(fields: [serviceId], references: [id])
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch         Branch              @relation(fields: [branchId], references: [id])
+  cabinet        Cabinet?            @relation(fields: [cabinetId], references: [id])
+  doctor         Employee?           @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  patient        Patient             @relation(fields: [patientId], references: [id])
+  service        Service?            @relation(fields: [serviceId], references: [id])
   reminders      Reminder[]
   treatmentPlans TreatmentPlan[]
   planItems      TreatmentPlanItem[]
@@ -621,15 +659,18 @@ model Appointment {
   visitNote      VisitNote?
   imagingStudies ImagingStudy[]
   prescriptions  Prescription[]
-  followUps      FollowUp[]      @relation("FollowSource")
+  followUps      FollowUp[]          @relation("FollowSource")
   photoProtocols PhotoProtocol[]
   materialUses   MaterialUse[]
+
+  reservations MaterialReservation[]
 
   @@index([organizationId, startsAt])
   @@index([branchId, startsAt])
   @@index([doctorId, startsAt])
   @@index([patientId])
   @@map("appointments")
+  clinicDocuments ClinicDocument[]
 }
 
 // ─── Аудит ─────────────────────────────────────────────────────────────────
@@ -666,7 +707,7 @@ model AuditLog {
 // ─── Сотрудники: график и сертификаты ───────────────────────────────────────
 
 model EmployeeSchedule {
-  id             String   @id @default(cuid())
+  id             String  @id @default(cuid())
   organizationId String
   employeeId     String
   branchId       String
@@ -675,7 +716,7 @@ model EmployeeSchedule {
   endsAt         String
   breakStart     String?
   breakEnd       String?
-  isActive       Boolean  @default(true)
+  isActive       Boolean @default(true)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
@@ -685,7 +726,7 @@ model EmployeeSchedule {
 }
 
 model EmployeeCertificate {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   employeeId String
   title      String
   issuedAt   DateTime?
@@ -716,39 +757,41 @@ enum PlanTier {
 }
 
 model TreatmentPlan {
-  id             String              @id @default(cuid())
-  organizationId String
-  patientId      String
-  appointmentId  String?
-  doctorId       String?
-  title          String
-  status         TreatmentPlanStatus @default(DRAFT)
-  totalPrice      Decimal             @default(0) @db.Decimal(12, 2)
-  discountPercent Decimal             @default(0) @db.Decimal(5, 2)
-  notes           String?
-  isAlternative   Boolean             @default(false)
-  parentPlanId    String?
-  acceptedAt      DateTime?
-  presentedAt     DateTime?
-  validUntil      DateTime?
-  tier               PlanTier?
-  familyKey          String?
-  guaranteeMonths    Int                 @default(12)
-  durationWeeks      Int                 @default(4)
-  signatureSvg       String?             @db.Text
-  signedName         String?
-  signedAt           DateTime?
-  installmentMonths  Int                 @default(0)
-  abandonedAt        DateTime?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  id                String              @id @default(cuid())
+  organizationId    String
+  patientId         String
+  appointmentId     String?
+  doctorId          String?
+  title             String
+  status            TreatmentPlanStatus @default(DRAFT)
+  totalPrice        Decimal             @default(0) @db.Decimal(12, 2)
+  discountPercent   Decimal             @default(0) @db.Decimal(5, 2)
+  notes             String?
+  isAlternative     Boolean             @default(false)
+  parentPlanId      String?
+  acceptedAt        DateTime?
+  presentedAt       DateTime?
+  validUntil        DateTime?
+  tier              PlanTier?
+  familyKey         String?
+  guaranteeMonths   Int                 @default(12)
+  durationWeeks     Int                 @default(4)
+  signatureSvg      String?             @db.Text
+  signedName        String?
+  signedAt          DateTime?
+  installmentMonths Int                 @default(0)
+  /// Whether the patient's copy shows what each price is made of.
+  showBreakdown     Boolean             @default(true)
+  abandonedAt       DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
-  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  patient      Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  appointment  Appointment?        @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
-  doctor       Employee?           @relation(fields: [doctorId], references: [id])
-  parentPlan   TreatmentPlan?      @relation("PlanAlternatives", fields: [parentPlanId], references: [id])
-  alternatives TreatmentPlan[]     @relation("PlanAlternatives")
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  patient      Patient               @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment  Appointment?          @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  doctor       Employee?             @relation(fields: [doctorId], references: [id])
+  parentPlan   TreatmentPlan?        @relation("PlanAlternatives", fields: [parentPlanId], references: [id])
+  alternatives TreatmentPlan[]       @relation("PlanAlternatives")
   phases       PlanPhase[]
   items        TreatmentPlanItem[]
   diaryEntries TreatmentDiaryEntry[]
@@ -771,12 +814,15 @@ model PlanPhase {
   healingDays Int     @default(0)
   dependsOnId String?
 
-  plan       TreatmentPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
-  dependsOn  PlanPhase?          @relation("PhaseDepends", fields: [dependsOnId], references: [id], onDelete: SetNull)
+  plan           TreatmentPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  dependsOn      PlanPhase?          @relation("PhaseDepends", fields: [dependsOnId], references: [id], onDelete: SetNull)
   blocked        PlanPhase[]         @relation("PhaseDepends")
+  labWork        String?
   items          TreatmentPlanItem[]
   imagingStudies ImagingStudy[]
   photoProtocols PhotoProtocol[]
+
+  labOrders LabOrder[]
 
   @@index([planId])
   @@map("plan_phases")
@@ -790,9 +836,9 @@ enum PlanItemStatus {
 }
 
 model TreatmentPlanItem {
-  id           String         @id @default(cuid())
-  planId       String
-  serviceId    String?
+  id              String         @id @default(cuid())
+  planId          String
+  serviceId       String?
   toothNum        Int?
   surfaces        String[]       @default([])
   phase           Int            @default(1)
@@ -800,6 +846,8 @@ model TreatmentPlanItem {
   sortOrder       Int            @default(0)
   price           Decimal        @default(0) @db.Decimal(12, 2)
   listPrice       Decimal?       @db.Decimal(12, 2)
+  /// How many of the service on this line; listPrice is unit × qty before the discount.
+  qty             Int            @default(1)
   discountPercent Decimal        @default(0) @db.Decimal(5, 2)
   durationMin     Int            @default(30)
   isCompleted     Boolean        @default(false)
@@ -808,12 +856,14 @@ model TreatmentPlanItem {
   completedAt     DateTime?
   phaseId         String?
 
-  plan        TreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  service     Service?      @relation(fields: [serviceId], references: [id])
-  invoiceItem InvoiceItem?
-  appointment Appointment?  @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  plan         TreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  service      Service?      @relation(fields: [serviceId], references: [id])
+  invoiceItem  InvoiceItem?
+  appointment  Appointment?  @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   phaseRef     PlanPhase?    @relation(fields: [phaseId], references: [id], onDelete: SetNull)
   materialUses MaterialUse[]
+
+  reservations MaterialReservation[]
 
   @@map("treatment_plan_items")
 }
@@ -854,10 +904,10 @@ model ImagingStudy {
   sliceIndex    Int?
   takenAt       DateTime    @default(now())
 
-  patient      Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  appointment  Appointment?         @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
-  phase        PlanPhase?           @relation(fields: [phaseId], references: [id], onDelete: SetNull)
-  annotations  ImagingAnnotation[]
+  patient     Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment Appointment?        @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  phase       PlanPhase?          @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  annotations ImagingAnnotation[]
 
   @@index([patientId])
   @@index([seriesKey])
@@ -906,7 +956,7 @@ model PhotoProtocol {
 }
 
 model PhotoShot {
-  id         String  @id @default(cuid())
+  id         String @id @default(cuid())
   protocolId String
   slot       String
   toothNum   Int?
@@ -1117,14 +1167,14 @@ model ReceptionQueueItem {
 // ─── Финансы ─────────────────────────────────────────────────────────────────
 
 model PriceList {
-  id             String   @id @default(cuid())
+  id             String  @id @default(cuid())
   organizationId String
   name           String
   code           String
-  isDefault      Boolean  @default(false)
-  isActive       Boolean  @default(true)
+  isDefault      Boolean @default(false)
+  isActive       Boolean @default(true)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   items        PriceListItem[]
 
   @@unique([organizationId, code])
@@ -1167,13 +1217,13 @@ model Invoice {
   promiseNote     String?
   createdAt       DateTime      @default(now())
 
-  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  patient           Patient           @relation(fields: [patientId], references: [id])
-  appointment       Appointment?      @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
-  treatmentPlan     TreatmentPlan?    @relation(fields: [treatmentPlanId], references: [id], onDelete: SetNull)
-  payments          Payment[]
-  installmentPlans  InstallmentPlan[]
-  items             InvoiceItem[]
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  patient          Patient           @relation(fields: [patientId], references: [id])
+  appointment      Appointment?      @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  treatmentPlan    TreatmentPlan?    @relation(fields: [treatmentPlanId], references: [id], onDelete: SetNull)
+  payments         Payment[]
+  installmentPlans InstallmentPlan[]
+  items            InvoiceItem[]
 
   @@unique([organizationId, number])
   @@index([patientId])
@@ -1190,8 +1240,8 @@ model InvoiceItem {
   title      String
   price      Decimal @db.Decimal(12, 2)
 
-  invoice     Invoice              @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  planItem    TreatmentPlanItem?   @relation(fields: [planItemId], references: [id], onDelete: SetNull)
+  invoice     Invoice             @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  planItem    TreatmentPlanItem?  @relation(fields: [planItemId], references: [id], onDelete: SetNull)
   allocations PaymentAllocation[]
 
   @@index([invoiceId])
@@ -1233,13 +1283,20 @@ model Payment {
   externalId     String?
   refundOfId     String?
   paidAt         DateTime      @default(now())
+  /// Sent by the client once per payment attempt; a repeat with the same key returns the first payment.
+  idempotencyKey String?
+  createdById    String?
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   invoice      Invoice?            @relation(fields: [invoiceId], references: [id])
   refundOf     Payment?            @relation("PaymentRefunds", fields: [refundOfId], references: [id], onDelete: SetNull)
   refunds      Payment[]           @relation("PaymentRefunds")
   allocations  PaymentAllocation[]
+  createdBy    User?               @relation("PaymentAuthor", fields: [createdById], references: [id], onDelete: SetNull)
 
+  @@unique([organizationId, idempotencyKey])
+  @@index([invoiceId])
+  @@index([organizationId, patientId])
   @@map("payments")
 }
 
@@ -1267,7 +1324,7 @@ model LoyaltyProgram {
   name           String
   levelsJson     Json
 
-  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   accounts     LoyaltyAccount[]
 
   @@map("loyalty_programs")
@@ -1288,13 +1345,13 @@ model LoyaltyAccount {
 }
 
 model PayrollEntry {
-  id         String   @id @default(cuid())
-  employeeId String
-  periodFrom DateTime
-  periodTo   DateTime
-  amount     Decimal  @db.Decimal(12, 2)
+  id          String   @id @default(cuid())
+  employeeId  String
+  periodFrom  DateTime
+  periodTo    DateTime
+  amount      Decimal  @db.Decimal(12, 2)
   detailsJson Json?
-  createdAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
@@ -1321,14 +1378,17 @@ model InventoryItem {
   minStock       Decimal           @default(0) @db.Decimal(12, 3)
   isActive       Boolean           @default(true)
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parent       InventoryItem? @relation("InventoryTree", fields: [parentId], references: [id])
-  children     InventoryItem[] @relation("InventoryTree")
-  batches      StockBatch[]
-  movements    StockMovement[]
-  countLines   InventoryCountLine[]
+  organization  Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent        InventoryItem?        @relation("InventoryTree", fields: [parentId], references: [id])
+  children      InventoryItem[]       @relation("InventoryTree")
+  batches       StockBatch[]
+  movements     StockMovement[]
+  countLines    InventoryCountLine[]
   materialNorms ServiceMaterialNorm[]
   materialUses  MaterialUse[]
+
+  reservations  MaterialReservation[]
+  purchaseLines PurchaseOrderLine[]
 
   @@index([organizationId])
   @@map("inventory_items")
@@ -1391,12 +1451,62 @@ model PurchaseOrder {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
+  expectedAt DateTime?
+  branchId   String?
+  lines      PurchaseOrderLine[]
+
   @@map("purchase_orders")
+}
+
+enum ReservationStatus {
+  RESERVED
+  SHORT
+  CONSUMED
+  RELEASED
+}
+
+// Материал, отложенный под строку подписанного плана. Списание со склада идёт через комплект визита.
+model MaterialReservation {
+  id             String            @id @default(cuid())
+  organizationId String
+  planItemId     String
+  appointmentId  String?
+  itemId         String
+  branchId       String
+  quantity       Decimal           @db.Decimal(12, 3)
+  status         ReservationStatus @default(RESERVED)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  planItem     TreatmentPlanItem @relation(fields: [planItemId], references: [id], onDelete: Cascade)
+  appointment  Appointment?      @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  item         InventoryItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([appointmentId])
+  @@index([itemId, branchId, status])
+  @@map("material_reservations")
+}
+
+model PurchaseOrderLine {
+  id              String  @id @default(cuid())
+  purchaseOrderId String
+  itemId          String
+  quantity        Decimal @db.Decimal(12, 3)
+  unitPrice       Decimal @default(0) @db.Decimal(12, 2)
+  reason          String  @default("SHORTAGE")
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  item          InventoryItem @relation(fields: [itemId], references: [id])
+
+  @@map("purchase_order_lines")
 }
 
 // ─── Зуботехническая лаборатория ─────────────────────────────────────────────
 
 enum LabOrderStatus {
+  WAITING_IMPRESSION
   RECEIVED
   IN_PROGRESS
   READY
@@ -1422,11 +1532,16 @@ model LabOrder {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  patient      Patient?     @relation(fields: [patientId], references: [id], onDelete: SetNull)
-  doctor       Employee?    @relation(fields: [doctorId], references: [id])
-  messages     LabMessage[]
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  patient       Patient?     @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  doctor        Employee?    @relation(fields: [doctorId], references: [id])
+  planPhaseId   String?
+  appointmentId String?
+  planPhase     PlanPhase?   @relation(fields: [planPhaseId], references: [id], onDelete: SetNull)
+  messages      LabMessage[]
 
+  @@index([planPhaseId])
+  @@index([appointmentId])
   @@map("lab_orders")
 }
 
@@ -1510,7 +1625,7 @@ model CommunicationThread {
   subject        String?
   lastMessageAt  DateTime    @default(now())
 
-  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   messages     CommunicationMessage[]
 
   @@map("communication_threads")
@@ -1870,12 +1985,12 @@ model InstallmentPlan {
 }
 
 model InstallmentSchedule {
-  id       String                @id @default(cuid())
-  planId   String
-  dueDate  DateTime
-  amount   Decimal               @db.Decimal(12, 2)
-  status   InstallmentLineStatus @default(PENDING)
-  paidAt   DateTime?
+  id      String                @id @default(cuid())
+  planId  String
+  dueDate DateTime
+  amount  Decimal               @db.Decimal(12, 2)
+  status  InstallmentLineStatus @default(PENDING)
+  paidAt  DateTime?
 
   plan InstallmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
@@ -2108,10 +2223,10 @@ enum SterilizationResult {
 }
 
 model SterilizationCycle {
-  id             String               @id @default(cuid())
+  id             String              @id @default(cuid())
   organizationId String
   branchId       String
-  startedAt      DateTime             @default(now())
+  startedAt      DateTime            @default(now())
   autoclave      String
   loadNote       String
   result         SterilizationResult
@@ -2204,4 +2319,170 @@ model PlanVersion {
 
   @@index([planId, createdAt])
   @@map("plan_versions")
+}
+
+/// A dated change to the usual week: a holiday or vacation (opensAt null) or different hours.
+/// employeeId null means the whole clinic. Dates are clinic-local YYYY-MM-DD, both ends included.
+model ScheduleException {
+  id             String   @id @default(cuid())
+  organizationId String
+  employeeId     String?
+  dateFrom       String
+  dateTo         String
+  opensAt        Int?
+  closesAt       Int?
+  note           String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employee     Employee?    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, dateFrom])
+  @@map("schedule_exceptions")
+}
+
+/// A patient's conversation with the booking assistant on the clinic's site. Messages are the
+/// model transcript (content blocks kept as returned); names and phones are never part of it.
+model WidgetChat {
+  id             String   @id @default(cuid())
+  organizationId String
+  messages       Json     @default("[]")
+  /// The assistant's latest note for the clinic: what the patient needs and how urgent.
+  summary        String?
+  serviceId      String?
+  urgent         Boolean  @default(false)
+  turns          Int      @default(0)
+  consentAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requests     BookingRequest[]
+
+  @@index([organizationId, createdAt])
+  @@map("widget_chats")
+}
+
+/// A booking asked for on the site. It holds its slot while PENDING; the clinic accepts it
+/// (an appointment is created) or declines it.
+model BookingRequest {
+  id             String    @id @default(cuid())
+  organizationId String
+  branchId       String
+  chatId         String?
+  serviceId      String?
+  firstName      String
+  lastName       String
+  phone          String
+  startsAt       DateTime
+  endsAt         DateTime
+  summary        String?
+  urgent         Boolean   @default(false)
+  status         String    @default("PENDING")
+  declineReason  String?
+  appointmentId  String?
+  consentAt      DateTime
+  decidedAt      DateTime?
+  decidedById    String?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  chat         WidgetChat?  @relation(fields: [chatId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, startsAt])
+  @@map("booking_requests")
+}
+
+// ─── Документы пациента ───────────────────────
+
+enum DocumentKind {
+  CONTRACT
+  PD_CONSENT
+  HEALTH_FORM
+  IDS_GENERAL
+  IDS_INTERVENTION
+  XRAY_CONSENT
+  REFUSAL
+  ESTIMATE
+  ACT
+  RECOMMENDATIONS
+  TAX_CERT
+}
+
+enum DocumentStatus {
+  CREATED
+  PRINTED
+  SIGNED
+  VOID
+}
+
+/// A patient document as issued: its content is frozen in `data` when it is created, so what was
+/// printed and signed never changes afterwards. A mistake is voided with a reason, never edited.
+model ClinicDocument {
+  id              String         @id @default(cuid())
+  organizationId  String
+  patientId       String
+  appointmentId   String?
+  treatmentPlanId String?
+  kind            DocumentKind
+  /// The intervention group for consents and the like, e.g. «surgery».
+  topic           String?
+  number          String
+  title           String
+  data            Json
+  templateVersion Int            @default(1)
+  status          DocumentStatus @default(CREATED)
+  printedAt       DateTime?
+  signedAt        DateTime?
+  signedById      String?
+  scanUrl         String?
+  voidReason      String?
+  createdById     String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  patient      Patient      @relation(fields: [patientId], references: [id])
+  appointment  Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+  @@index([patientId, kind])
+  @@index([appointmentId])
+  @@map("clinic_documents")
+}
+
+// ─── Задачи сотрудников ───────────────────────
+
+enum StaffTaskStatus {
+  OPEN
+  DONE
+  CANCELLED
+}
+
+/// A to-do for someone in the clinic: call a patient back, order a material, check a document.
+model StaffTask {
+  id             String          @id @default(cuid())
+  organizationId String
+  title          String
+  notes          String?
+  dueAt          DateTime?
+  status         StaffTaskStatus @default(OPEN)
+  assigneeId     String?
+  createdById    String?
+  patientId      String?
+  doneAt         DateTime?
+  doneById       String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignee     User?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdBy    User?        @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  patient      Patient?     @relation(fields: [patientId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, dueAt])
+  @@index([assigneeId, status])
+  @@index([patientId])
+  @@map("staff_tasks")
 }

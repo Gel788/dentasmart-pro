@@ -15,7 +15,9 @@ export type PatientField =
   | 'visits'
   | 'balance'
   | 'comment'
-  | 'sms';
+  | 'sms'
+  | 'segment'
+  | 'revenue';
 
 export type VisitField = 'date' | 'time' | 'patient' | 'phone' | 'doctor' | 'service' | 'status';
 
@@ -33,6 +35,8 @@ export type PatientDraft = {
   balance: string;
   comment: string;
   sms: string;
+  segment: string;
+  revenue: string;
 };
 
 export type VisitDraft = {
@@ -61,6 +65,8 @@ const PATIENT_SYNONYMS: Record<PatientField, string[]> = {
   balance: ['баланс'],
   comment: ['комментарий', 'примечание'],
   sms: ['разрешить sms', 'sms', 'рассылка'],
+  segment: ['тип', 'тип клиента', 'категория', 'статус клиента'],
+  revenue: ['сумма продаж', 'выручка', 'оплачено всего'],
 };
 
 const VISIT_SYNONYMS: Record<VisitField, string[]> = {
@@ -87,6 +93,8 @@ export const PATIENT_FIELDS: { field: PatientField; label: string }[] = [
   { field: 'balance', label: 'Баланс' },
   { field: 'comment', label: 'Комментарий' },
   { field: 'sms', label: 'SMS' },
+  { field: 'segment', label: 'Тип клиента' },
+  { field: 'revenue', label: 'Сумма продаж' },
 ];
 
 export const VISIT_FIELDS: { field: VisitField; label: string }[] = [
@@ -187,7 +195,15 @@ export function readPatients(sheet: Sheet, map: Record<string, string>): { rows:
       else seenNames.set(nameKey, rowNumber);
     }
     const birth = parseDate(draft.birthDate);
-    if (draft.birthDate && !birth) issues.push({ level: 'warn', reason: 'Дата рождения не читается', row: rowNumber, name });
+    // SQNS lets clinics store a birthday as "12.03"; it is not a date, but the clinic still wants it on the card.
+    const dayMonth = draft.birthDate.match(/^(\d{1,2})[./](\d{1,2})\.?$/);
+    if (draft.birthDate && !birth && dayMonth) {
+      issues.push({ level: 'warn', reason: 'День рождения без года', row: rowNumber, name });
+      const note = `День рождения ${dayMonth[1].padStart(2, '0')}.${dayMonth[2].padStart(2, '0')}, год не указан`;
+      draft.comment = draft.comment ? `${draft.comment} · ${note}` : note;
+    } else if (draft.birthDate && !birth) {
+      issues.push({ level: 'warn', reason: 'Дата рождения не читается', row: rowNumber, name });
+    }
     draft.birthDate = birth ?? '';
     const last = parseDate(draft.lastVisit);
     if (draft.lastVisit && !last) issues.push({ level: 'warn', reason: 'Дата визита не читается', row: rowNumber, name });
@@ -295,7 +311,7 @@ function norm(value: string) {
 }
 
 function emptyPatient(): PatientDraft {
-  return { lastName: '', firstName: '', middleName: '', phone: '', cardNumber: '', birthDate: '', gender: '', email: '', lastVisit: '', visits: '', balance: '', comment: '', sms: '' };
+  return { lastName: '', firstName: '', middleName: '', phone: '', cardNumber: '', birthDate: '', gender: '', email: '', lastVisit: '', visits: '', balance: '', comment: '', sms: '', segment: '', revenue: '' };
 }
 
 function emptyVisit(): VisitDraft {

@@ -19,6 +19,13 @@ import { QueueController } from './queue.controller';
 import { QueueService } from './queue.service';
 import { WidgetController } from './widget.controller';
 import { WidgetService } from './widget.service';
+import { BookingAssistantService } from './booking-assistant.service';
+import { DictationService } from './dictation.service';
+import { CrmAssistantController, CrmAssistantService, SpeechService } from './crm-assistant';
+import { DocumentsController, DocumentsService } from './documents';
+import { ReportsController, ReportsService } from './reports';
+import { TasksController, TasksService } from './tasks';
+import { BookingRequestsController, BookingRequestsService } from './booking-requests';
 import { RemindersController } from './reminders.controller';
 import { RemindersService } from './reminders.service';
 import { IntegrationsController } from './integrations.controller';
@@ -26,6 +33,7 @@ import { IntegrationsService } from './integrations.service';
 import { SterilizationController } from './sterilization.controller';
 import { SterilizationService } from './sterilization.service';
 import { WorkspaceController } from './workspace.controller';
+import { PatientImportService } from './patient-import.service';
 import { WorkspaceService } from './workspace.service';
 import { FlowController } from './flow.controller';
 import { FlowService } from './flow.service';
@@ -48,6 +56,11 @@ import { MarketService } from './market.service';
     EmployeesController,
     QueueController,
     WidgetController,
+    BookingRequestsController,
+    CrmAssistantController,
+    DocumentsController,
+    ReportsController,
+    TasksController,
     RemindersController,
     IntegrationsController,
     SterilizationController,
@@ -69,10 +82,19 @@ import { MarketService } from './market.service';
     EmployeesService,
     QueueService,
     WidgetService,
+    BookingAssistantService,
+    DictationService,
+    CrmAssistantService,
+    SpeechService,
+    DocumentsService,
+    ReportsService,
+    TasksService,
+    BookingRequestsService,
     RemindersService,
     IntegrationsService,
     SterilizationService,
     WorkspaceService,
+    PatientImportService,
     FlowService,
     ShowcaseService,
     ClinicConfigService,
