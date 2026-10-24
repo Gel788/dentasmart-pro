@@ -70,9 +70,9 @@ function sum(lines: { price: number }[]) {
   return lines.reduce((total, line) => total + line.price, 0);
 }
 
-function useCount(target: number, animate: boolean) {
-  const [value, setValue] = useState(target);
-  const from = useRef(target);
+function useCount(target: number, animate: boolean, fromZero = false) {
+  const [value, setValue] = useState(fromZero ? 0 : target);
+  const from = useRef(fromZero ? 0 : target);
   useEffect(() => {
     if (!animate) {
       from.current = target;
@@ -140,8 +140,9 @@ function Splash({ onDone }: { onDone: () => void }) {
   );
 }
 
-function PlanSheet({ tooth, tier, onTier, embedded = false }: { tooth: ToothId; tier: TierId; onTier: (tier: TierId) => void; embedded?: boolean }) {
+function PlanSheet({ tooth, tier, onTier, embedded = false, live = false, reduce = false }: { tooth: ToothId; tier: TierId; onTier: (tier: TierId) => void; embedded?: boolean; live?: boolean; reduce?: boolean }) {
   const plan = PLANS[tooth][tier];
+  const total = useCount(sum(plan.lines), live && !reduce, live);
   return (
     <div className={embedded ? styles.sheetEmbed : styles.sheet}>
       {!embedded && <div className={styles.sheetHead}><span>План · зуб {tooth}</span><span>пример</span></div>}
@@ -164,7 +165,7 @@ function PlanSheet({ tooth, tier, onTier, embedded = false }: { tooth: ToothId; 
       </ul>
       <div className={styles.sheetTotal}>
         <span>К подписи</span>
-        <b className={unbounded.className}>{rub(sum(plan.lines))}</b>
+        <b className={unbounded.className}>{rub(live ? total : sum(plan.lines))}</b>
       </div>
       <p className={styles.sheetFoot}>Суммы учебные. В клинике их берёт прайс. Оптимум в продукте помечен как рекомендуемый.</p>
     </div>
@@ -242,6 +243,8 @@ export function Landing() {
   const [offer, setOffer] = useState<Offer>('clinic');
   const [sent, setSent] = useState<{ name: string; phone: string; clinic: string; tariff: string } | null>(null);
   const [error, setError] = useState('');
+  const pinRef = useRef<HTMLElement>(null);
+  const active = CHAPTERS.find((item) => item.id === chapter) ?? CHAPTERS[0];
 
   const doctor = useCount(monthly ? 2250 : 27000, !reduce);
   const clinic = useCount(monthly ? 3750 : 45000, !reduce);
@@ -274,25 +277,18 @@ export function Landing() {
   }, []);
 
   useEffect(() => {
-    const root = document.getElementById('story');
-    if (!root) return;
-    const nodes = [...root.querySelectorAll<HTMLElement>('[data-chapter]')];
+    const pin = pinRef.current;
+    if (!pin) return;
     let frame = 0;
     const update = () => {
       frame = 0;
-      const mark = window.innerHeight * 0.42;
-      let next: ChapterId | undefined;
-      let bestDist = Infinity;
-      for (const node of nodes) {
-        const rect = node.getBoundingClientRect();
-        if (rect.bottom < 96 || rect.top > window.innerHeight - 40) continue;
-        const dist = Math.abs(rect.top + Math.min(rect.height * 0.35, 220) - mark);
-        if (dist < bestDist) {
-          bestDist = dist;
-          next = node.dataset.chapter as ChapterId;
-        }
-      }
-      if (next) setChapter((current) => (current === next ? current : next));
+      if (window.matchMedia('(max-width: 980px)').matches) return;
+      const rect = pin.getBoundingClientRect();
+      const total = pin.offsetHeight - window.innerHeight;
+      if (total <= 0) return;
+      const progress = Math.min(0.999, Math.max(0, -rect.top / total));
+      const next = CHAPTERS[Math.min(CHAPTERS.length - 1, Math.floor(progress * CHAPTERS.length))].id;
+      setChapter((current) => (current === next ? current : next));
     };
     const onScroll = () => {
       if (frame) return;
@@ -348,7 +344,12 @@ export function Landing() {
 
   const jump = (id: ChapterId) => {
     setChapter(id);
-    document.querySelector(`[data-chapter="${id}"]`)?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+    const pin = pinRef.current;
+    if (!pin || window.matchMedia('(max-width: 980px)').matches) return;
+    const index = CHAPTERS.findIndex((item) => item.id === id);
+    const total = pin.offsetHeight - window.innerHeight;
+    const top = window.scrollY + pin.getBoundingClientRect().top + (total * index) / CHAPTERS.length + 2;
+    window.scrollTo({ top, behavior: reduce ? 'auto' : 'smooth' });
   };
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -411,41 +412,46 @@ export function Landing() {
               <p className={styles.heroNote}>Демо без установки: <a href="/login?role=owner">владелец</a>, <a href="/login?role=doctor">врач</a>, <a href="/login?role=admin">администратор</a>.</p>
               <p className={styles.proof}><span><b>Формула</b></span><span><b>Три варианта</b></span><span><b>Расшифровка</b></span><span><b>Маршрут</b></span></p>
             </div>
-            <PlanSheet tooth="16" tier={heroTier} onTier={setHeroTier} />
-            <figure className={styles.plate}>
-              <img className={styles.buccal} src="/marketing/tooth-16.webp" width={346} height={754} alt="Зуб 16, верхний первый моляр, вид сбоку. Та же модель, что в формуле." />
-              <img className={styles.occ} src="/marketing/tooth-16-occ.webp" width={406} height={426} alt="Зуб 16, жевательная поверхность." />
-              <figcaption className={styles.plateCap}><b>Зуб 16</b> верхний первый моляр, вид сбоку и жевательная. Та же модель, что в формуле.</figcaption>
-            </figure>
+            <div className={styles.visual}>
+              <img className={`${styles.shot} ${styles.shotFormula}`} src="/marketing/ui-formula.webp" width={1200} height={968} alt="Формула в ZAZA: верхняя челюсть, зуб 16 отмечен." />
+              <img className={`${styles.shot} ${styles.shotPlan}`} src="/marketing/ui-plan.webp" width={1400} height={918} alt="Карта пациента: эконом, оптимум и премиум, под ними маршрут." />
+              <img className={`${styles.shot} ${styles.shotRoute}`} src="/marketing/ui-route.webp" width={1200} height={264} alt="Маршрут лечения: следующий шаг и остаток по плану." />
+              <i className={styles.molarShadow} aria-hidden />
+              <img className={styles.molar} src="/marketing/tooth-16.webp" width={346} height={754} alt="Зуб 16, верхний первый моляр, вид сбоку. Та же модель, что в формуле." />
+              <span className={`${styles.callout} ${styles.callFormula}`}>Формула</span>
+              <span className={`${styles.callout} ${styles.callRoute}`}>Маршрут</span>
+              <div className={styles.quote}>
+                <PlanSheet tooth="16" tier={heroTier} onTier={setHeroTier} live reduce={reduce} />
+              </div>
+            </div>
           </div>
         </section>
 
-        <section className={`${styles.block} ${styles.wrap}`} id="story" data-reveal>
-          <p className={styles.kicker}>Как проходит приём</p>
-          <h2 className={`${styles.display} ${unbounded.className}`}>От находки до оплаты</h2>
-          <div className={styles.story}>
-            <div className={styles.chapters}>
-              {CHAPTERS.map((item) => (
-                <article key={item.id} className={styles.chapter} data-chapter={item.id}>
-                  <p className={styles.kicker}>{item.index}</p>
-                  <h3 className={`${styles.display} ${unbounded.className}`}>{item.title}</h3>
-                  <p>{item.body}</p>
-                  {item.id === 'plans' && <p>Голос «Привет, ЗаЗа» спрашивает цифры, должников, карточку, оплаты, задачи и склад. Команду на запись видно на экране, её подтверждают. SpeechKit отвечает, когда на сервере есть ключ. Иначе говорит устройство.</p>}
-                  <div className={styles.chapterStage}>
-                    <Stage chapter={item.id} tooth={tooth} tier={tier} onTooth={setTooth} onTier={setTier} />
-                  </div>
-                </article>
-              ))}
-            </div>
-            <aside className={styles.rail}>
-              <ul className={styles.railIndex}>
+        <section className={styles.pin} id="story" ref={pinRef}>
+          <div className={styles.pinSticky}>
+            <div className={styles.pinCopy}>
+              <p className={styles.kicker}>Приём · {active.index} / 05</p>
+              <h2 className={`${styles.display} ${unbounded.className}`}>{active.title}</h2>
+              <p>{active.body}</p>
+              {active.id === 'plans' && <p>Голос «Привет, ЗаЗа» спрашивает цифры, должников, карточку, оплаты, задачи и склад. Команду на запись видно на экране, её подтверждают. SpeechKit отвечает, когда на сервере есть ключ. Иначе говорит устройство.</p>}
+              <div className={styles.pinNav}>
                 {CHAPTERS.map((item) => (
-                  <li key={item.id}><button type="button" className={chapter === item.id ? styles.current : ''} onClick={() => jump(item.id)}>{item.index} {item.title}</button></li>
+                  <button key={item.id} type="button" className={chapter === item.id ? styles.current : ''} onClick={() => jump(item.id)}>
+                    <b>{item.index}</b>
+                    <span>{item.title}</span>
+                  </button>
                 ))}
-              </ul>
-              <Stage chapter={chapter} tooth={tooth} tier={tier} onTooth={setTooth} onTier={setTier} />
-            </aside>
+              </div>
+            </div>
+            <div className={styles.device}>
+              <div className={styles.deviceBar}><b>ZAZA</b><span>{active.title}</span></div>
+              <div className={`${styles.deviceBody} ${styles.cinema}`}>
+                <Stage chapter={chapter} tooth={tooth} tier={tier} onTooth={setTooth} onTier={setTier} />
+              </div>
+            </div>
           </div>
+        </section>
+        <section className={`${styles.block} ${styles.wrap}`} data-reveal>
           <ul className={styles.day}>
             <li><b>Расписание</b><span>Карточки визитов по врачам, неделя, свободные окна и загрузка колонки.</span></li>
             <li><b>Деньги</b><span>Касса, счета и смены. Радар показывает незакрытые планы и долги.</span></li>
@@ -493,7 +499,8 @@ export function Landing() {
           </div>
         </section>
 
-        <section className={`${styles.block} ${styles.wrap}`} id="compare" data-reveal>
+        <section className={styles.band} id="compare" data-reveal>
+          <div className={`${styles.block} ${styles.wrap}`}>
           <p className={styles.kicker}>Сравнение</p>
           <h2 className={`${styles.display} ${unbounded.className}`}>Что увозите и что появляется</h2>
           <p className={styles.sub}>АдминДента, IDENT и SQNS остаются источником пациентов и расписания. Ниже не список их недостатков, а то, что меняется в первый день.</p>
@@ -512,6 +519,7 @@ export function Landing() {
                 <span className={styles.here} data-label="В ZAZA">{to}</span>
               </div>
             ))}
+          </div>
           </div>
         </section>
 
@@ -540,27 +548,40 @@ export function Landing() {
           </div>
           <div className={styles.offers}>
             <article className={styles.offer}>
-              <div>
-                <h3 className={unbounded.className}>Врач</h3>
-                <p>Формула, приём, планы и презентация. Расписание одного врача. {yearNote(27000)} · за врача.</p>
-              </div>
+              <p className={styles.kicker}>За врача</p>
+              <h3 className={unbounded.className}>Врач</h3>
               <p className={`${styles.amount} ${unbounded.className}`}>{doctor.toLocaleString('ru-RU')} <small>{unit}</small></p>
+              <p className={styles.yearNote}>{yearNote(27000)}</p>
+              <ul className={styles.features}>
+                <li>Формула и приём</li>
+                <li>Планы и презентация пациенту</li>
+                <li>Расписание одного врача</li>
+              </ul>
               <button type="button" className={styles.btn} onClick={() => chooseOffer('doctor')}>Заявка</button>
             </article>
             <article className={`${styles.offer} ${styles.offerInk}`}>
-              <div>
-                <h3 className={unbounded.className}>Клиника</h3>
-                <p>Стойка, роли и кресла. Касса, долги, склад, лаборатория, переезд и маршруты. {yearNote(45000)} · за клинику.</p>
-              </div>
+              <p className={styles.kicker}>За клинику</p>
+              <h3 className={unbounded.className}>Клиника</h3>
               <p className={`${styles.amount} ${unbounded.className}`}>{clinic.toLocaleString('ru-RU')} <small>{unit}</small></p>
+              <p className={styles.yearNote}>{yearNote(45000)}</p>
+              <ul className={styles.features}>
+                <li>Стойка, роли и кресла</li>
+                <li>Касса, долги и склад</li>
+                <li>Лаборатория и маршруты</li>
+                <li>Переезд пациентов и расписания</li>
+              </ul>
               <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => chooseOffer('clinic')}>Заявка</button>
             </article>
             <article className={styles.offer}>
-              <div>
-                <h3 className={unbounded.className}>Сеть</h3>
-                <p>Всё, что в клинике, плюс филиалы и кресла по назначениям. Условия под вашу сеть.</p>
-              </div>
+              <p className={styles.kicker}>Под вашу сеть</p>
+              <h3 className={unbounded.className}>Сеть</h3>
               <p className={`${styles.amount} ${unbounded.className}`}>индивидуально</p>
+              <p className={styles.yearNote}>условия обсуждаем</p>
+              <ul className={styles.features}>
+                <li>Всё, что входит в клинику</li>
+                <li>Филиалы</li>
+                <li>Кресла по назначениям</li>
+              </ul>
               <button type="button" className={styles.btn} onClick={() => chooseOffer('network')}>Обсудить</button>
             </article>
           </div>
