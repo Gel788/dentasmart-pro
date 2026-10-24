@@ -28,6 +28,27 @@ export class WarehouseService {
     return this.prisma.purchaseOrder.findMany({
       where: { organizationId: orgId },
       orderBy: { orderedAt: 'desc' },
+      include: { lines: { include: { item: { select: { name: true, unit: true } } } } },
+      take: 50,
+    });
+  }
+
+  /** «Заказать»: one order to the supplier for the chosen items, quantities as asked. */
+  async createPurchaseOrder(orgId: string, data: { supplierName?: string; expectedAt?: string; lines?: { itemId: string; quantity: number }[] }) {
+    const lines = (Array.isArray(data.lines) ? data.lines : []).filter((line) => line?.itemId && Number(line.quantity) > 0).slice(0, 100);
+    if (!lines.length) throw new BadRequestException('Выберите, что заказать');
+    const items = await this.prisma.inventoryItem.findMany({ where: { organizationId: orgId, id: { in: lines.map((line) => line.itemId) } }, select: { id: true } });
+    if (items.length !== new Set(lines.map((line) => line.itemId)).size) throw new NotFoundException('Позиция склада не найдена');
+    const expectedAt = data.expectedAt && !Number.isNaN(Date.parse(data.expectedAt)) ? new Date(data.expectedAt) : null;
+    return this.prisma.purchaseOrder.create({
+      data: {
+        organizationId: orgId,
+        supplierName: String(data.supplierName ?? '').trim().slice(0, 120) || 'Поставщик',
+        status: 'SENT',
+        expectedAt,
+        lines: { create: lines.map((line) => ({ itemId: line.itemId, quantity: Math.round(Number(line.quantity) * 1000) / 1000, reason: 'SHORTAGE' })) },
+      },
+      include: { lines: true },
     });
   }
 

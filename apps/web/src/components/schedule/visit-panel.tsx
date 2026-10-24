@@ -47,7 +47,7 @@ export function VisitPanel({ visit, offset, busy, onStatus, onReschedule, onMove
       <span className={styles.pill} data-tone={status.tone}><i aria-hidden="true" />{status.label}</span>
       {visit.allergies && visit.allergies.length > 0 && <p className={styles.allergy}>Аллергия: {visit.allergies.join(', ')}</p>}
       <dl>
-        <dt>Когда</dt><dd>{dayTitle(day, { weekday: 'short', day: 'numeric', month: 'short' })}, {clock(wallMinutes(visit.startsAt, offset))}–{clock(wallMinutes(visit.endsAt, offset))}</dd>
+        <dt>Когда</dt><dd>{dayTitle(day, { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}, {clock(wallMinutes(visit.startsAt, offset))}–{clock(wallMinutes(visit.endsAt, offset))}</dd>
         <dt>Услуга</dt><dd>{visit.service}</dd>
         <dt>Кресло</dt><dd>{visit.cabinet}</dd>
         <dt>Врач</dt><dd>{visit.doctor}</dd>

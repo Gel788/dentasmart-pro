@@ -260,8 +260,22 @@ export class WorkspaceService {
       const held = families.get(key);
       if (!held || (plan.tier === 'OPTIMUM' && held.tier !== 'OPTIMUM')) families.set(key, plan);
     }
+    // Each patient once: the largest open plan stands for the rest, and a patient already due for a
+    // checkup carries the plan on that same line instead of getting a second one.
+    const byPatient = new Map<string, (typeof plans)[number]>();
+    for (const plan of families.values()) {
+      const held = byPatient.get(plan.patient.id);
+      if (!held || Number(plan.totalPrice) > Number(held.totalPrice)) byPatient.set(plan.patient.id, plan);
+    }
+    const planLine = (plan: (typeof plans)[number]) => ({ planId: plan.id, title: plan.tier ? TIER_LABEL[plan.tier] : plan.title, total: Number(plan.totalPrice) });
+    const withPlans = checkups.map((row) => {
+      const plan = byPatient.get(row.id);
+      return plan ? { ...row, plan: planLine(plan) } : { ...row, plan: null };
+    });
+    families.clear();
+    for (const [id, plan] of byPatient) if (!checkups.some((row) => row.id === id)) families.set(id, plan);
     return {
-      checkups,
+      checkups: withPlans,
       plans: [...families.values()].slice(0, 50).map((plan) => ({
         planId: plan.id,
         patientId: plan.patient.id,
@@ -1354,6 +1368,14 @@ export class WorkspaceService {
       });
     }
     rows.sort((a, b) => b.days - a.days);
+    // One call per patient: several open plans of one person are one conversation, the biggest sum leads.
+    const perPatient = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) {
+      const held = perPatient.get(row.patientId);
+      if (!held) perPatient.set(row.patientId, row);
+      else if (row.total > held.total) perPatient.set(row.patientId, { ...row, since: held.since < row.since ? held.since : row.since, days: Math.max(held.days, row.days) });
+    }
+    rows.splice(0, rows.length, ...[...perPatient.values()].sort((a, b) => b.days - a.days));
     const presented = await this.prisma.treatmentPlan.findMany({
       where: { organizationId: orgId, status: { not: 'DRAFT' } },
       select: { familyKey: true, id: true, status: true },
@@ -1421,7 +1443,7 @@ export class WorkspaceService {
       }),
       this.prisma.appointment.findMany({
         where: { organizationId: orgId, startsAt: { gte: start, lt: end }, status: { not: 'CANCELLED' } },
-        include: { patient: true, doctor: true, service: true, cabinet: true },
+        include: { patient: true, doctor: true, service: true, cabinet: true, invoices: { select: { status: true } } },
         orderBy: { startsAt: 'asc' },
       }),
     ]);
@@ -1483,7 +1505,7 @@ export class WorkspaceService {
         status: { not: 'CANCELLED' },
         startsAt: { gte: new Date(fromDay - offset * 60000), lt: new Date(toDay + 86400000 - offset * 60000) },
       },
-      include: { patient: true, doctor: true, service: true, cabinet: true },
+      include: { patient: true, doctor: true, service: true, cabinet: true, invoices: { select: { status: true } } },
       orderBy: { startsAt: 'asc' },
     });
     const visits = appointments.map(boardVisit);
@@ -2220,7 +2242,7 @@ function splitInstallment(total: number, months: number) {
 }
 
 /** The shape every schedule view reads a visit in. */
-function boardVisit(a: Prisma.AppointmentGetPayload<{ include: { patient: true; doctor: true; service: true; cabinet: true } }>) {
+function boardVisit(a: Prisma.AppointmentGetPayload<{ include: { patient: true; doctor: true; service: true; cabinet: true; invoices: { select: { status: true } } } }>) {
   return {
     id: a.id,
     startsAt: a.startsAt,
@@ -2234,5 +2256,7 @@ function boardVisit(a: Prisma.AppointmentGetPayload<{ include: { patient: true; 
     cabinet: a.cabinet?.name ?? 'Без кресла',
     service: a.service?.name ?? 'Приём',
     allergies: a.patient.allergies,
+    // Paid: the visit has a bill and every live bill on it is settled.
+    paid: a.invoices.some((row) => row.status === 'PAID') && a.invoices.every((row) => row.status === 'PAID' || row.status === 'CANCELLED'),
   };
 }

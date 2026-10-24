@@ -1,0 +1,42 @@
+/* Money: four figures with their trend, then debts, instalments, doctors and the month by day. */
+.page { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 16px; }
+.head h1 { margin: 0; font-size: clamp(22px, 1.2vw + 14px, 28px) !important; font-weight: 650; }
+.head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.links { display: flex; flex-wrap: wrap; gap: 6px; }
+.links a { display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-solid); color: var(--text-secondary); font-size: 13.5px; font-weight: 600; text-decoration: none; }
+.links a:hover { border-color: var(--accent); color: var(--accent-ink); }
+.error { margin: 0; padding: 10px 12px; border-radius: var(--r); background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+.skeleton { height: 360px; border-radius: var(--r-lg); background: var(--surface-2); }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 16px 16px 12px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-solid); }
+.tileLabel { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.tile b { font-size: clamp(24px, 1vw + 16px, 30px); font-weight: 650; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tile[data-tone='owe'] b { color: var(--code-owe, var(--danger)); }
+.tileFoot { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 12.5px; }
+.up, .down, .flat { display: inline-flex; align-items: center; gap: 3px; font-size: 12.5px; font-weight: 600; }
+.up { color: var(--teal, #0f8f84); }
+.down { color: var(--danger); }
+.flat { color: var(--muted); font-weight: 500; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.m { min-width: 0; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-solid); overflow: hidden; }
+.mHead { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.mHead h2 { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 15.5px !important; font-weight: 700; }
+.mHead a { margin-left: auto; color: var(--accent-ink); font-size: 13.5px; font-weight: 600; text-decoration: none; }
+.rows { margin: 0; padding: 0; list-style: none; }
+.rows li { border-bottom: 1px solid var(--border); }
+.rows li:last-child { border-bottom: 0; }
+.rows li[data-late] { background: color-mix(in srgb, var(--danger) 5%, var(--surface-solid)); }
+.rows a { display: flex; align-items: center; gap: 12px; padding: 11px 16px; color: var(--text); text-decoration: none; }
+.rows a:hover { background: var(--surface-2); }
+.rows a > span { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.rows b { font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rows small { color: var(--muted); font-size: 12.5px; }
+.rows em { font-style: normal; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.owe { color: var(--code-owe, var(--danger)); }
+.pad { padding: 16px; }
+.axis { display: flex; justify-content: space-between; margin-top: 6px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.best { margin: 12px 0 0; color: var(--text-secondary); font-size: 13.5px; }
+.empty { margin: 0; padding: 18px 16px; color: var(--muted); font-size: 14px; }
+@media (max-width: 1100px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .grid { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .tiles { grid-template-columns: 1fr; } }

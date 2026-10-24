@@ -67,7 +67,7 @@ export function MonthStrip({ days, selected, offset, onPick }: { days: RangeDay[
               data-today={day.date === today}
               data-closed={day.hours === null || undefined}
               aria-current={day.date === selected ? 'date' : undefined}
-              aria-label={`${dayTitle(day.date, { day: 'numeric', month: 'long', weekday: 'long' })}${day.hours === null ? ', выходной' : ''}: ${day.visits ? `${day.visits} ${visitsWord(day.visits)}, кресла заняты на ${percent}%` : 'записей нет'}`}
+              aria-label={`${dayTitle(day.date, { day: '2-digit', month: '2-digit', year: 'numeric', weekday: 'long' })}${day.hours === null ? ', выходной' : ''}: ${day.visits ? `${day.visits} ${visitsWord(day.visits)}, кресла заняты на ${percent}%` : 'записей нет'}`}
               title={day.visits ? `${day.visits} ${visitsWord(day.visits)} · занято ${percent}%` : 'Записей нет'}
               onClick={() => onPick(day.date)}
             >

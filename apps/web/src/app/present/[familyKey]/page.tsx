@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Protected } from '@/components/protected';
 import { api, assetUrl } from '@/lib/api';
-import { formatMoney } from '@/lib/format';
+import { formatDateOnly, formatMoney } from '@/lib/format';
 import type { PlanCard } from '@/components/studio/plans';
 import { BreakdownTable } from '@/components/studio/breakdown-table';
 import { SmilePreview } from '@/components/studio/smile';
@@ -24,6 +24,8 @@ const STORY: Record<string, string> = {
   Эстетика: 'Финал — цвет и гладкость. Улыбка выглядит собранной, а не «только что из кресла».',
 };
 
+const STUDY: Record<string, string> = { OPG: 'Панорамный снимок', CBCT: 'КТ', INTRAORAL: 'Прицельный снимок', PHOTO: 'Фото', INTRAORAL_PHOTO: 'Фото во рту', SCAN: '3D-скан', CEPH: 'ТРГ' };
+
 export default function PresentPage() {
   return <Protected bare><Story /></Protected>;
 }
@@ -34,6 +36,8 @@ function Story() {
   const [catalog, setCatalog] = useState<{ services: CatalogService[]; stock: CatalogStock[] }>({ services: [], stock: [] });
   const [priced, setPriced] = useState(false);
   const [photos, setPhotos] = useState<{ before: string | null; after: string | null; xray: string | null }>({ before: null, after: null, xray: null });
+  // Every real picture of the patient, newest first: X-rays, scans and photos, one of each series.
+  const [shots, setShots] = useState<{ id: string; url: string; title: string; takenAt: string | null }[]>([]);
   const [step, setStep] = useState(0);
   const [months, setMonths] = useState(6);
   const [name, setName] = useState('');
@@ -51,12 +55,22 @@ function Story() {
       const recommended = payload.plans.find((plan) => plan.tier === 'OPTIMUM');
       if (recommended && recommended.installmentMonths >= 2) setMonths(recommended.installmentMonths);
       if (recommended) setChosen(Object.fromEntries(recommended.phases.map((phase) => [phase.id, true])));
-      api<{ compare: { before: string | null; after: string | null }; studies: { type: string; fileUrl: string }[] }>(`/flow/patients/${payload.patient.id}/imaging`)
-        .then((imaging) => setPhotos({
-          before: imaging.compare.before,
-          after: imaging.compare.after,
-          xray: imaging.studies.find((study) => study.type === 'INTRAORAL' || study.type === 'OPG')?.fileUrl ?? null,
-        }))
+      api<{ compare: { before: string | null; after: string | null }; studies: { id: string; type: string; title: string | null; fileUrl: string; takenAt: string | null; seriesKey: string | null }[] }>(`/flow/patients/${payload.patient.id}/imaging`)
+        .then((imaging) => {
+          setPhotos({
+            before: imaging.compare.before,
+            after: imaging.compare.after,
+            xray: imaging.studies.find((study) => study.type === 'INTRAORAL' || study.type === 'OPG')?.fileUrl ?? null,
+          });
+          const seen = new Set<string>();
+          const picked = [...imaging.studies]
+            .filter((study) => !!study.fileUrl && !/\.(dcm|stl|ply|obj|zip)(\?|$)/i.test(study.fileUrl))
+            .sort((a, b) => (b.takenAt ?? '').localeCompare(a.takenAt ?? ''))
+            .filter((study) => { const key = study.seriesKey ?? study.id; if (seen.has(key)) return false; seen.add(key); return true; })
+            .slice(0, 6)
+            .map((study) => ({ id: study.id, url: study.fileUrl, title: study.title || STUDY[study.type] || 'Снимок', takenAt: study.takenAt }));
+          setShots(picked);
+        })
         .catch(() => undefined);
     }).catch((err: Error) => setError(err.message));
     api<{ services: CatalogService[]; stock: CatalogStock[] }>('/config')
@@ -110,10 +124,22 @@ function Story() {
           <div className="sd-chips" style={{ marginTop: 12 }}>
             {data.alerts.filter((alert) => alert.tone === 'danger').map((alert) => <span key={alert.text} className="sd-chip danger">{alert.text}</span>)}
           </div>
-          <div className="pv-photos">
-            {photos.xray ? <img src={assetUrl(photos.xray)} alt="Снимок" /> : <div className="pv-shot"><span>Снимок</span></div>}
-            {photos.before ? <img src={assetUrl(photos.before)} alt="До" /> : <div className="pv-shot"><span>Фото</span></div>}
-          </div>
+          {shots.length ? (
+            <div className="pv-gallery" data-count={Math.min(shots.length, 3)}>
+              {shots.slice(0, 6).map((shot) => (
+                <figure key={shot.id}>
+                  <img src={assetUrl(shot.url)} alt={shot.title} />
+                  <figcaption><b>{shot.title}</b>{shot.takenAt && <span>{formatDateOnly(shot.takenAt)}</span>}</figcaption>
+                </figure>
+              ))}
+            </div>
+          ) : (
+            <div className="pv-none">
+              <b>Снимков пока нет</b>
+              <span>Загрузите снимок или фото в карте пациента — они появятся здесь.</span>
+              <Link href={`/patients/${data.patient.id}?tab=formula`}>Открыть карту</Link>
+            </div>
+          )}
         </section>
       )}
       {step === 1 && (
@@ -156,12 +182,11 @@ function Story() {
               <img src={assetUrl(photos.before)} alt="До" />
               <img src={assetUrl(photos.after)} alt="После" />
             </div>
-          ) : (
-            <div className="pv-photos">
-              <div className="pv-shot"><span>Сейчас</span></div>
-              <div className="pv-shot"><span>После</span></div>
+          ) : shots[0] ? (
+            <div className="pv-gallery" data-count={1}>
+              <figure><img src={assetUrl(shots.find((shot) => /фото|улыб/i.test(shot.title))?.url ?? shots[0].url)} alt="Сейчас" /><figcaption><b>Сейчас</b><span>фото «после» появится после лечения</span></figcaption></figure>
             </div>
-          )}
+          ) : null}
           <SmilePreview sampleUrl={photos.before ? assetUrl(photos.before) : null} />
         </section>
       )}
@@ -194,7 +219,7 @@ function Story() {
             <>
               <Confetti />
               <p className="lead">План принят. Ближайшие визиты уже стоят в расписании.</p>
-              {done.appointments.map((item) => <p key={item.startsAt}>{item.title} · {new Date(item.startsAt).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</p>)}
+              {done.appointments.map((item) => <p key={item.startsAt}>{item.title} · {new Date(item.startsAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>)}
             </>
           ) : (
             <div className="pv-sign">

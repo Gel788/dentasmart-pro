@@ -41,7 +41,7 @@
   --nav-w: 236px;
   --panel-w: 320px;
   --top-h: 0px;
-  --font-display: var(--font-body);
+  --font-display: var(--font-unbounded);
   --font-mono: var(--font-body);
   --ok: #0b8a5f;
   --ok-soft: #e4f4ed;
@@ -94,11 +94,11 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   margin: 0;
   color: var(--text);
-  font-family: var(--font-body), 'Golos Text', ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-size: var(--text-size, 13px);
   background: var(--bg);
 }
-h1, .sd-display { font-family: var(--font-display), 'Golos Text', ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.01em; }
+h1, .sd-display { font-family: var(--font-display), sans-serif; letter-spacing: -0.01em; }
 .sd-mono, kbd { font-family: var(--font-mono), ui-monospace, monospace; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -694,24 +694,24 @@ html.dark .ai-chips button.on { color: #121212; }
 .pv-kicker { margin: 0 0 8px; color: #78716c; }
 .pv-hero, .pv-chapter { animation: sd-rise 420ms cubic-bezier(.2,.8,.2,1); }
 .pv-hero { padding: 12px 8vw 48px; max-width: 980px; }
-.pv-hero h1 { font-family: var(--font-display), 'Golos Text', sans-serif; font-weight: 500; font-size: clamp(40px, 6vw, 68px); line-height: 0.98; letter-spacing: -0.03em; margin: 0 0 12px; }
+.pv-hero h1 { font-family: var(--font-display), sans-serif; font-weight: 500; font-size: clamp(40px, 6vw, 68px); line-height: 0.98; letter-spacing: -0.03em; margin: 0 0 12px; }
 .pv-hero p.lead { font-size: 18px; line-height: 1.5; max-width: 46ch; color: #44403c; }
 .pv-photos { display: grid; grid-template-columns: 1.2fr .8fr; gap: 12px; margin-top: 22px; }
 .pv-photos img, .pv-shot { width: 100%; height: 280px; object-fit: cover; border-radius: 4px; transition: transform 220ms ease; }
 .pv-photos img:hover { transform: scale(1.015); }
-.pv-shot { position: relative; overflow: hidden; display: grid; place-items: center; background: #141414; color: rgba(236, 253, 245, 0.86); font-family: var(--font-display), 'Golos Text', sans-serif; font-size: 32px; }
+.pv-shot { position: relative; overflow: hidden; display: grid; place-items: center; background: #141414; color: rgba(236, 253, 245, 0.86); font-family: var(--font-display), sans-serif; font-size: 32px; }
 .pv-shot::after { content: ''; position: absolute; inset: 0; display: none; transform: translateX(-120%); animation: pv-sheen 4.2s ease-in-out infinite; }
 @keyframes pv-sheen { 0%, 55% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
 .pv-range { width: min(420px, 100%); margin-top: 18px; accent-color: var(--accent); }
 .pv-chapter { padding: 8px 8vw 36px; max-width: 980px; }
-.pv-chapter h2 { font-family: var(--font-display), 'Golos Text', sans-serif; font-weight: 500; font-size: 36px; margin: 0 0 8px; }
+.pv-chapter h2 { font-family: var(--font-display), sans-serif; font-weight: 500; font-size: 36px; margin: 0 0 8px; }
 .pv-phase { display: grid; grid-template-columns: 72px 1fr; gap: 14px; padding: 16px 0; border-top: 1px solid rgba(28,25,23,.1); }
-.pv-num { font-family: var(--font-display), 'Golos Text', sans-serif; font-size: 32px; color: var(--accent); }
+.pv-num { font-family: var(--font-display), sans-serif; font-size: 32px; color: var(--accent); }
 .pv-table { width: 100%; border-collapse: collapse; background: white; border-radius: 4px; overflow: hidden; }
 .pv-table th, .pv-table td { padding: 14px; text-align: left; border-bottom: 1px solid #eee; }
 .pv-table tr.rec { background: #f0fdfa; }
 .pv-ribbon { display: inline-block; background: var(--accent); color: white; border-radius: 999px; padding: 2px 8px; font-size: 12px; }
-.pv-price { font-family: var(--font-display), 'Golos Text', sans-serif; font-size: 64px; letter-spacing: -0.04em; margin: 0; }
+.pv-price { font-family: var(--font-display), sans-serif; font-size: 64px; letter-spacing: -0.04em; margin: 0; }
 .pv-sign { background: white; border-radius: 4px; padding: 18px; box-shadow: none; }
 .pv-nav { display: flex; justify-content: space-between; padding: 0 8vw 32px; max-width: 1100px; }
 .pv-confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
@@ -734,11 +734,11 @@ html.dark .ai-chips button.on { color: #121212; }
 .ck-item.hot { box-shadow: none; }
 .ck-summary { position: fixed; inset: 0; background: rgba(7,11,10,.46); display: grid; place-items: center; z-index: 30; padding: 20px; }
 .ck-sheet { width: min(520px, 100%); background: white; color: var(--text); border-radius: 4px; padding: 22px; box-shadow: none; }
-.ck-sheet h2 { font-family: var(--font-display), 'Golos Text', sans-serif; font-weight: 500; font-size: 32px; margin: 0 0 8px; }
+.ck-sheet h2 { font-family: var(--font-display), sans-serif; font-weight: 500; font-size: 32px; margin: 0 0 8px; }
 
 .pr-page { width: 210mm; min-height: 297mm; margin: 16px auto; background: white; color: var(--text); padding: 18mm 16mm; box-shadow: none; }
 .pr-cover { min-height: 240mm; display: flex; flex-direction: column; justify-content: space-between; background: #141414; color: #f5f5f2; margin: -18mm -16mm 12mm; padding: 18mm 16mm; }
-.pr-cover h1 { font-family: var(--font-display), 'Golos Text', sans-serif; font-weight: 500; font-size: 48px; line-height: 1; margin: 0; color: var(--text); }
+.pr-cover h1 { font-family: var(--font-display), sans-serif; font-weight: 500; font-size: 48px; line-height: 1; margin: 0; color: var(--text); }
 .pr-name { font-size: 28px; color: var(--text); }
 .pr-phase { margin: 0 0 14px; break-inside: avoid; }
 .pr-phase h3 { margin: 0; font-size: 15px; }
@@ -800,7 +800,7 @@ html.dark .ai-chips button.on { color: #121212; }
   .wow-grid, .wow-metrics, .wow-chairs, .wow-split, .wow-rules, .wow-sources, .wow-check-grid { grid-template-columns: 1fr; }
 }
 
-.wow h1, .wow-setup h1 { font-family: var(--font-display), 'Golos Text', sans-serif; font-weight: 500; letter-spacing: -0.03em; margin: 0; }
+.wow h1, .wow-setup h1 { font-family: var(--font-display), sans-serif; font-weight: 500; letter-spacing: -0.03em; margin: 0; }
 .wow-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-bottom: 18px; }
 .wow-head p { color: var(--muted); max-width: 640px; }
 .wow-kicker { margin: 0 0 6px; letter-spacing: -0.01em; color: var(--muted); font-size: 14px; }
@@ -843,7 +843,7 @@ html.dark .ai-chips button.on { color: #121212; }
 .wow-call { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.08); }
 .wow-call a, .wow-split a { color: var(--accent-2); }
 .wow-count { animation: wow-rise 700ms ease; }
-.wow-rules article b { font-family: var(--font-display), 'Golos Text', sans-serif; font-size: 36px; color: var(--accent); }
+.wow-rules article b { font-family: var(--font-display), sans-serif; font-size: 36px; color: var(--accent); }
 .wow-sources button, .wow-sources label { text-align: left; cursor: pointer; }
 .wow-sources .on { outline: 2px solid var(--accent); }
 .wow-queue { display: flex; flex-direction: column; gap: 8px; }
@@ -852,7 +852,7 @@ html.dark .ai-chips button.on { color: #121212; }
 .wow-board { display: flex; flex-direction: column; gap: 10px; }
 .wow-board article { display: grid; grid-template-columns: 36px 74px 1fr auto auto; gap: 14px; align-items: center; }
 .wow-board article.lead { background: var(--accent-soft); }
-.wow-rank { font-family: var(--font-display), 'Golos Text', sans-serif; font-size: 28px; color: var(--accent); }
+.wow-rank { font-family: var(--font-display), sans-serif; font-size: 28px; color: var(--accent); }
 .wow-kpi-num { text-align: right; }
 .wow-note { padding: 10px 12px; border-radius: 3px; background: var(--accent-soft); }
 .wow-map { display: flex; flex-direction: column; gap: 12px; }
@@ -862,11 +862,11 @@ html.dark .ai-chips button.on { color: #121212; }
 .wow-phone-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--bg); }
 .wow-phone { width: min(400px, 100%); height: min(820px, calc(100vh - 32px)); display: flex; flex-direction: column; background: #f7f3ee; color: var(--text); border-radius: 4px; overflow: hidden; box-shadow: none; border: 8px solid var(--text); }
 .wow-phone header, .wow-phone nav { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 12px 14px; background: white; }
-.wow-phone header strong { display: block; font-family: var(--font-display), 'Golos Text', sans-serif; font-size: 22px; }
+.wow-phone header strong { display: block; font-family: var(--font-display), sans-serif; font-size: 22px; }
 .wow-phone header select, .wow-phone select, .wow-map select, .wow-check select { width: 100%; border-radius: 3px; border: 1px solid var(--border); padding: 8px; background: white; }
 .wow-phone-body { flex: 1; overflow: auto; padding: 14px; }
 .wow-phone article, .wow-slot { display: block; width: 100%; text-align: left; margin: 8px 0; padding: 10px 12px; border-radius: 3px; background: white; border: 0; }
-.wow-phone .wow-price { font-family: var(--font-display), 'Golos Text', sans-serif; font-size: 40px; margin: 0; }
+.wow-phone .wow-price { font-family: var(--font-display), sans-serif; font-size: 40px; margin: 0; }
 .wow-photos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .wow-photos img { width: 100%; height: 110px; object-fit: cover; border-radius: 3px; background: #e7e5e4; }
 .wow-chat p { margin: 6px 0; padding: 8px 10px; border-radius: 3px; background: white; }
@@ -970,7 +970,7 @@ html.dark .ai-chips button.on { color: #121212; }
 .vc-mic.on i { animation: mic-ring 1.4s ease-out infinite; border-color: var(--accent-soft); }
 .vc-mic.on i:last-of-type { animation-delay: .4s; }
 @keyframes mic-ring { from { transform: scale(0.86); opacity: .9; } to { transform: scale(1.35); opacity: 0; } }
-.vc-line { margin: 0; min-height: 2.6em; font-family: var(--font-display), 'Golos Text', sans-serif; font-size: 18px; line-height: 1.35; }
+.vc-line { margin: 0; min-height: 2.6em; font-family: var(--font-display), sans-serif; font-size: 18px; line-height: 1.35; }
 .vc-line.on { animation: sd-rise 280ms ease; }
 
 .xr { display: grid; gap: 12px; padding: 14px; border-radius: 4px; background: var(--text); color: #f5f5f2; }
@@ -992,18 +992,18 @@ html.dark .ai-chips button.on { color: #121212; }
 .xr-box em { bottom: calc(100% + 4px); }
 .xr-box b { top: calc(100% + 4px); }
 @keyframes xr-pop { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: none; } }
-.xr-saved { margin: 0; font-family: var(--font-display), 'Golos Text', sans-serif; font-size: 20px; }
+.xr-saved { margin: 0; font-family: var(--font-display), sans-serif; font-size: 20px; }
 .xr-fold { border-radius: 4px; }
 .xr-fold summary { cursor: pointer; color: var(--accent-ink); }
 
 .jaw-grid { display: grid; grid-template-columns: 1.3fr .7fr; gap: 18px; padding: 8px 6vw 48px; }
-.jaw h1 { font-family: var(--font-display), 'Golos Text', sans-serif; font-weight: 500; font-size: clamp(36px, 5vw, 58px); line-height: 0.98; letter-spacing: -0.03em; margin: 0 0 8px; }
+.jaw h1 { font-family: var(--font-display), sans-serif; font-weight: 500; font-size: clamp(36px, 5vw, 58px); line-height: 0.98; letter-spacing: -0.03em; margin: 0 0 8px; }
 .jaw .lead { color: #44403c; max-width: 42ch; }
 .jaw-canvas { height: 520px; margin-top: 16px; border-radius: 4px; overflow: hidden; background: var(--text); }
 .jaw-canvas canvas { width: 100% !important; height: 100% !important; }
 .jaw-wait { display: grid; place-items: center; color: #f5f5f2; }
 .jaw-side { background: white; border-radius: 4px; padding: 18px; box-shadow: none; }
-.jaw-price { font-family: var(--font-display), 'Golos Text', sans-serif; font-size: 52px; letter-spacing: -0.04em; margin: 0; }
+.jaw-price { font-family: var(--font-display), sans-serif; font-size: 52px; letter-spacing: -0.04em; margin: 0; }
 .jaw-time { list-style: none; margin: 14px 0; padding: 0; display: grid; gap: 6px; }
 .jaw-time button { width: 100%; text-align: left; border: 0; background: transparent; border-radius: 3px; padding: 8px 10px; }
 .jaw-time .on button { background: #f0fdfa; }
@@ -1018,21 +1018,21 @@ html.dark .ai-chips button.on { color: #121212; }
 .radar-teaser i::after { content: ''; position: absolute; inset: 0; display: none; animation: radar-spin 2.8s linear infinite; }
 .radar-teaser em { display: block; color: var(--muted); font-style: normal; }
 .radar-hero { display: grid; grid-template-columns: 1fr auto auto; gap: 18px; align-items: center; margin-bottom: 14px; }
-.radar-hero h1 { font-family: var(--font-display), 'Golos Text', sans-serif; font-weight: 500; font-size: clamp(42px, 6vw, 72px); letter-spacing: -0.04em; margin: 0; line-height: 0.95; }
+.radar-hero h1 { font-family: var(--font-display), sans-serif; font-weight: 500; font-size: clamp(42px, 6vw, 72px); letter-spacing: -0.04em; margin: 0; line-height: 0.95; }
 .radar-orb { width: 148px; height: 148px; border-radius: 50%; position: relative; background: #141414; overflow: hidden; }
 .radar-orb i { position: absolute; inset: 0; display: none; animation: radar-spin 3.2s linear infinite; }
 .radar-orb b { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: #fbbf24; left: calc(20% + (var(--i) * 11%)); top: calc(28% + (var(--i) * 7%)); box-shadow: none; animation: xr-pop 600ms ease both; animation-delay: calc(var(--i) * 80ms); }
 @keyframes radar-spin { to { transform: rotate(360deg); } }
 .radar-back { padding: 14px 16px; border-radius: 4px; background: var(--accent-soft); }
 .radar-back span { display: block; color: var(--accent-ink); }
-.radar-back strong { font-family: var(--font-display), 'Golos Text', sans-serif; font-size: 32px; }
+.radar-back strong { font-family: var(--font-display), sans-serif; font-size: 32px; }
 .radar-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .radar-col { display: grid; gap: 8px; }
 .radar-col-h, .radar-col article { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; }
 .radar-col article { padding-top: 8px; border-top: 1px solid var(--border); }
 .radar-col article.done { opacity: 0.45; }
 .radar-col p { margin: 0; color: var(--muted); font-size: 13px; }
-.radar-template { white-space: pre-wrap; margin: 0 0 12px; padding: 12px 14px; border-radius: 3px; background: var(--surface); border: 1px solid var(--border); font-family: var(--font-display), 'Golos Text', sans-serif; }
+.radar-template { white-space: pre-wrap; margin: 0 0 12px; padding: 12px 14px; border-radius: 3px; background: var(--surface); border: 1px solid var(--border); font-family: var(--font-display), sans-serif; }
 @media (max-width: 960px) { .radar-hero, .radar-grid, .radar-col-h, .radar-col article { grid-template-columns: 1fr; } }
 
 /* One focus ring for every control, and no motion for people who asked for none. */
@@ -1595,3 +1595,61 @@ li:has(> .jn-line .jn-edit) > .jn-line { grid-column: 1 / -1; }
   .sd-fold { color: var(--muted); }
 }
 @media (max-width: 1180px) and (min-width: 721px) { .sd-fold { display: none !important; } }
+
+/* «Итого» spans the whole plan, under both columns, in one low row: at the end of the page it sits
+   below the teeth instead of over the lower jaw, and while scrolling it covers as little as it can. */
+@media (min-width: 1100px) {
+  .jn-dock { grid-column: 1 / -1; flex-wrap: nowrap; gap: 12px 18px; padding: 10px 16px; border-radius: var(--r-lg, 12px); background: color-mix(in srgb, var(--surface-solid) 94%, transparent); backdrop-filter: blur(8px); }
+  .jn-dock .jn-sum { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; margin-right: auto; }
+  .jn-dock .jn-sum small { color: var(--muted); font-size: 12px; }
+  .jn-dock .jn-actions { margin-left: 0; flex-wrap: nowrap; }
+}
+.jn-stage { scroll-padding-bottom: 96px; }
+.jn-chart { scroll-margin-bottom: 96px; }
+
+/* Main buttons: the clinic's deep teal, flat — no bright mint gradients. */
+:root { --primary: #0b6e66; --primary-hover: #095a53; --primary-soft: #e3f1ef; }
+.sd-btn, .sd-top-book { background: var(--primary); color: #fff; box-shadow: 0 1px 2px rgba(11, 110, 102, 0.25); }
+.sd-btn:hover, .sd-top-book:hover { background: var(--primary-hover); }
+html.dark .sd-btn { color: #fff; }
+/* Titles in Unbounded: tighter and a touch lighter, it is a wide face. */
+h1, .sd-display { font-family: var(--font-display), sans-serif; font-weight: 600; letter-spacing: -0.02em; }
+
+/* Patient presentation: light and clinical — white figures with real pictures, the clinic's teal, no warm greys. */
+.pv { background: var(--bg); }
+.pv-kicker { color: var(--primary, #0b6e66); font-weight: 600; }
+.pv-hero h1 { font-weight: 600; font-size: clamp(32px, 4.2vw, 54px); line-height: 1.04; letter-spacing: -0.03em; }
+.pv-hero p.lead, .pv-chapter .lead { color: var(--text-secondary); }
+.pv-steps button, .pv-steps a { border-color: var(--border); background: var(--surface-solid); }
+.pv-steps button.on { background: var(--primary, #0b6e66); border-color: var(--primary, #0b6e66); }
+.pv-phase { border-top-color: var(--border); }
+.pv-num, .pv-chapter .pv-num { color: var(--primary, #0b6e66); }
+.pv-table tr.rec { background: var(--primary-soft, #e3f1ef); }
+.pv-ribbon { background: var(--primary, #0b6e66); }
+.pv-shot { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); font-size: 18px; }
+.pv-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
+.pv-gallery[data-count='1'] { grid-template-columns: minmax(0, 640px); }
+.pv-gallery[data-count='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pv-gallery figure { margin: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-solid); box-shadow: 0 1px 2px rgba(15, 28, 48, 0.05); }
+.pv-gallery img { display: block; width: 100%; height: 240px; object-fit: cover; background: #0e1116; }
+.pv-gallery figcaption { display: flex; justify-content: space-between; gap: 10px; padding: 10px 14px; font-size: 13.5px; }
+.pv-gallery figcaption span { color: var(--muted); }
+.pv-none { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 22px; padding: 22px; border: 1px dashed var(--border-strong); border-radius: 14px; background: var(--surface-solid); }
+.pv-none span { color: var(--text-secondary); }
+.pv-none a { margin-top: 6px; color: var(--primary, #0b6e66); font-weight: 600; }
+@media (max-width: 720px) { .pv-gallery { grid-template-columns: 1fr; } .pv-gallery img { height: 200px; } }
+
+/* Settings: a real 12-column grid for the clinic's details, one column on a phone. */
+.cfg-brand { gap: 18px; }
+.cfg-brand fieldset { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px 14px; }
+.cfg-brand legend { grid-column: 1 / -1; padding: 0; }
+.cfg-brand fieldset > label { grid-column: span var(--span, 4); }
+.cfg-brand fieldset + fieldset { padding-top: 16px; border-top: 1px solid var(--border); }
+.cfg-color { display: flex; gap: 8px; align-items: center; }
+.cfg-color input[type='color'] { flex: none; width: 44px; height: 40px; padding: 2px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--surface-solid); cursor: pointer; }
+.cfg-color .sd-input { flex: 1; min-width: 0; }
+.cfg-panel { border-radius: var(--r-lg); }
+@media (max-width: 860px) { .cfg-brand fieldset > label { grid-column: span 12; } }
+@media (max-width: 720px) { .cfg-layout { grid-template-columns: 1fr; } .cfg-layout nav { position: static; flex-direction: row; overflow-x: auto; } }
+/* Inside a title, the small line under it reads in the text face, not the display face. */
+h1 small, h1 em, .sd-display small { font-family: var(--font-body), sans-serif; letter-spacing: 0; }

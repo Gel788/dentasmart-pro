@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowRight, Globe, CalendarPlus, CheckCircle2, FileText,
 import { api } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { addDays, weekStart, type RangeDay } from '@/components/schedule/model';
+import { OwnerBoard } from './owner-board';
 import styles from './today.module.css';
 
 type Visit = {
@@ -98,7 +99,7 @@ export function Today({ owner, permissions = [] }: { owner: boolean; permissions
 
   const off = day.offsetMinutes ?? 180;
   const clock = (iso: string) => clockAt(iso, off);
-  const title = new Date(`${day.day}T12:00:00`).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).replace(/(\d+) /, '$1\u00a0');
+  const title = new Date(`${day.day}T12:00:00`).toLocaleDateString('ru-RU', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/(\d+) /, '$1\u00a0');
   const summary = [
     day.counts.inChair ? `${day.counts.inChair} в кресле` : '',
     day.counts.waiting ? `${day.counts.waiting} ждёт` : '',
@@ -295,19 +296,9 @@ export function Today({ owner, permissions = [] }: { owner: boolean; permissions
           <ul className={styles.list}>
             <li><Link href="/schedule"><CalendarPlus size={16} aria-hidden="true" /><span><b>{day.tomorrow} {plural(day.tomorrow, 'пациент', 'пациента', 'пациентов')}</b><small>открыть расписание</small></span></Link></li>
           </ul>
-          {month && (
-            <>
-              <h3>Этот месяц <Link href="/reports">Отчёты</Link></h3>
-              <dl className={styles.kpi}>
-                <div><dt>Выручка</dt><dd>{formatMoney(month.revenue)}</dd></div>
-                <div><dt>Визитов</dt><dd>{month.visits}</dd></div>
-                <div><dt>Средний чек</dt><dd>{formatMoney(month.avgCheck)}</dd></div>
-                <div><dt>Неявки</dt><dd>{month.noShowRate}%</dd></div>
-              </dl>
-            </>
-          )}
         </section>
       </div>
+      {owner && month && <OwnerBoard permissions={permissions} />}
     </div>
   );
 }

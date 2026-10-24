@@ -2,17 +2,23 @@ export function formatMoney(n: number | string) {
   return Number(n).toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
 }
 
+/** Dates read the same everywhere: 24.10.2026, and time on the 24-hour clock: 24.10.2026, 14:30. */
 export function formatDate(d: string | Date) {
-  return new Date(d).toLocaleString('ru-RU', {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return `${formatDateOnly(d)}, ${formatTime(d)}`;
 }
 
 export function formatDateOnly(d: string | Date) {
-  return new Date(d).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+  return new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+export function formatTime(d: string | Date) {
+  return new Date(d).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+}
+
+/** A calendar day as ГГГГ-ММ-ДД (no time zone shift) written дд.мм.гггг. */
+export function formatDay(day: string) {
+  const [y, m, d] = day.slice(0, 10).split('-');
+  return y && m && d ? `${d}.${m}.${y}` : day;
 }
 
 export function patientAge(birthDate: string | Date) {
@@ -106,6 +112,7 @@ export const QUEUE_STATUS: Record<string, string> = {
 };
 
 export const LAB_STATUS: Record<string, string> = {
+  WAITING_IMPRESSION: 'Ждём слепок',
   RECEIVED: 'Принято',
   IN_PROGRESS: 'В работе',
   READY: 'Готово',

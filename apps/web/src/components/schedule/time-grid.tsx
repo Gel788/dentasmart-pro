@@ -19,6 +19,8 @@ type Props = {
   onSelect: (visit: BoardVisit) => void;
   onSlot: (column: Column, minutes: number) => void;
   onMove: (visit: BoardVisit, column: Column, minutes: number) => void;
+  /** Drag the card's bottom edge: the visit's new end, in minutes of the day. */
+  onResize?: (visit: BoardVisit, endMinutes: number) => void;
   label: string;
   /** A visit being moved by tapping its new time (touch screens and keyboard). */
   moving?: BoardVisit | null;
@@ -34,7 +36,7 @@ const STATUS_ICON: Record<string, string> = { wait: '?', ok: '✓', here: '●',
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
 
 /** Columns × time. Card height follows the visit's length; overlapping visits share their column. */
-export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId, pendingIds, onSelect, onSlot, onMove, label, moving = null, showDoctor = false, colorOf = () => '#2563eb', doctorAxis = false }: Props) {
+export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId, pendingIds, onSelect, onSlot, onMove, label, moving = null, onResize, showDoctor = false, colorOf = () => '#2563eb', doctorAxis = false }: Props) {
   const startHour = Math.floor(hours.opensAt / 60);
   const endHour = Math.ceil(hours.closesAt / 60);
   const first = startHour * 60;
@@ -47,6 +49,8 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
   const carriedLength = carried ? Math.max(15, Math.round((Date.parse(carried.endsAt) - Date.parse(carried.startsAt)) / 60000)) : 0;
   useEffect(() => { if (!moving) setGhost(null); }, [moving]);
   const [now, setNow] = useState(() => Date.now());
+  // Stretching a visit by its bottom edge: which one and where its end is now.
+  const [stretch, setStretch] = useState<{ id: string; end: number } | null>(null);
   // Under the mouse: the free quarter-hour a click would book.
   const [hover, setHover] = useState<{ column: string; minutes: number } | null>(null);
 
@@ -81,7 +85,14 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
 
   return (
     <div className={styles.grid} role="region" aria-label={label} tabIndex={0}>
-      <div className={styles.gridInner} style={{ '--cols': columns.length } as CSSProperties}>
+      <div
+        className={styles.gridInner}
+        style={{
+          '--cols': columns.length,
+          // A column with visits side by side gets room for each, so names stay readable.
+          gridTemplateColumns: `var(--time-w) ${placed.map(({ lanes }) => `minmax(calc(var(--col-min) * ${Math.min(4, Math.max(1, ...[...lanes.values()].map((lane) => lane.lanes), 1))}), 1fr)`).join(' ')}`,
+        } as CSSProperties}
+      >
         <div className={styles.corner} />
         {placed.map(({ column, own }) => {
           const active = own.filter((visit) => visit.status !== 'CANCELLED' && visit.status !== 'NO_SHOW');
@@ -164,7 +175,7 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
             ))}
             {own.map((visit) => {
               const start = wallMinutes(visit.startsAt, offset);
-              const end = wallMinutes(visit.endsAt, offset);
+              const end = stretch?.id === visit.id ? stretch.end : wallMinutes(visit.endsAt, offset);
               const lane = lanes.get(visit.id) ?? { lane: 0, lanes: 1 };
               const status = STATUS[visit.status];
               const width = 100 / lane.lanes;
@@ -177,14 +188,17 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
                   data-short={end - start < 30}
                   data-size={end - start < 30 ? 'xs' : end - start < 50 ? 'sm' : 'md'}
                   data-status={visit.status}
+                  data-paid={visit.paid || undefined}
+                  data-lanes={lane.lanes > 1 ? lane.lanes : undefined}
+                  data-stretching={stretch?.id === visit.id || undefined}
                   data-pending={pendingIds.has(visit.id)}
                   aria-pressed={selectedId === visit.id}
-                  draggable={!pendingIds.has(visit.id)}
+                  draggable={!pendingIds.has(visit.id) && !stretch}
                   data-carried={carried?.id === visit.id || undefined}
-                  onDragStart={(event) => { event.dataTransfer.setData('text/plain', visit.id); event.dataTransfer.effectAllowed = 'move'; setDragging(visit); }}
+                  onDragStart={(event) => { if (stretch) { event.preventDefault(); return; } event.dataTransfer.setData('text/plain', visit.id); event.dataTransfer.effectAllowed = 'move'; setDragging(visit); }}
                   onDragEnd={() => { setDragging(null); setGhost(null); setOver(null); }}
                   onClick={() => onSelect(visit)}
-                  aria-label={`${clock(start)}–${clock(end)}, ${visit.patient}, ${visit.service}, ${status.label}`}
+                  aria-label={`${clock(start)}–${clock(end)}, ${visit.patient}, ${visit.service}, ${status.label}${visit.paid ? ', оплачен' : ''}`}
                   style={{
                     top: at(start),
                     height: `max(30px, calc(${(end - start) / 60} * ${hourPx} - 3px))`,
@@ -193,6 +207,41 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
                     '--c': colorOf(visit.doctorId),
                   } as CSSProperties}
                 >
+                  {onResize && !pendingIds.has(visit.id) && !['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(visit.status) && (
+                    <span
+                      className={styles.grip}
+                      aria-hidden="true"
+                      title="Потяните, чтобы изменить длительность"
+                      onClick={(event) => event.stopPropagation()}
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                        event.preventDefault();
+                        const columnBox = (event.currentTarget.closest(`.${styles.col}`) as HTMLElement).getBoundingClientRect();
+                        const perMinute = columnBox.height / span;
+                        const target = event.currentTarget;
+                        target.setPointerCapture(event.pointerId);
+                        let last = end;
+                        setStretch({ id: visit.id, end });
+                        const moveTo = (clientY: number) => {
+                          const raw = first + (clientY - columnBox.top) / perMinute;
+                          last = Math.max(start + SNAP, Math.min(first + span, Math.round(raw / SNAP) * SNAP));
+                          setStretch({ id: visit.id, end: last });
+                        };
+                        const onMoveEvent = (moveEvent: PointerEvent) => moveTo(moveEvent.clientY);
+                        const onUp = () => {
+                          target.removeEventListener('pointermove', onMoveEvent);
+                          target.removeEventListener('pointerup', onUp);
+                          target.removeEventListener('pointercancel', onUp);
+                          setStretch(null);
+                          if (last !== wallMinutes(visit.endsAt, offset)) onResize(visit, last);
+                        };
+                        target.addEventListener('pointermove', onMoveEvent);
+                        target.addEventListener('pointerup', onUp);
+                        target.addEventListener('pointercancel', onUp);
+                      }}
+                    />
+                  )}
+                  {stretch?.id === visit.id && <span className={styles.stretchLabel}>до {clock(end)} · {end - start} мин</span>}
                   {end - start < 30 ? (
                     <span className={styles.short}><b>{visit.patient}</b> {clock(start)} · {visit.service}</span>
                   ) : end - start < 50 ? (
@@ -202,7 +251,7 @@ export function TimeGrid({ columns, visits, offset, hours, dayHours, selectedId,
                     </>
                   ) : (
                     <>
-                      <span className={styles.when}>{clock(start)}–{clock(end)}<em title={status.label}><i aria-hidden="true">{STATUS_ICON[status.tone]}</i><span>{status.label}</span></em></span>
+                      <span className={styles.when}>{clock(start)}–{clock(end)}<em title={status.label}><i aria-hidden="true">{STATUS_ICON[status.tone]}</i><span>{status.label}</span></em>{visit.paid && <em className={styles.paid} title="Оплачен"><i aria-hidden="true">₽</i><span>оплачен</span></em>}</span>
                       <b>{visit.patient}</b>
                       <span className={styles.what}>{visit.service}</span>
                       {end - start >= 60 && <span className={styles.who}>{showDoctor ? visit.doctor : visit.cabinet}</span>}

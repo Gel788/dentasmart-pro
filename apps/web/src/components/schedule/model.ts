@@ -13,6 +13,8 @@ export type BoardVisit = {
   cabinet: string;
   service: string;
   allergies?: string[];
+  /** Every bill on the visit is settled. */
+  paid?: boolean;
 };
 
 export type DayShell = {

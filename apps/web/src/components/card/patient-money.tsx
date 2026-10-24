@@ -40,7 +40,7 @@ export function PatientMoney({ patientId, patientName }: { patientId: string; pa
           <ul className={styles.list}>
             {invoices.map((row) => (
               <li key={row.id} className={styles.row}>
-                <span className={styles.when}><b>{new Date(row.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</b><small>№ {row.number}</small></span>
+                <span className={styles.when}><b>{new Date(row.createdAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</b><small>№ {row.number}</small></span>
                 <span className={styles.what}><b>{formatMoney(Number(row.totalAmount) - Number(row.discountAmount))}</b><small>{Number(row.discountAmount) > 0 ? `скидка ${formatMoney(Number(row.discountAmount))} · ` : ''}оплачено {formatMoney(Number(row.paidAmount))}{left(row) > 0 && row.status !== 'CANCELLED' ? ` · осталось ${formatMoney(left(row))}` : ''}</small></span>
                 <span className={styles.state}><i data-code={row.status === 'PAID' ? 'paid' : row.status === 'CANCELLED' ? 'gone' : 'owe'} />{INVOICE[row.status] ?? row.status}</span>
               </li>
@@ -54,7 +54,7 @@ export function PatientMoney({ patientId, patientName }: { patientId: string; pa
           <ul className={styles.list}>
             {payments.map((row) => (
               <li key={row.id} className={styles.row}>
-                <span className={styles.when}><b>{new Date(row.paidAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</b><small>{new Date(row.paidAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</small></span>
+                <span className={styles.when}><b>{new Date(row.paidAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</b><small>{new Date(row.paidAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</small></span>
                 <span className={styles.what}><b>{row.refundOfId || Number(row.amount) < 0 ? `Возврат ${formatMoney(Math.abs(Number(row.amount)))}` : formatMoney(Number(row.amount))}</b><small>{METHOD[row.method] ?? row.method}{row.invoiceId ? '' : ' · аванс без счёта'}</small></span>
                 <span className={styles.state}><i data-code={row.refundOfId || Number(row.amount) < 0 ? 'owe' : 'paid'} />{row.refundOfId || Number(row.amount) < 0 ? 'возврат' : 'оплата'}</span>
               </li>

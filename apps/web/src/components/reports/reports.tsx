@@ -123,7 +123,7 @@ export function Reports() {
               <h2 id="by-day">По дням<em>{data.finance ? 'столбик — визиты, полоса — деньги' : 'визиты по дням'}</em></h2>
               <div className={styles.chart} style={{ ['--n' as string]: data.series.length }}>
                 {data.series.map((day) => (
-                  <div key={day.date} className={styles.col} title={`${new Date(`${day.date}T12:00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}: ${day.visits} визитов${day.money !== null ? `, ${formatMoney(day.money)}` : ''}`}>
+                  <div key={day.date} className={styles.col} title={`${new Date(`${day.date}T12:00:00`).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}: ${day.visits} визитов${day.money !== null ? `, ${formatMoney(day.money)}` : ''}`}>
                     <div className={styles.bars}>
                       <i className={styles.visits} style={{ height: `${(day.visits / peak) * 100}%` }} />
                       {day.money !== null && <i className={styles.money} style={{ height: `${(Math.max(0, day.money) / peakMoney) * 100}%` }} />}

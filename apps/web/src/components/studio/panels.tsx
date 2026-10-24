@@ -61,7 +61,7 @@ function PatientPanel({ id }: { id: string }) {
 }
 
 function when(value: string) {
-  return new Date(value).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return new Date(value).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function years(value: string) {

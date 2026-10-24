@@ -52,7 +52,7 @@ function List({ rows }: { rows: Visit[] }) {
         return (
           <li key={row.id}>
             <Link href={`/visits/${row.id}`} className={styles.row}>
-              <span className={styles.when}><b>{at.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: at.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })}</b><small>{at.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</small></span>
+              <span className={styles.when}><b>{at.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric'})}</b><small>{at.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</small></span>
               <span className={styles.what}>
                 <b>{row.service ?? 'Приём'}</b>
                 <small>{[row.doctor, row.cabinet, row.diagnosis ? `диагноз: ${row.diagnosis}` : null, row.noShowReason].filter(Boolean).join(' · ') || '—'}</small>

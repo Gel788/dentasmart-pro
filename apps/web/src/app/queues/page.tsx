@@ -119,7 +119,7 @@ export default function QueuesPage() {
                       {a.patient.lastName} {a.patient.firstName}
                     </Link>
                     <p className="text-sm text-[var(--muted)]">
-                      {new Date(a.startsAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      {new Date(a.startsAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       {' · '}
                       {a.service}
                       {' · '}

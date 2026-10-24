@@ -235,7 +235,21 @@ async function load(): Promise<Row[]> {
       message: `Здравствуйте, ${who}! По счёту ${invoice.number} осталось ${formatMoney(due)}. Можно закрыть на стойке до следующего визита. Седракович Дент.`,
     });
   }
-  return rows;
+  // Each patient once: their reasons join into one line, the biggest sum and its action lead.
+  const byPatient = new Map<string, Row>();
+  for (const row of rows) {
+    const held = byPatient.get(row.patientId);
+    if (!held) { byPatient.set(row.patientId, row); continue; }
+    const lead = row.amount > held.amount ? row : held;
+    byPatient.set(row.patientId, {
+      ...lead,
+      bucket: held.bucket === row.bucket ? held.bucket : `${held.bucket} · ${row.bucket}`,
+      title: held.title === row.title ? held.title : `${held.title}; ${row.title}`,
+      amount: Math.max(held.amount, row.amount),
+      phone: held.phone ?? row.phone,
+    });
+  }
+  return [...byPatient.values()];
 }
 
 function priceOf(service: string) {

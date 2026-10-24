@@ -254,7 +254,7 @@ export function PlanJourney({
                     </div>
                     <div className="jn-price">
                       {index === current && phase.id !== 'loose' && (
-                        <button className="sd-btn-ghost" type="button" onClick={() => void api<{ startsAt: string }>(`/workspace/plans/${plan.id}/phases/${phase.id}/book`, { method: 'POST', body: '{}' }).then((result) => setSaved(`«${phase.title}» записан на ${new Date(result.startsAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`)).catch((err: Error) => setSaved(err.message))}>Записать</button>
+                        <button className="sd-btn-ghost" type="button" onClick={() => void api<{ startsAt: string }>(`/workspace/plans/${plan.id}/phases/${phase.id}/book`, { method: 'POST', body: '{}' }).then((result) => setSaved(`«${phase.title}» записан на ${new Date(result.startsAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`)).catch((err: Error) => setSaved(err.message))}>Записать</button>
                       )}
                       <span>{done} из {phase.items.length}</span>
                       <span>Подытог</span>
@@ -273,6 +273,8 @@ export function PlanJourney({
             );
           })}
         </section>}
+        </div>
+      </div>
       {plan && <div className="jn-dock">
         <div className="jn-sum">
           <span>Итого{discount > 0 ? ` со скидкой ${discount}%` : ''}</span>
@@ -336,14 +338,12 @@ export function PlanJourney({
             {versions.length === 0 && 'Версий ещё нет — нажмите «Сохранить».'}
             {versions.map((version) => (
               <button key={version.id} className="sd-btn-ghost" type="button" onClick={() => void api(`/workspace/plans/${plan.id}/versions/${version.id}/restore`, { method: 'POST', body: '{}' }).then(() => setSaved('Версия восстановлена')).catch((err: Error) => setSaved(err.message))}>
-                {new Date(version.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} {version.note}
+                {new Date(version.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} {version.note}
               </button>
             ))}
           </div>
         )}
       </div>}
-        </div>
-      </div>
       {picker && plan && (
         <PricePicker
           tooth={picker.tooth}

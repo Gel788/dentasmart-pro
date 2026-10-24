@@ -213,7 +213,7 @@ function Calendar() {
       await api(`/appointments/${visit.id}`, { method: 'PATCH', body: JSON.stringify({ startsAt, endsAt, ...column.move }) });
       setToast({
         tone: 'ok',
-        text: `${visit.patient}: перенесено на ${dayTitle(column.date, { day: 'numeric', month: 'short' })}, ${clock(minutes)}`,
+        text: `${visit.patient}: перенесено на ${dayTitle(column.date, { day: '2-digit', month: '2-digit', year: 'numeric' })}, ${clock(minutes)}`,
         // One tap puts the visit back where it was, through the same server checks.
         undo: () => {
           setToast(null);
@@ -225,6 +225,33 @@ function Calendar() {
       refresh();
     } catch (err) {
       setToast({ tone: 'bad', text: err instanceof Error ? err.message : 'Перенос не прошёл. Визит остался на прежнем месте' });
+    } finally {
+      setPending((current) => { const next = new Set(current); next.delete(visit.id); return next; });
+    }
+  };
+
+  /** A longer or shorter visit: same start, new end, the server checks the chair and the doctor are free. */
+  const resize = async (visit: BoardVisit, endMinutes: number) => {
+    const day = new Date(Date.parse(visit.startsAt) + offset * 60000).toISOString().slice(0, 10);
+    const endsAt = instantAt(day, endMinutes, offset);
+    setPending((current) => new Set(current).add(visit.id));
+    const before = visit.endsAt;
+    try {
+      await api(`/appointments/${visit.id}`, { method: 'PATCH', body: JSON.stringify({ startsAt: visit.startsAt, endsAt }) });
+      const minutes = Math.round((Date.parse(endsAt) - Date.parse(visit.startsAt)) / 60000);
+      setToast({
+        tone: 'ok',
+        text: `${visit.patient}: теперь ${minutes} мин, до ${clock(endMinutes)}`,
+        undo: () => {
+          setToast(null);
+          void api(`/appointments/${visit.id}`, { method: 'PATCH', body: JSON.stringify({ startsAt: visit.startsAt, endsAt: before }) })
+            .then(() => { setToast({ tone: 'ok', text: `${visit.patient}: длительность возвращена` }); refresh(); })
+            .catch((err: Error) => setToast({ tone: 'bad', text: err.message || 'Не получилось вернуть' }));
+        },
+      });
+      refresh();
+    } catch (err) {
+      setToast({ tone: 'bad', text: err instanceof Error ? err.message : 'Не получилось изменить длительность: время занято' });
     } finally {
       setPending((current) => { const next = new Set(current); next.delete(visit.id); return next; });
     }
@@ -255,9 +282,9 @@ function Calendar() {
   const movingVisit = movingId ? [...dayVisits, ...weekVisits].find((visit) => visit.id === movingId) ?? null : null;
   const weekFrom = weekStart(date);
   const title =
-    view === 'day' ? dayTitle(date, { weekday: 'long', day: 'numeric', month: 'long' })
+    view === 'day' ? dayTitle(date, { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })
       : view === 'month' ? dayTitle(date, { month: 'long', year: 'numeric' })
-        : `${dayTitle(weekFrom, { day: 'numeric', month: 'short' })} – ${dayTitle(addDays(weekFrom, 6), { day: 'numeric', month: 'short' })}`;
+        : `${dayTitle(weekFrom, { day: '2-digit', month: '2-digit', year: 'numeric' })} – ${dayTitle(addDays(weekFrom, 6), { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
   const daySummary = month?.days.find((item) => item.date === date);
 
   const weekHours = month?.week ?? weekHoursOf(null, null);
@@ -418,12 +445,12 @@ function Calendar() {
             {view === 'day' && !(dayOff && !allHours && dayVisits.length === 0) && (
               columns.length ? (
                 <TimeGrid label="День по креслам" showDoctor={axis === 'chair'} colorOf={doctorColor} doctorAxis={axis === 'doctor'} columns={columns} visits={dayVisits} offset={offset} hours={gridHours} dayHours={columnHours} selectedId={selectedId} pendingIds={pending}
-                  onSelect={(visit) => setSelectedId(visit.id)} onSlot={openSlot} onMove={move} moving={movingVisit} />
+                  onSelect={(visit) => setSelectedId(visit.id)} onSlot={openSlot} onMove={move} onResize={resize} moving={movingVisit} />
               ) : <p className={styles.empty}>В клинике пока нет кресел. Добавьте их в настройках, чтобы записывать пациентов.</p>
             )}
             {view === 'week' && (
               <TimeGrid label="Неделя" colorOf={doctorColor} columns={columns} visits={weekVisits} offset={offset} hours={gridHours} dayHours={columnHours} selectedId={selectedId} pendingIds={pending}
-                onSelect={(visit) => setSelectedId(visit.id)} onSlot={openSlot} onMove={move} moving={movingVisit} />
+                onSelect={(visit) => setSelectedId(visit.id)} onSlot={openSlot} onMove={move} onResize={resize} moving={movingVisit} />
             )}
             {view === 'month' && <MonthView days={month.days} selected={date} offset={offset} onPick={pick} />}
             {view === 'agenda' && (

@@ -19,8 +19,8 @@ export type MoreCard =
 export const MORE_KINDS = ['report', 'debtors', 'patientInfo', 'payment', 'tasks', 'newTask', 'stock'];
 
 const rub = (value: number) => `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value)} ₽`;
-const when = (iso: string) => new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
-const day = (iso: string) => new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso));
+const when = (iso: string) => new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+const day = (iso: string) => new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(iso));
 const METHODS: { id: 'CARD' | 'CASH' | 'ONLINE'; label: string }[] = [
   { id: 'CARD', label: 'Картой' },
   { id: 'CASH', label: 'Наличными' },

@@ -13,8 +13,8 @@ export function Agenda({ dates, visits, offset, selectedId, onSelect }: { dates:
   return (
     <div className={styles.agenda}>
       {byDay.filter((day) => day.rows.length).map((day) => (
-        <section key={day.date} className={styles.agendaDay} aria-label={dayTitle(day.date, { weekday: 'long', day: 'numeric', month: 'long' })}>
-          <h3><span>{dayTitle(day.date, { weekday: 'long', day: 'numeric', month: 'long' })}</span><span>{day.rows.length}</span></h3>
+        <section key={day.date} className={styles.agendaDay} aria-label={dayTitle(day.date, { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}>
+          <h3><span>{dayTitle(day.date, { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}</span><span>{day.rows.length}</span></h3>
           {day.rows.map((visit) => {
             const status = STATUS[visit.status];
             return (

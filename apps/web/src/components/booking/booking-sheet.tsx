@@ -167,7 +167,7 @@ export function BookingSheet() {
       else await api('/workspace/appointments', { method: 'POST', body: JSON.stringify(body) });
       bump();
       // The sheet answers in place; the old context panel no longer pops up over the calendar.
-      setDone({ name: `${patient.lastName} ${patient.firstName}`, patientId: patient.id, when: `${new Date(at).toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' })}, ${hm(at)}–${hm(ends)}` });
+      setDone({ name: `${patient.lastName} ${patient.firstName}`, patientId: patient.id, when: `${new Date(at).toLocaleDateString('ru-RU', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}, ${hm(at)}–${hm(ends)}` });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось записать');
     } finally {
@@ -211,7 +211,7 @@ export function BookingSheet() {
         <div className={styles.body}>
           {/* When: the time as the big figure, nudged by a quarter hour. */}
           <section className={styles.when} aria-label="Время">
-            <p className={styles.date}>{new Date(at).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+            <p className={styles.date}>{new Date(at).toLocaleDateString('ru-RU', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
             <div className={styles.timeRow}>
               <button type="button" className={styles.step} onClick={() => shift(-15)} aria-label="На 15 минут раньше"><Minus /></button>
               <span className={styles.time}>{hm(at)}<small>–{hm(ends)}</small></span>

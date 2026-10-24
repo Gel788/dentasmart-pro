@@ -25,6 +25,12 @@ export class FinanceController {
     return this.svc.summary(orgId);
   }
 
+  @Get('overview')
+  @RequirePermissions('finance.read')
+  overview(@OrgId() orgId: string) {
+    return this.svc.overview(orgId);
+  }
+
   @Get('desk')
   @RequirePermissions('finance.read')
   desk(@OrgId() orgId: string, @Query('branchId') branchId?: string) {
