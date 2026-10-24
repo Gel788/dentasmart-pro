@@ -1,11 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Golos_Text, Unbounded } from 'next/font/google';
 import styles from './landing.module.css';
-
-const golos = Golos_Text({ subsets: ['cyrillic', 'latin'], weight: ['400', '500', '600', '700'], display: 'swap' });
-const unbounded = Unbounded({ subsets: ['cyrillic', 'latin'], weight: ['500', '600'], display: 'swap' });
 
 const LEADS_KEY = 'zaza.leads.v1';
 const SPLASH_KEY = 'zaza.splash';
@@ -119,7 +115,7 @@ function Splash({ onDone }: { onDone: () => void }) {
   return (
     <div className={styles.splash} role="dialog" aria-label="ZAZA" onClick={onDone} onAnimationEnd={(event) => { if (event.target === event.currentTarget) onDone(); }}>
       <div className={styles.splashInner}>
-        <div className={`${styles.word} ${unbounded.className}`} aria-hidden>
+        <div className={`${styles.word} ${styles.face}`} aria-hidden>
           {['Z', 'A', 'Z', 'A'].map((letter, index) => (
             <div key={letter + index} className={styles.letter} style={{ ['--i' as string]: index }}>
               <i className={styles.cavity} />
@@ -165,7 +161,7 @@ function PlanSheet({ tooth, tier, onTier, embedded = false, live = false, reduce
       </ul>
       <div className={styles.sheetTotal}>
         <span>К подписи</span>
-        <b className={unbounded.className}>{rub(live ? total : sum(plan.lines))}</b>
+        <b className={styles.face}>{rub(live ? total : sum(plan.lines))}</b>
       </div>
       <p className={styles.sheetFoot}>Суммы учебные. В клинике их берёт прайс. Оптимум в продукте помечен как рекомендуемый.</p>
     </div>
@@ -200,7 +196,7 @@ function Stage({ chapter, tooth, tier, onTooth, onTier }: { chapter: ChapterId; 
       {chapter === 'sign' && (
         <div>
           <p className={styles.finding}>{TIER_LABEL[tier]} · зуб {tooth} · {toothMeta.name}</p>
-          <p className={`${styles.signTotal} ${unbounded.className}`}>{rub(sum(plan.lines))}</p>
+          <p className={`${styles.signTotal} ${styles.face}`}>{rub(sum(plan.lines))}</p>
           <div className={styles.signRule}><span /></div>
           <p className={styles.signNote}>Подпись пациента. После неё план становится маршрутом.</p>
         </div>
@@ -378,10 +374,10 @@ export function Landing() {
   const yearNote = (year: number) => (monthly ? `при оплате ${year.toLocaleString('ru-RU')} ₽ за год` : 'оплата за год');
 
   return (
-    <div id="zaza" className={`${styles.root} ${golos.className}`}>
+    <div id="zaza" className={styles.root}>
       {splash && <Splash onDone={finishSplash} />}
       <header className={`${styles.header} ${scrolled ? styles.scrolled : ''}`}>
-        <a className={`${styles.brand} ${unbounded.className}`} href="#top">ZAZA<small>для клиник</small></a>
+        <a className={`${styles.brand} ${styles.face}`} href="#top">ZAZA<small>для клиник</small></a>
         <nav className={`${styles.nav} ${openNav ? styles.open : ''}`} aria-label="Разделы">
           <a href="#story" onClick={() => setOpenNav(false)}>Приём</a>
           <a href="#move" onClick={() => setOpenNav(false)}>Переезд</a>
@@ -403,7 +399,7 @@ export function Landing() {
           <div className={styles.heroGrid}>
             <div className={styles.heroCopy}>
               <p className={styles.kicker}>План за минуты</p>
-              <h1 className={`${styles.display} ${unbounded.className}`}>Пациент подписывает, пока сидит в кресле</h1>
+              <h1 className={`${styles.display} ${styles.face}`}>Пациент подписывает, пока сидит в кресле</h1>
               <p className={styles.lead}>Пока план собирают после приёма, человек уходит думать. Отметьте находки на формуле или надиктуйте их. ZAZA соберёт эконом, оптимум и премиум, разложит цену и после подписи откроет маршрут.</p>
               <div className={styles.heroActions}>
                 <a className={`${styles.btn} ${styles.btnPrimary}`} href="#request">Запросить доступ</a>
@@ -431,7 +427,7 @@ export function Landing() {
           <div className={styles.pinSticky}>
             <div className={styles.pinCopy}>
               <p className={styles.kicker}>Приём · {active.index} / 05</p>
-              <h2 className={`${styles.display} ${unbounded.className}`}>{active.title}</h2>
+              <h2 className={`${styles.display} ${styles.face}`}>{active.title}</h2>
               <p>{active.body}</p>
               {active.id === 'plans' && <p>Голос «Привет, ЗаЗа» спрашивает цифры, должников, карточку, оплаты, задачи и склад. Команду на запись видно на экране, её подтверждают. SpeechKit отвечает, когда на сервере есть ключ. Иначе говорит устройство.</p>}
               <div className={styles.pinNav}>
@@ -465,7 +461,7 @@ export function Landing() {
 
         <section className={`${styles.block} ${styles.wrap}`} id="move" data-reveal>
           <p className={styles.kicker}>Переезд</p>
-          <h2 className={`${styles.display} ${unbounded.className}`}>Как переехать за 1 день</h2>
+          <h2 className={`${styles.display} ${styles.face}`}>Как переехать за 1 день</h2>
           <p className={styles.sub}>Пациенты и расписание из текущей программы. Колонки можно поправить до записи. Финансовую историю целиком перенос не обещает. В демо есть учебный файл SQNS, живые фамилии туда класть не нужно.</p>
           <div className={styles.steps}>
             <article className={styles.step}><i>01</i><b>Выгрузка</b><p>Заберите файл пациентов и расписания.</p></article>
@@ -473,7 +469,7 @@ export function Landing() {
             <article className={styles.step}><i>03</i><b>Проверка</b><p>Поправьте колонки, посмотрите отчёт и подтвердите запись.</p></article>
             <article className={styles.step}><i>04</i><b>Приём</b><p>Карточки на месте. Расписание можно открыть в тот же день.</p></article>
           </div>
-          <div className={`${styles.names} ${unbounded.className}`}>
+          <div className={`${styles.names} ${styles.face}`}>
             <span>SQNS</span>
             <span>IDENT</span>
             <span>АдминДента</span>
@@ -482,18 +478,18 @@ export function Landing() {
 
         <section className={`${styles.block} ${styles.wrap}`} data-reveal>
           <p className={styles.kicker}>Возражения</p>
-          <h2 className={`${styles.display} ${unbounded.className}`}>Три вопроса до договора</h2>
+          <h2 className={`${styles.display} ${styles.face}`}>Три вопроса до договора</h2>
           <div className={styles.objections}>
             <article className={styles.objection}>
-              <h3 className={unbounded.className}>День, не квартал</h3>
+              <h3 className={styles.face}>День, не квартал</h3>
               <p>Переносятся пациенты и расписание. Колонки видны до записи. После подтверждения карточки и день врача уже в ZAZA.</p>
             </article>
             <article className={styles.objection}>
-              <h3 className={unbounded.className}>Без программиста</h3>
+              <h3 className={styles.face}>Без программиста</h3>
               <p>Владелец сам правит название и часы, сотрудников, кресла, прайс, склад, шаблоны, акции и двухфакторный вход. Права роли сохраняются сразу: себестоимость, закрытый визит, прайс, потолок скидки.</p>
             </article>
             <article className={styles.objection}>
-              <h3 className={unbounded.className}>152-ФЗ</h3>
+              <h3 className={styles.face}>152-ФЗ</h3>
               <p>Согласие на обработку персональных данных есть в карте и в документах клиники. В тексте согласия хранение и работа системы поручаются на территории России.</p>
             </article>
           </div>
@@ -502,7 +498,7 @@ export function Landing() {
         <section className={styles.band} id="compare" data-reveal>
           <div className={`${styles.block} ${styles.wrap}`}>
           <p className={styles.kicker}>Сравнение</p>
-          <h2 className={`${styles.display} ${unbounded.className}`}>Что увозите и что появляется</h2>
+          <h2 className={`${styles.display} ${styles.face}`}>Что увозите и что появляется</h2>
           <p className={styles.sub}>АдминДента, IDENT и SQNS остаются источником пациентов и расписания. Ниже не список их недостатков, а то, что меняется в первый день.</p>
           <div className={styles.compare}>
             <div className={styles.compareHead}><span>Задача</span><span>Увозите с собой</span><span>В первый день в ZAZA</span></div>
@@ -526,9 +522,9 @@ export function Landing() {
         <section className={`${styles.block} ${styles.wrap}`} id="author" data-reveal>
           <p className={styles.kicker}>Автор</p>
           <div className={styles.authorGrid}>
-            <div className={`${styles.monogram} ${unbounded.className}`} aria-hidden>ЗА</div>
+            <div className={`${styles.monogram} ${styles.face}`} aria-hidden>ЗА</div>
             <div>
-              <h2 className={`${styles.display} ${unbounded.className}`}>Завен Агаян</h2>
+              <h2 className={`${styles.display} ${styles.face}`}>Завен Агаян</h2>
               <p>Практикующий стоматолог и владелец клиник. ZAZA — его авторский проект: систему он собрал для своих клиник и открывает её как сервис для других практик.</p>
             </div>
           </div>
@@ -538,7 +534,7 @@ export function Landing() {
           <div className={styles.priceHead}>
             <div>
               <p className={styles.kicker}>Тарифы</p>
-              <h2 className={`${styles.display} ${unbounded.className}`}>Годовая оплата</h2>
+              <h2 className={`${styles.display} ${styles.face}`}>Годовая оплата</h2>
               <p className={styles.sub}>Месяц на переключателе — годовая цена, разделённая на 12.</p>
             </div>
             <div className={styles.toggle} role="group" aria-label="Период цены">
@@ -549,8 +545,8 @@ export function Landing() {
           <div className={styles.offers}>
             <article className={styles.offer}>
               <p className={styles.kicker}>За врача</p>
-              <h3 className={unbounded.className}>Врач</h3>
-              <p className={`${styles.amount} ${unbounded.className}`}>{doctor.toLocaleString('ru-RU')} <small>{unit}</small></p>
+              <h3 className={styles.face}>Врач</h3>
+              <p className={`${styles.amount} ${styles.face}`}>{doctor.toLocaleString('ru-RU')} <small>{unit}</small></p>
               <p className={styles.yearNote}>{yearNote(27000)}</p>
               <ul className={styles.features}>
                 <li>Формула и приём</li>
@@ -561,8 +557,8 @@ export function Landing() {
             </article>
             <article className={`${styles.offer} ${styles.offerInk}`}>
               <p className={styles.kicker}>За клинику</p>
-              <h3 className={unbounded.className}>Клиника</h3>
-              <p className={`${styles.amount} ${unbounded.className}`}>{clinic.toLocaleString('ru-RU')} <small>{unit}</small></p>
+              <h3 className={styles.face}>Клиника</h3>
+              <p className={`${styles.amount} ${styles.face}`}>{clinic.toLocaleString('ru-RU')} <small>{unit}</small></p>
               <p className={styles.yearNote}>{yearNote(45000)}</p>
               <ul className={styles.features}>
                 <li>Стойка, роли и кресла</li>
@@ -574,8 +570,8 @@ export function Landing() {
             </article>
             <article className={styles.offer}>
               <p className={styles.kicker}>Под вашу сеть</p>
-              <h3 className={unbounded.className}>Сеть</h3>
-              <p className={`${styles.amount} ${unbounded.className}`}>индивидуально</p>
+              <h3 className={styles.face}>Сеть</h3>
+              <p className={`${styles.amount} ${styles.face}`}>индивидуально</p>
               <p className={styles.yearNote}>условия обсуждаем</p>
               <ul className={styles.features}>
                 <li>Всё, что входит в клинику</li>
@@ -597,7 +593,7 @@ export function Landing() {
 
         <section className={`${styles.block} ${styles.wrap} ${styles.faq}`} id="faq" data-reveal>
           <p className={styles.kicker}>Вопросы</p>
-          <h2 className={`${styles.display} ${unbounded.className}`}>Коротко</h2>
+          <h2 className={`${styles.display} ${styles.face}`}>Коротко</h2>
           <details>
             <summary>Это программа на компьютер или сервис?</summary>
             <p>Сервис в браузере. Демо работает без своего сервера: можно войти как владелец, врач или администратор и пройти приём.</p>
@@ -627,12 +623,12 @@ export function Landing() {
         <section className={`${styles.cta} ${styles.wrap}`} id="request" data-reveal>
           <div>
             <p className={styles.kicker}>Доступ</p>
-            <h2 className={`${styles.display} ${unbounded.className}`}>Откроем ZAZA для вашей клиники</h2>
+            <h2 className={`${styles.display} ${styles.face}`}>Откроем ZAZA для вашей клиники</h2>
             <p className={styles.lead}>Имя, телефон и название. Заявка сохранится в этом браузере, и на странице будет видно, что она принята.</p>
           </div>
           {sent ? (
             <div className={styles.success} role="status">
-              <b className={unbounded.className}>Заявка принята</b>
+              <b className={styles.face}>Заявка принята</b>
               <p>{sent.name}, клиника «{sent.clinic}». Свяжемся по {sent.phone}. Тариф: {sent.tariff}.</p>
               <button type="button" className={styles.btn} onClick={() => setSent(null)}>Отправить ещё одну</button>
             </div>
