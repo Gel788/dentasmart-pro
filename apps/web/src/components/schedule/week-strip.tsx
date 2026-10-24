@@ -36,7 +36,7 @@ export function WeekStrip({ days, selected, offset, onPick, onMonth }: { days: R
               data-today={date === today}
               data-closed={closed || undefined}
               onClick={() => onPick(date)}
-              aria-label={`${dayTitle(date, { weekday: 'long', day: 'numeric', month: 'long' })}: ${closed ? 'выходной' : day?.visits ? `${day.visits} ${visitsWord(day.visits)}, занято ${percent}%` : 'записей нет'}`}
+              aria-label={`${dayTitle(date, { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}: ${closed ? 'выходной' : day?.visits ? `${day.visits} ${visitsWord(day.visits)}, занято ${percent}%` : 'записей нет'}`}
             >
               <span className={styles.wdayName}>{dayTitle(date, { weekday: 'short' })}{date === today && <i>сегодня</i>}</span>
               <b>{Number(date.slice(8))}</b>

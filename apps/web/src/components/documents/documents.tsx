@@ -20,7 +20,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'egisz', label: 'ЕРИС и ЕГИСЗ' },
 ];
 const STATE: Record<string, string> = { CREATED: 'к печати', PRINTED: 'ждёт подписи', SIGNED: 'подписан', VOID: 'аннулирован' };
-const date = (iso: string) => new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+const date = (iso: string) => new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
 /** All patient papers: what waits for a signature, the archive, the clinic's requisites, the tax certificate. */
 export function Documents() {

@@ -33,8 +33,8 @@ const STATUS: Record<string, { code: string; word: string }> = {
 const time = (iso: string) => new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 const dayKey = (iso: string) => new Date(iso).toDateString();
 const weekday = (iso: string) => new Intl.DateTimeFormat('ru-RU', { weekday: 'short' }).format(new Date(iso));
-const month = (iso: string) => new Intl.DateTimeFormat('ru-RU', { month: 'long', day: 'numeric' }).format(new Date(iso)).replace(/^\d+\s/, '');
-const dayLabel = (iso: string) => new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(iso));
+const month = (iso: string) => new Intl.DateTimeFormat('ru-RU', { month: '2-digit', year: 'numeric' }).format(new Date(iso));
+const dayLabel = (iso: string) => new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(iso));
 const initials = (name: string) => name.split(/\s+/).slice(0, 2).map((part) => part[0] ?? '').join('').toUpperCase();
 const capital = (text: string) => text.charAt(0).toLocaleUpperCase('ru-RU') + text.slice(1);
 

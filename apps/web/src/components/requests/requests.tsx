@@ -23,7 +23,7 @@ type Row = {
   createdAt: string;
 };
 
-const when = (iso: string) => new Date(iso).toLocaleString('ru-RU', { weekday: 'short', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+const when = (iso: string) => new Date(iso).toLocaleString('ru-RU', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 /** Bookings asked for on the site. Each holds its slot until the clinic accepts or declines it. */
 export function Requests() {

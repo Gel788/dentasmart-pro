@@ -48,9 +48,9 @@
 .todayBtn { height: 38px; padding: 0 14px; border: 0; border-left: 1px solid var(--border); border-right: 1px solid var(--border); background: var(--surface-solid); color: var(--text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
 .todayBtn:hover { background: var(--surface-2); }
 /* On a wide screen the top bar already has «Записать»; this one is for the phone, where the top bar is hidden. */
-.book { display: none; flex: none; align-items: center; justify-content: center; gap: 8px; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--r); background: var(--accent); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.book { display: none; flex: none; align-items: center; justify-content: center; gap: 8px; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--r); background: var(--primary); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
 .book span { display: none; }
-.book:hover { background: var(--accent-hover); }
+.book:hover { background: var(--primary-hover); }
 .book:disabled { opacity: 0.6; cursor: default; }
 .filter { height: 38px; border: 1px solid var(--border-strong); background: var(--surface-solid); padding: 0 10px; color: var(--text); max-width: 220px; border-radius: var(--r); font: inherit; font-size: 14px; }
 
@@ -355,3 +355,34 @@
   .free > * { flex: none; }
   .hoursToggle { flex: none; }
 }
+
+/* Columns size themselves to their busiest moment (see TimeGrid); these are the base widths. */
+.gridInner { --time-w: 58px; --col-min: 170px; }
+.body[data-view='week'] .gridInner { --col-min: 118px; }
+@media (max-width: 720px) { .gridInner { --time-w: 48px; --col-min: 150px; } }
+
+/* Colour is the doctor; status is the stripe on the left and the badge. */
+.visit { padding-left: 13px; }
+.visit::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--st, rgba(255, 255, 255, 0.6)); box-shadow: 1px 0 0 rgba(255, 255, 255, 0.5); }
+.visit[data-status='SCHEDULED'] { --st: #f59e0b; background: linear-gradient(160deg, color-mix(in srgb, var(--c) 88%, #fff) 0%, var(--c) 100%); color: #fff; box-shadow: 0 1px 2px color-mix(in srgb, var(--c) 30%, transparent); }
+.visit[data-status='SCHEDULED'] .when em:first-of-type { background: #fff3d6; color: #8a5300; }
+.visit[data-status='SCHEDULED'] .when em:first-of-type i, .visit[data-status='SCHEDULED'] .line1 em i { background: #f59e0b; color: #fff; }
+.visit[data-status='CONFIRMED'] { --st: #ffffff; }
+.visit[data-status='WAITING'] { --st: #22d3a6; }
+.visit[data-status='IN_PROGRESS'] { --st: #ff4d5e; }
+.visit[data-status='COMPLETED'] { --st: #9aa6b6; }
+.visit[data-paid] { --st: #16c784; }
+.visit[data-status='CANCELLED'], .visit[data-status='NO_SHOW'] { --st: var(--danger); }
+.when .paid { background: #d9fbe9 !important; color: #08623e !important; }
+.when .paid i { background: #16c784 !important; color: #fff !important; }
+.visit[data-status='COMPLETED'] .when .paid span { color: #08623e; }
+/* Side by side: names may wrap so they stay whole even in a narrow lane. */
+.visit[data-lanes] b { white-space: normal; overflow-wrap: anywhere; line-height: 1.15; font-size: 13px; }
+.visit[data-lanes] .when em span { display: none; }
+.visit[data-lanes] .when em { padding: 1px; }
+/* The bottom edge stretches the visit. */
+.grip { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; cursor: ns-resize; z-index: 2; touch-action: none; }
+.grip::after { content: ''; position: absolute; left: 50%; bottom: 2px; width: 26px; height: 3px; margin-left: -13px; border-radius: 2px; background: rgba(255, 255, 255, 0.7); opacity: 0; transition: opacity 120ms ease; }
+.visit:hover .grip::after, .visit[data-stretching] .grip::after { opacity: 1; }
+.visit[data-stretching] { z-index: 6; outline: 2px dashed rgba(255, 255, 255, 0.9); outline-offset: -3px; }
+.stretchLabel { position: absolute; right: 6px; bottom: 10px; padding: 1px 6px; border-radius: 6px; background: rgba(15, 28, 48, 0.75); color: #fff; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }

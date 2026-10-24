@@ -2,7 +2,7 @@ import type { RouteStage } from '@dentasmart/shared';
 import { StatusChip } from './status-chip';
 
 const when = (iso: string) =>
-  new Date(iso).toLocaleString('ru-RU', { day: 'numeric', month: 'short', weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
 export function StageCard({ stage, index }: { stage: RouteStage; index: number }) {
   const current = stage.status === 'current';

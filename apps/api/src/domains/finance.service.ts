@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { formatRub, fromKopecks, kopecks, tzOffsetMinutes } from '@dentasmart/shared';
 import { inputKopecks, isUniqueViolation, paymentByKey, recordPayment, refreshInvoice, splitKopecks } from './invoice-ledger';
 import { resolveBranchId } from '../common/resolve-branch';
+import { clinicianWhere } from './clinicians';
 
 function localDay(iso: string, end: boolean) {
   const [year, month, day] = iso.slice(0, 10).split('-').map(Number);
@@ -42,6 +43,77 @@ export class FinanceService {
     const wall = new Date(now.getTime() + offset * 60000);
     const start = new Date(Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate()) - offset * 60000);
     return { branch, offset, start, end: new Date(start.getTime() + 86400000) };
+  }
+
+  /**
+   * The money page in one call: what came in today, this week and this month (each against the period
+   * before), thirty days for the sparkline, who owes, the instalments that fall due, and each doctor's take.
+   * Refunds count against the day they were made; bonus points are not money.
+   */
+  async overview(orgId: string) {
+    const { offset, start: today } = await this.clinicDay(orgId);
+    const DAY = 86400000;
+    const rub = (value: number) => Math.round(value) / 100;
+    const wall = new Date(today.getTime() + offset * 60000);
+    const weekday = (wall.getUTCDay() + 6) % 7;
+    const week = new Date(today.getTime() - weekday * DAY);
+    const month = new Date(Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), 1) - offset * 60000);
+    const prevMonth = new Date(Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth() - 1, 1) - offset * 60000);
+    const since = new Date(Math.min(prevMonth.getTime(), today.getTime() - 34 * DAY));
+    const payments = await this.prisma.payment.findMany({
+      where: { organizationId: orgId, paidAt: { gte: since }, method: { not: 'BONUS' } },
+      select: { amount: true, paidAt: true, refundOfId: true, invoice: { select: { appointment: { select: { doctorId: true } } } } },
+    });
+    const signed = (row: (typeof payments)[number]) => (row.refundOfId ? -Math.abs(kopecks(row.amount)) : kopecks(row.amount));
+    const sum = (from: Date, to: Date) => payments.filter((row) => row.paidAt >= from && row.paidAt < to).reduce((total, row) => total + signed(row), 0);
+    const now = new Date();
+    const elapsed = now.getTime() - today.getTime();
+    const series = Array.from({ length: 30 }, (_, index) => {
+      const from = new Date(today.getTime() - (29 - index) * DAY);
+      return { date: new Date(from.getTime() + offset * 60000).toISOString().slice(0, 10), amount: rub(sum(from, new Date(from.getTime() + DAY))) };
+    });
+    const doctors = await this.prisma.employee.findMany({ where: clinicianWhere(orgId), select: { id: true, firstName: true, lastName: true } });
+    const byDoctor = new Map<string, number>();
+    for (const row of payments.filter((item) => item.paidAt >= month)) {
+      const id = row.invoice?.appointment?.doctorId ?? '';
+      byDoctor.set(id, (byDoctor.get(id) ?? 0) + signed(row));
+    }
+    const open = await this.prisma.invoice.findMany({
+      where: { organizationId: orgId, status: { in: ['ISSUED', 'PARTIAL'] } },
+      select: { patientId: true, totalAmount: true, paidAmount: true, discountAmount: true, createdAt: true, patient: { select: { firstName: true, lastName: true, phone: true } } },
+    });
+    const debts = new Map<string, { patientId: string; name: string; phone: string | null; amount: number; since: Date }>();
+    for (const row of open) {
+      const left = kopecks(row.totalAmount) - kopecks(row.discountAmount) - kopecks(row.paidAmount);
+      if (left <= 0) continue;
+      const entry = debts.get(row.patientId) ?? { patientId: row.patientId, name: `${row.patient.lastName} ${row.patient.firstName}`, phone: row.patient.phone, amount: 0, since: row.createdAt };
+      entry.amount += left;
+      if (row.createdAt < entry.since) entry.since = row.createdAt;
+      debts.set(row.patientId, entry);
+    }
+    const debtors = [...debts.values()].sort((a, b) => b.amount - a.amount);
+    const lines = await this.prisma.installmentSchedule.findMany({
+      where: { status: { in: ['PENDING', 'OVERDUE'] }, dueDate: { lt: new Date(today.getTime() + 31 * DAY) }, plan: { organizationId: orgId, status: 'ACTIVE' } },
+      orderBy: { dueDate: 'asc' },
+      take: 20,
+      select: { id: true, dueDate: true, amount: true, plan: { select: { months: true, patientId: true, patient: { select: { firstName: true, lastName: true } } } } },
+    });
+    const period = (from: Date, to: Date, prevFrom: Date, prevTo: Date) => ({ amount: rub(sum(from, to)), previous: rub(sum(prevFrom, prevTo)) });
+    return {
+      today: period(today, new Date(today.getTime() + DAY), new Date(today.getTime() - DAY), new Date(today.getTime() - DAY + elapsed)),
+      week: period(week, new Date(today.getTime() + DAY), new Date(week.getTime() - 7 * DAY), new Date(week.getTime() - 7 * DAY + (now.getTime() - week.getTime()))),
+      month: period(month, new Date(today.getTime() + DAY), prevMonth, new Date(prevMonth.getTime() + (now.getTime() - month.getTime()))),
+      series,
+      debt: { total: rub(debtors.reduce((total, row) => total + row.amount, 0)), patients: debtors.length, top: debtors.slice(0, 8).map((row) => ({ ...row, amount: rub(row.amount), since: row.since.toISOString() })) },
+      installments: lines.map((row) => ({ id: row.id, dueDate: row.dueDate.toISOString(), amount: Number(row.amount), overdue: row.dueDate < today, patientId: row.plan.patientId, patient: `${row.plan.patient.lastName} ${row.plan.patient.firstName}`, months: row.plan.months })),
+      doctors: [...byDoctor.entries()]
+        .map(([id, amount]) => {
+          const doctor = doctors.find((row) => row.id === id);
+          return { id: id || null, name: doctor ? `${doctor.lastName} ${doctor.firstName}` : 'Без врача', amount: rub(amount) };
+        })
+        .filter((row) => row.amount !== 0)
+        .sort((a, b) => b.amount - a.amount),
+    };
   }
 
   async summary(orgId: string) {

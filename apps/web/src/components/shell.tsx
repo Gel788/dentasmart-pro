@@ -86,7 +86,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const unread = feed?.unread ?? 0;
   // Set after mount so the server render and the browser agree on the date.
   const [today, setToday] = useState('');
-  useEffect(() => { setToday(new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' }).format(new Date())); }, []);
+  useEffect(() => { setToday(new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date())); }, []);
 
   const allowed = (item: (typeof NAV)[number]) => user?.permissions.includes(item.perm);
   const primary = PRIMARY.filter(allowed);

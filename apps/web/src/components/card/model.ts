@@ -49,9 +49,9 @@ export const FEED_FILTERS: { id: string; label: string; kinds: string[] }[] = [
   { id: 'plan', label: 'Планы', kinds: ['plan'] },
 ];
 
-const longDate = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
-const shortDate = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
-const dayTime = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+const longDate = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const shortDate = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const dayTime = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
 const clock = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
 export const fmt = {

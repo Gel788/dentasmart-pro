@@ -87,7 +87,7 @@ function CashDesk() {
       : <div className={styles.page} aria-busy="true"><div className="sd-skel" style={{ height: 88 }} /><div className="sd-skel" style={{ height: 320 }} /></div>;
   }
 
-  const day = new Date(`${desk.day}T12:00:00`).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+  const day = new Date(`${desk.day}T12:00:00`).toLocaleDateString('ru-RU', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
 
   return (
     <div className={styles.page}>
@@ -375,7 +375,7 @@ function ShiftPanel({ shift, branchId, canTake, onChange }: { shift: Shift; bran
 function openedLabel(iso: string) {
   const at = new Date(iso);
   const today = new Date().toDateString() === at.toDateString();
-  return today ? `в ${time(iso)}` : `${at.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} в ${time(iso)} — не закрыта с прошлого дня`;
+  return today ? `в ${time(iso)}` : `${at.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })} в ${time(iso)} — не закрыта с прошлого дня`;
 }
 
 function plural(n: number, one: string, few: string, many: string) {

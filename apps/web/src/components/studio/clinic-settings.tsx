@@ -237,15 +237,17 @@ function Templates({ data, query, flash, aiPlans }: { data: Bundle; query: strin
   );
 }
 
-const BRAND_GROUPS: { title: string; fields: [string, string][] }[] = [
-  { title: 'Клиника', fields: [['name', 'Название'], ['phone', 'Телефон'], ['email', 'Почта'], ['address', 'Адрес']] },
-  { title: 'Юрлицо', fields: [['legalName', 'Юрлицо'], ['inn', 'ИНН'], ['ogrn', 'ОГРН'], ['bankName', 'Банк'], ['bankAccount', 'Счёт'], ['bik', 'БИК']] },
-  { title: 'Оформление', fields: [['logoUrl', 'Логотип (ссылка)'], ['brandColor', 'Цвет']] },
+// Fields sit on a 12-column grid: each says how many columns it takes, rows always add up to 12.
+const BRAND_GROUPS: { title: string; fields: [string, string, number][] }[] = [
+  { title: 'Клиника', fields: [['name', 'Название', 6], ['phone', 'Телефон', 3], ['email', 'Почта', 3], ['address', 'Адрес', 12]] },
+  { title: 'Юрлицо', fields: [['legalName', 'Юрлицо', 6], ['inn', 'ИНН', 3], ['ogrn', 'ОГРН', 3], ['bankName', 'Банк', 6], ['bik', 'БИК', 3], ['bankAccount', 'Расчётный счёт', 3]] },
+  { title: 'Оформление', fields: [['logoUrl', 'Логотип (ссылка)', 9], ['brandColor', 'Цвет', 3]] },
 ];
 
 function Brand({ data, flash }: { data: Bundle; flash: (work: () => Promise<unknown>) => Promise<boolean> }) {
   const [form, setForm] = useState(data.brand);
   const dirty = BRAND_GROUPS.some((group) => group.fields.some(([key]) => (form[key] ?? '') !== (data.brand[key] ?? '')));
+  const put = (field: string, value: string) => setForm({ ...form, [field]: value });
   const fieldsOnly = () => Object.fromEntries(BRAND_GROUPS.flatMap((group) => group.fields.map(([key]) => [key, form[key] ?? ''])));
   return (
     <Panel title="Клиника" hint="Реквизиты печатаются в планах лечения, счетах и согласиях.">
@@ -253,9 +255,16 @@ function Brand({ data, flash }: { data: Bundle; flash: (work: () => Promise<unkn
         {BRAND_GROUPS.map((group) => (
           <fieldset key={group.title}>
             <legend>{group.title}</legend>
-            {group.fields.map(([key, label]) => (
-              <label key={key}>{label}
-                <input className="sd-input" value={form[key] ?? ''} onChange={(event) => setForm({ ...form, [key]: event.target.value })} />
+            {group.fields.map(([key, label, span]) => (
+              <label key={key} style={{ '--span': span } as React.CSSProperties}>{label}
+                {key === 'brandColor' ? (
+                  <span className="cfg-color">
+                    <input type="color" aria-label="Выбрать цвет" value={/^#[0-9a-f]{6}$/i.test(form[key] ?? '') ? (form[key] as string) : '#0b6e66'} onChange={(event) => put(key, event.target.value)} />
+                    <input className="sd-input" value={form[key] ?? ''} onChange={(event) => put(key, event.target.value)} />
+                  </span>
+                ) : (
+                  <input className="sd-input" value={form[key] ?? ''} onChange={(event) => setForm({ ...form, [key]: event.target.value })} />
+                )}
               </label>
             ))}
           </fieldset>
@@ -363,7 +372,7 @@ function Exceptions({ data }: { data: Bundle }) {
   const load = () => api<ExceptionRow[]>('/config/exceptions').then(setRows).catch(() => setRows([]));
   useEffect(() => { void load(); }, []);
   const staff = data.employees.filter((row) => row.status !== 'INACTIVE' && row.status !== 'TERMINATED');
-  const date = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  const date = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   const add = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -678,7 +687,7 @@ function History({ rows }: { rows: Bundle['history'] }) {
       <header><h2>История изменений</h2><p className="sd-muted">Кто и когда менял настройки: прайс, роли, сотрудников, шаблоны.</p></header>
       {text.map((row) => (
         <article key={row.id} className="cfg-row">
-          <b>{new Date(row.at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</b>
+          <b>{new Date(row.at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</b>
           <span>{row.email} · {row.entityType} · {row.action}</span>
           <small className="sd-muted">{JSON.stringify(row.changes)}</small>
         </article>

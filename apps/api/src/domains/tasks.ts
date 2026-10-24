@@ -93,7 +93,7 @@ export class TasksService {
 
     if (can('schedule.read')) {
       const requests = await this.prisma.bookingRequest.findMany({ where: { organizationId: orgId, status: 'PENDING' }, orderBy: { createdAt: 'desc' }, take: 20, select: { id: true, firstName: true, lastName: true, startsAt: true, createdAt: true } });
-      for (const row of requests) items.push({ id: `req-${row.id}`, kind: 'request', title: `Заявка с сайта: ${row.lastName} ${row.firstName}`, detail: `на ${row.startsAt.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: tz })}, ждёт ответа`, href: '/requests', at: row.createdAt.toISOString() });
+      for (const row of requests) items.push({ id: `req-${row.id}`, kind: 'request', title: `Заявка с сайта: ${row.lastName} ${row.firstName}`, detail: `на ${row.startsAt.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: tz })}, ждёт ответа`, href: '/requests', at: row.createdAt.toISOString() });
       const unconfirmed = await this.prisma.appointment.count({ where: { organizationId: orgId, status: 'SCHEDULED', startsAt: { gte: dayEnd, lt: new Date(dayEnd.getTime() + 86400000) } } });
       if (unconfirmed) items.push({ id: `tomorrow-${localToday}`, kind: 'confirm', title: `Завтра не подтверждены: ${unconfirmed}`, detail: 'обзвоните пациентов или отправьте напоминание', href: '/schedule', at: dayStart.toISOString() });
     }
@@ -111,7 +111,7 @@ export class TasksService {
         id: `task-${task.id}-${overdue ? 'late' : 'new'}`,
         kind: overdue ? 'overdue' : 'task',
         title: overdue ? `Просрочена задача: ${task.title}` : `Новая задача: ${task.title}`,
-        detail: [by && task.createdById !== user.id ? `от ${by}` : null, task.dueAt ? `срок ${task.dueAt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', timeZone: tz })}` : null].filter(Boolean).join(' · ') || 'без срока',
+        detail: [by && task.createdById !== user.id ? `от ${by}` : null, task.dueAt ? `срок ${task.dueAt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: tz })}` : null].filter(Boolean).join(' · ') || 'без срока',
         href: '/tasks',
         at: (overdue && task.dueAt ? task.dueAt : task.createdAt).toISOString(),
       });

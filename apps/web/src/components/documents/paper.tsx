@@ -39,7 +39,7 @@ export type PaperData = {
 export type Paper = { id: string; kind: string; number: string; title: string; status: string; createdAt: string; data: PaperData };
 
 const day = (iso?: string | null) => (iso ? new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(iso)) : '«___» __________ 20__ г.');
-const longDay = (iso: string) => new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso));
+const longDay = (iso: string) => new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(iso));
 const blank = (value: string | null | undefined, width = 16) => value?.trim() || '_'.repeat(width);
 
 /** Risks and alternatives a doctor explains for each kind of dental intervention. */

@@ -11,7 +11,7 @@ type Payload = {
   funnel: { accepted: number; abandoned: number; open: number; lost: number; rate: number };
 };
 type Recall = {
-  checkups: { id: string; patient: string; phone: string | null; days: number }[];
+  checkups: { id: string; patient: string; phone: string | null; days: number; plan?: { planId: string; title: string; total: number } | null }[];
   plans: { planId: string; patientId: string; patient: string; title: string }[];
 };
 
@@ -68,7 +68,7 @@ function Body() {
             {(recall?.checkups ?? []).map((row) => (
               <tr key={row.id}>
                 <td>{row.patient}<div className="sd-muted">{row.phone}</div></td>
-                <td>Не был {row.days} дн.</td>
+                <td>Не был {row.days} дн.{row.plan ? ` · план «${row.plan.title}» на ${formatMoney(row.plan.total)} не подписан` : ''}</td>
                 <td>{row.phone ? <a className="sd-btn" href={`tel:${row.phone}`}>Позвонить</a> : <Link className="sd-btn" href={`/patients/${row.id}`}>Открыть</Link>}</td>
               </tr>
             ))}

@@ -53,7 +53,7 @@ export function ScheduleCalendar({
           <div className="p-2" />
           {days.map((d) => (
             <div key={d.toISOString()} className="p-2 text-center">
-              {d.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' })}
+              {d.toLocaleDateString('ru-RU', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
             </div>
           ))}
         </div>

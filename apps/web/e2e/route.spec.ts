@@ -6,7 +6,9 @@ test('подписанный план превращается в маршрут
   await page.getByRole('button', { name: /^Врач/ }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/login'));
 
+  // The card opens on the overview; the route has its own tab.
   await page.goto('/patients/seed-patient-anna');
+  await page.getByRole('button', { name: 'Маршрут', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Маршрута пока нет' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Открыть план' }).click();
@@ -26,7 +28,7 @@ test('подписанный план превращается в маршрут
   await expect(page.getByText('План принят')).toBeVisible();
 
   await page.goto('/patients/seed-patient-anna');
-  await page.getByRole('button', { name: 'Маршрут' }).click();
+  await page.getByRole('button', { name: 'Маршрут', exact: true }).click();
   const route = page.getByRole('region', { name: 'Маршрут лечения' });
   await expect(route.getByRole('heading', { name: 'Санация' })).toBeVisible();
   await expect(route.getByRole('heading', { name: 'Ортопедия' })).toBeVisible();

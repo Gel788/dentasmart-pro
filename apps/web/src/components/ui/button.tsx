@@ -18,7 +18,7 @@ export function Button({
         size === 'md' && 'min-h-[44px] px-4 text-sm',
         size === 'lg' && 'min-h-[48px] px-5 text-[15px]',
         variant === 'primary' &&
-          'bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]',
+          'bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)]',
         variant === 'secondary' &&
           'bg-[var(--text)] text-[var(--surface-solid)] hover:bg-black',
         variant === 'ghost' &&

@@ -765,7 +765,7 @@ export class ShowcaseService {
         if (!clash) {
           slots.push({
             startsAt: at.toISOString(),
-            label: at.toLocaleString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
+            label: at.toLocaleString('ru-RU', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
           });
         }
         if (slots.length >= 6) break;

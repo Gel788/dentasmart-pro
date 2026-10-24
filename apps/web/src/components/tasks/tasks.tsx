@@ -21,7 +21,7 @@ const dueLabel = (iso: string) => {
   const time = due.getHours() || due.getMinutes() ? `, ${due.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : '';
   if (day === today) return `сегодня${time}`;
   if (day === tomorrow) return `завтра${time}`;
-  return due.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) + time;
+  return due.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) + time;
 };
 
 /** Clinic to-dos: what to do, by when, for whom; one tap to mark done. */

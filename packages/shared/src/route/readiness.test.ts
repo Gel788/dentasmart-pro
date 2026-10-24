@@ -43,7 +43,7 @@ describe('readiness', () => {
 
   it('материалы: дефицит с датой поставки ждёт, без даты блокирует', () => {
     const inTransit = stage({ reservations: [{ itemName: 'Формирователь 4.5', quantity: 1, status: 'SHORT', expectedAt: '2026-10-20T00:00:00.000Z' }] });
-    expect(readiness(inTransit).materials).toEqual({ state: 'waiting', reason: 'Формирователь 4.5: в пути до 20.10' });
+    expect(readiness(inTransit).materials).toEqual({ state: 'waiting', reason: 'Формирователь 4.5: в пути до 20.10.2026' });
     const missing = stage({ reservations: [{ itemName: 'Мембрана Bio-Gide', quantity: 1, status: 'SHORT', expectedAt: null }] });
     expect(readiness(missing).materials).toEqual({ state: 'blocked', reason: 'Мембрана Bio-Gide: нет на складе' });
   });
@@ -64,6 +64,16 @@ describe('readiness', () => {
     expect(readiness(overdue, now).lab).toEqual({ state: 'blocked', reason: 'Срок сдачи прошёл' });
     const ready = stage({ lab: { id: 'l1', status: 'READY', dueAt: '2026-10-19T07:00:00.000Z' } });
     expect(readiness(ready, now).lab.state).toBe('ready');
+  });
+
+  it('лаборатория: срок сегодня или в будущем — не «прошёл»', () => {
+    const now = new Date('2026-10-24T15:00:00.000Z');
+    const today = stage({ appointment: null, lab: { id: 'l1', status: 'IN_PROGRESS', dueAt: '2026-10-24T00:00:00.000Z' } });
+    expect(readiness(today, now).lab.reason).not.toBe('Срок сдачи прошёл');
+    const later = stage({ appointment: null, lab: { id: 'l1', status: 'IN_PROGRESS', dueAt: '2026-10-30T09:00:00.000Z' } });
+    expect(readiness(later, now).lab.reason).not.toBe('Срок сдачи прошёл');
+    const yesterday = stage({ appointment: null, lab: { id: 'l1', status: 'IN_PROGRESS', dueAt: '2026-10-23' } });
+    expect(readiness(yesterday, now).lab.reason).toBe('Срок сдачи прошёл');
   });
 
   it('лаборатория: готовый заказ готов, ожидающий слепка ждёт', () => {

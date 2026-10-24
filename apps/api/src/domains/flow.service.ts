@@ -132,7 +132,7 @@ export class FlowService {
         patientId: appointment.patientId,
         appointmentId: id,
         channel: 'TELEGRAM',
-        message: `Седракович Дент: ждём вас ${appointment.startsAt.toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}. Ответьте «да», чтобы подтвердить.`,
+        message: `Седракович Дент: ждём вас ${appointment.startsAt.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}. Ответьте «да», чтобы подтвердить.`,
         scheduledAt: when,
         // No messenger is connected yet: the reminder waits in the queue, it is not «sent».
         status: 'PENDING',

@@ -66,9 +66,9 @@ async function main() {
     const recall = await workspace.recall(clinic.id);
     assert.deepEqual(recall.checkups.map((row) => row.patient), ['Пропавший Иван'], 'записанного не обзваниваем');
     assert.equal(recall.checkups[0].days >= 199, true);
-    assert.equal(recall.plans.length, 1, 'одна строка на семейство вариантов');
-    assert.equal(recall.plans[0].title, 'Оптимум');
-    assert.equal(recall.plans[0].total, 36200);
+    assert.equal(recall.plans.length, 0, 'пациент из обзвона не повторяется строкой плана');
+    assert.equal(recall.checkups[0].plan?.total, 36200, 'план семьи — одной строкой, рекомендуемый вариант, на строке обзвона');
+    assert.equal(recall.checkups[0].plan?.title, 'Оптимум');
     console.log('today ok');
   } finally {
     const org = clinic.id;

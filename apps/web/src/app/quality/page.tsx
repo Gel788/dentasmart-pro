@@ -36,7 +36,7 @@ function Desk() {
         <article key={row.id} className="sd-card lead-line sd-inline">
           <div>
             <b>{row.patient}</b>
-            <p className="sd-muted">{row.doctor} · нет: {row.missing} · {new Date(row.at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+            <p className="sd-muted">{row.doctor} · нет: {row.missing} · {new Date(row.at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
           </div>
           <Link className={index === 0 ? 'sd-btn' : 'sd-btn-ghost'} href={`/visits/${row.id}`}>Заполнить</Link>
         </article>
